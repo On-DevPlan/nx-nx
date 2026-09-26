@@ -1,0 +1,54 @@
+{
+  "id": "server-cli-web",
+  "name": "server-cli-web 骨架",
+  "description": "serve 驱动 CLI 与 Web 面板的标准骨架：CLI 与 API 同源、状态落本机、带发版流水线",
+  "namePrefix": "nx-",
+  "nextSteps": [
+    "cd {{name}} && pnpm install",
+    "pnpm start          # 构建并启动面板",
+    "pnpm test           # lint + build + smoke + unit",
+    "gh repo create <org>/{{name}} --public --source=. --push   # 发版前先建仓库",
+    "git tag v{{version}} && git push origin v{{version}}       # 或改 package.json 版本后 push main"
+  ],
+  "options": [
+    {
+      "name": "letters",
+      "type": "letters",
+      "label": "项目字母",
+      "required": true,
+      "hint": "1~5 位小写字母，决定项目名（nx-<字母>）、数据目录与 logo"
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "label": "项目描述",
+      "default": "本机工具：CLI 与 Web 面板同源",
+      "hint": "写进 package.json 与面板副标题"
+    },
+    {
+      "name": "port",
+      "type": "number",
+      "label": "serve 端口",
+      "hint": "留空则自动探测一个空闲端口（家族从 7881 起）"
+    },
+    {
+      "name": "vitePort",
+      "type": "number",
+      "label": "vite dev 端口",
+      "hint": "留空则自动探测"
+    },
+    {
+      "name": "scheme",
+      "type": "enum",
+      "label": "logo 撞色",
+      "default": "mars",
+      "values": ["klein", "mars", "hermes", "tiffany", "red", "vandyke", "prussian"]
+    },
+    {
+      "name": "version",
+      "type": "string",
+      "label": "初始版本",
+      "default": "0.1.0"
+    }
+  ]
+}

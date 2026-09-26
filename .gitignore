@@ -1,0 +1,11 @@
+node_modules/
+src/web/public/
+*.log
+.DS_Store
+.env
+.env.local
+*.tgz
+
+# nx-nx 自身的 logo 产物：由 tools/logo-gen 实时产出，不入库——
+# 与模板「不预置二进制」的原则一致（图由代码算出来，不存盘）
+src/web/frontend/public/
