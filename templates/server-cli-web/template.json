@@ -7,8 +7,11 @@
     "cd {{name}} && pnpm install",
     "pnpm start          # 构建并启动面板",
     "pnpm test           # lint + build + smoke + unit",
-    "gh repo create <org>/{{name}} --public --source=. --push   # 发版前先建仓库",
-    "git tag v{{version}} && git push origin v{{version}}       # 或改 package.json 版本后 push main"
+    "{{name}} skill install   # 把用法装给本机 agent",
+    "# ── 要发版时（A06 流程）──",
+    "gh repo create <org>/{{name}} --public --source=. --push",
+    "gh secret list      # 确认 NPM_TOKEN 已配置；缺失则: gh secret set NPM_TOKEN",
+    "git tag v{{version}} && git push origin v{{version}}   # CI 自动发 npm"
   ],
   "options": [
     {
