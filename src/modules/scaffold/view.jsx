@@ -95,7 +95,10 @@ function LogoPreview({ letters, scheme, size = 96 }) {
 export default function CreateView() {
   const { boot } = useStore();
   const toast = useToast();
-  const dialog = useDialog();
+  // useDialog() 返回 { dialog(打开函数), node(要渲染的弹窗 DOM) }——必须解构。
+  // 直接 const dialog = useDialog() 再 dialog({...}) 是调一个对象，
+  // 运行时 TypeError: not a function；这个坑两层叠加（confirm 不存在 + 忘解构）。
+  const { dialog, node: dialogNode } = useDialog();
 
   const [tplId, setTplId] = useState('');
   const [tpl, setTpl] = useState(null);
@@ -187,9 +190,14 @@ export default function CreateView() {
       toast('请先填项目字母', 'bad');
       return;
     }
-    const ok = await dialog.confirm({
+    // useDialog 的形态是 { dialog(开), node(渲染), close }——没有 confirm 语法糖。
+    // 这里手动开确认框：node 渲染在组件根部，用户点「确定」resolve(true)。
+    // 之前写成 dialog.confirm({...}) 调了不存在的方法，TypeError 被 catch 吞掉，
+    // 表现就是「点生成没反应」。
+    const ok = await dialog({
       title: '确认生成',
       message: `将在以下目录创建 ${preview?.count ?? '若干'} 个文件：\n${outDir}\n\n生成器不会覆盖已有内容；目录非空会被拒绝。`,
+      okText: '生成',
     });
     if (!ok) return;
 
@@ -228,7 +236,11 @@ export default function CreateView() {
   const opts = tpl?.options || [];
 
   return (
-    <div className="create-grid">
+    <>
+      {/* useDialog 的弹窗 DOM 必须由调用方渲染——不渲染 node，dialog() 的
+          Promise 永远不会 resolve，按钮就"点了没反应" */}
+      {dialogNode}
+      <div className="create-grid">
       {/* ---- 左：模板选择 ---- */}
       <div className="card">
         <div className="colhead">模板</div>
@@ -334,6 +346,7 @@ export default function CreateView() {
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
