@@ -26,7 +26,7 @@ const BUILTINS = [
   {
     id: 'help',
     cli: ['help'],
-    summary: '显示帮助（可跟模块名或命令组，如 nx-nx help repo）',
+    summary: '显示帮助（可跟模块名或命令组，如 nx-nx help repo',
     args: [{ name: 'topic', required: false }],
     // 走标准 action 形态：--json 时 emit 会序列化返回的条目，
     // 于是 `help --json` 输出的是可解析的命令表而非帮助文本
