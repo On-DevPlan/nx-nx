@@ -26,14 +26,14 @@ const BUILTINS = [
   {
     id: 'help',
     cli: ['help'],
-    summary: '显示帮助（可跟模块名或命令组，如 nx-rh help repo）',
+    summary: '显示帮助（可跟模块名或命令组，如 nx-nx help repo）',
     args: [{ name: 'topic', required: false }],
     // 走标准 action 形态：--json 时 emit 会序列化返回的条目，
     // 于是 `help --json` 输出的是可解析的命令表而非帮助文本
     run: (ctx) => helpEntries(ctx.topic),
     render: (entries, ctx) => renderHelp(entries, ctx.topic),
   },
-  // render 让 `nx-rh version` 输出裸版本号（脚本里可 `V=$(nx-rh version)`），
+  // render 让 `nx-nx version` 输出裸版本号（脚本里可 `V=$(nx-nx version)`），
   // 而 `--json` 仍走序列化，保持机器可读
   { id: 'version', cli: ['version'], summary: '显示版本', run: () => VERSION, render: (v) => v },
 ];
@@ -178,7 +178,7 @@ export function commandEntry(c) {
 
 // 解析帮助主题。既接受模块 id（repos），也接受命令组（repo）——
 // 用户脑子里想的是「repo 相关的东西」，不会去记内部模块名。
-// 这条路径不能报错退出：`nx-rh help <随便什么>` 失败会让最需要帮助的人卡住。
+// 这条路径不能报错退出：`nx-nx help <随便什么>` 失败会让最需要帮助的人卡住。
 function helpEntries(topic) {
   const all = ALL_COMMANDS.map(commandEntry);
   if (!topic) return all;
@@ -189,7 +189,7 @@ function helpEntries(topic) {
   const byRoot = all.filter((e) => e.command.split(' ')[1] === t);
   if (byRoot.length) return byRoot;
 
-  // 命令本身的 id 也认（如 `nx-rh help repo.add`）
+  // 命令本身的 id 也认（如 `nx-nx help repo.add`）
   const byId = all.filter((e) => e.id === t);
   if (byId.length) return byId;
 
@@ -234,7 +234,7 @@ function renderHelp(entries, topic) {
   return lines.join('\n');
 }
 
-// `nx-rh <命令> --help`：只打印这一条，而不是整个模块——
+// `nx-nx <命令> --help`：只打印这一条，而不是整个模块——
 // 之前这里传的是 cmd.cli[0]，对别名 action（cli 是数组的数组）会拼出 "bundled,list"。
 function printCommandHelp(cmd) {
   const lines = [usageOf(cmd)];
