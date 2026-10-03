@@ -2,6 +2,15 @@
 
 本文件记录对外可见的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.2.0] - 2026-10-04
+
+- 模板随包 skill 转为产品文档：`assets/{{name}}/` 面向使用者（客户 / agent），
+  只讲解决什么问题、命令用法与使用场景，不再包含源码结构
+  - `SKILL.md` 删除「核心不变量」（action 三端声明、依赖方向等开发内容）
+  - `references/00-design.md`（架构图 / 分层 / 错误案例）替换为
+    `references/00-product.md`（解决什么问题 / 使用背景与需求 / 使用场景）
+- CLI：`--letters` 与 `--dir` 组合生成时输出目录语义不变
+
 ## [0.1.0] - 2026-09-27
 
 首个版本。
