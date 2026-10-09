@@ -74,48 +74,5 @@ export default {
       },
       render: (r) => `${r.path}    （默认 ${r.default}）`,
     },
-    {
-      id: 'home.skillInstall',
-      cli: ['skill', 'install'],
-      http: ['POST', '/api/skill/install'],
-      summary: '把随包 skill 装到 ~/.claude/skills（让本机 agent 学会用法）',
-      flags: {
-        name: { type: 'string' },
-        to: { type: 'string' },
-        force: { type: 'boolean' },
-      },
-      run: async (ctx) => {
-        const { installBundledSkill } = await import('../../runtime/skill.js');
-        return installBundledSkill({ name: ctx.name, to: ctx.to, force: ctx.force });
-      },
-      render: (r) => {
-        if (r.skipped) return `已是最新: ${r.path}`;
-        if (r.status === 'conflict')
-          return `冲突: ${r.path}（${r.count} 个文件不同；确认覆盖加 --force）`;
-        return `${r.replaced ? '已替换' : '已安装'}: ${r.path}（${r.files} 个文件）`;
-      },
-    },
-    {
-      id: 'home.skillGet',
-      cli: ['skill', 'get'],
-      http: null, // 纯 stdout 契约：三段拼接给外部 agent，无 HTTP 形态
-      summary: '导出 skill 上下文（prefix + 文档 + install 状态，供外部 agent 复制）',
-      args: [{ name: 'ref', required: false }],
-      flags: { name: { type: 'string' }, to: { type: 'string' }, force: { type: 'boolean' } },
-      run: async (ctx) => {
-        const { getSkill } = await import('../../runtime/skill.js');
-        return getSkill({ ref: ctx.ref, name: ctx.name, to: ctx.to, force: ctx.force });
-      },
-      render: async (r, ctx) => {
-        // --json 由 emit 走序列化（不含 prefix）；人读模式走三段拼接
-        const { skillGetPrefix, skillGetInstallStatus } = await import('../../runtime/skill.js');
-        return [
-          skillGetPrefix(r.skillName, r.ref),
-          r.content,
-          '',
-          skillGetInstallStatus(r.install),
-        ].join('\n');
-      },
-    },
   ],
 };

@@ -9,8 +9,9 @@
 //   2. 在下面 import 并加进 MODULES；再到 web/frontend/registry.js 登记视图
 import { cliPathsOf } from './spec.js';
 import home from '../modules/home/index.js';
+import skill from '../modules/skill/index.js';
 
-export const MODULES = [home].sort((a, b) => (a.order ?? 100) - (b.order ?? 100));
+export const MODULES = [home, skill].sort((a, b) => (a.order ?? 100) - (b.order ?? 100));
 
 export const ACTIONS = MODULES.flatMap((m) =>
   (m.actions || []).map((a) => ({ ...a, module: m.id }))

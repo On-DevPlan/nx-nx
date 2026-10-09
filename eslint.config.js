@@ -88,6 +88,7 @@ export default tseslint.config(
     files: [
       'src/modules/template/**/*.{ts,tsx}',
       'src/modules/scaffold/**/*.{ts,tsx}',
+      'src/modules/skill/**/*.{ts,tsx}',
     ],
     plugins: { '@typescript-eslint': tseslint.plugin },
     rules: {
@@ -99,6 +100,7 @@ export default tseslint.config(
               group: [
                 '../template/*', '../template/**',
                 '../scaffold/*', '../scaffold/**',
+                '../skill/*', '../skill/**',
                 '../system/*', '../system/**',
               ],
               allowTypeImports: true,

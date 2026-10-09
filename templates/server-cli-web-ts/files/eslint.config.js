@@ -63,7 +63,10 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ['../modules/**', '../runtime/**', '../web/**'],
+              group: [
+                '../modules/**', '../runtime/**', '../web/**',
+                '../../modules/**', '../../runtime/**', '../../web/**',
+              ],
               message: 'core 是最底层，不得依赖 modules / runtime / web。',
             },
           ],
@@ -73,9 +76,9 @@ export default tseslint.config(
   },
 
   {
-    // 业务模块：模块之间禁止互相值依赖（本骨架只有 home 一个模块，
-    // 新增模块时把它的路径补进 group，并同步更新一致性测试）。
-    files: ['src/modules/home/**/*.{ts,tsx}'],
+    // 业务模块：模块之间禁止互相值依赖。新增模块时把它的路径补进 files 与
+    // group 枚举（逐模块枚举，漏补会静默失效）。
+    files: ['src/modules/home/**/*.{ts,tsx}', 'src/modules/skill/**/*.{ts,tsx}'],
     plugins: { '@typescript-eslint': tseslint.plugin },
     rules: {
       '@typescript-eslint/no-restricted-imports': [
@@ -83,7 +86,7 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ['../home/*', '../home/**'],
+              group: ['../home/*', '../home/**', '../skill/*', '../skill/**'],
               allowTypeImports: true,
               message:
                 '模块之间不得做值依赖；共享逻辑请下沉到 core/（类型引用允许 import type）。',

@@ -6,7 +6,8 @@ import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { renderString, resolveVars, listTemplates, loadTemplate } from '../../src/core/templates.js';
-import { generate, walkTemplate, assertTargetUsable, isTextPath } from '../../src/core/generate.js';
+import { generate, walkTemplate, assertTargetUsable } from '../../src/core/generate.js';
+import { isTextPath } from '../../src/core/skills/text-util.js';
 
 const TPL_ROOT = new URL('../../templates/', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 

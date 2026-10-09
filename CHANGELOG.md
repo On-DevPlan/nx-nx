@@ -2,6 +2,34 @@
 
 本文件记录对外可见的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.4.0] - 2026-10-09
+
+多 skill 编排与配置驱动 hook 总线，并把整套机制沉淀为标准模块植入两个模板。
+
+- **multi-skill**：`skill install [name]` 显式安装、`skill install --group <g>`
+  一键装一组、`skill list` / `skill groups` 列出可装项与默认安装标记；
+  `groups.json` 缺失或损坏时降级为目录扫描，schema 错误显眼报错
+- **配置驱动 hook 总线**（参考 Claude Code hooks 模型）：
+  - 每个 skill 可带 `hooks.json`，事件平面开放（首批 `skill:pre-install` /
+    `skill:post-install`），`match` 正则匹配目标，核心不枚举事件
+  - 两类 handler：`module`（ESM 导入，路径越界拒绝，支持 `#export`）与
+    `command`（子进程语言无关，payload 走 stdin；exit 2 阻断、exit 0 返回决策）
+  - 统一 decision：`block` 阻断安装、`vars` 聚合为动态字符串、`data` 收集；
+    坏 JSON / schema / 坏正则一律 specError
+  - 安装期资产（`hooks.json`、`install/`）不复制进安装目标
+- **标准模块沉淀**：skill 机制重组为自包含的 `core/skills/` 六文件
+  （index / get / install / bus / handlers / text-util），零生成器依赖，
+  可直接移植；`text-util` 为文本判定的独立模块
+- **两个模板初始化即具备 multi-skill + hook 机制**：
+  - `server-cli-web-ts` 与 `server-cli-web` 均内置 skill 模块、模板资产
+    （主 skill + hooks.json + install handler）
+  - 首个 hook：skill 安装时校验当前项目根，非本项目拒绝安装，是则注入
+    项目根全路径（安装期占位 `PROJECT_ROOT`）
+  - JS 模板补齐 smoke 测试、JSX lint 支持（eslint-plugin-react）
+- 工程：build 前清理 dist（杜绝旧产物打包），`tsc -b --force` 保证干净构建
+- 测试：nx-nx smoke 8 项、unit 27 项全闸门通过；两个模板 e2e 项目
+  （nx-ts / nx-js）lint / build / smoke 全部通过
+
 ## [0.3.0] - 2026-10-09
 
 项目本身全面 TypeScript 化，并新增 TS 模板。

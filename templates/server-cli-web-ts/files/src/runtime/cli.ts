@@ -305,3 +305,15 @@ export async function runCli(argv: string[]): Promise<void> {
     fail(err, json);
   }
 }
+
+// ---- 直接运行本文件时进入 CLI ----
+// dev：`node --import tsx src/runtime/cli.ts ...`（改码即跑，无需构建）；
+// prod：bin 调用 runCli，argv[1] 是 bin → 此处不重复执行；被 import 时不触发。
+import { pathToFileURL } from 'node:url';
+
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  runCli(process.argv.slice(2)).catch((err) => {
+    console.error(err && err.stack ? err.stack : String(err));
+    process.exitCode = 1;
+  });
+}

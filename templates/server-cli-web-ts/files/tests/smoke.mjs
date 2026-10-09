@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,12 +14,12 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = join(ROOT, 'bin', '{{letters}}.mjs');
 
 // 每个用例独立存储，避免写脏用户真实目录，也避免用例间计数互相干扰
-function run(cmdline) {
+function run(cmdline, cwd = tmpdir()) {
   const dir = mkdtempSync(join(tmpdir(), '{{name}}-smoke-'));
   // execFile 不走 shell，必须把命令串拆成 token 数组——
   // 整串塞进去会被当成一个 argv 元素，CLI 侧报「未知命令」。
   return exec(process.execPath, [BIN, ...cmdline.split(' ').filter(Boolean)], {
-    cwd: tmpdir(),
+    cwd,
     env: { ...process.env, {{envPrefix}}_STORE: join(dir, 'store.json') },
   });
 }
@@ -67,4 +67,35 @@ test('greet 缺名字被拒且 exit 1', async () => {
 
 test('未知命令 exit 1', async () => {
   await assert.rejects(() => run('nope'));
+});
+
+test('skill list：含主 skill 与默认 group', async () => {
+  const r = JSON.parse((await run('skill list --json')).stdout);
+  assert.ok(r.skills.includes('{{name}}'), '缺主 skill');
+  assert.equal(r.defaultGroup, '{{name}}');
+});
+
+test('skill install：项目根安装注入路径，非项目目录拒绝', async () => {
+  const to = mkdtempSync(join(tmpdir(), '{{name}}-skill-'));
+  const ok = JSON.parse(
+    (await run(`skill install {{name}} --to ${to} --json`, ROOT)).stdout
+  );
+  assert.equal(ok.status, 'ok');
+
+  const skill = readFileSync(join(to, '{{name}}', 'SKILL.md'), 'utf8');
+  assert.ok(skill.includes(ROOT.replace(/\\/g, '/')), '应注入项目根路径');
+  assert.ok(!skill.includes('{{PROJECT_ROOT}}'), '不应残留安装期占位');
+  assert.ok(!existsSync(join(to, '{{name}}', 'hooks.json')), 'hooks.json 不复制');
+  assert.ok(!existsSync(join(to, '{{name}}', 'install')), 'install/ 不复制');
+
+  const wrong = mkdtempSync(join(tmpdir(), '{{name}}-wrong-'));
+  await assert.rejects(
+    () => run(`skill install {{name}} --to ${wrong} --json`, wrong),
+    (err) => {
+      // --json 模式下错误信封走 stdout（人读模式才走 stderr）
+      const payload = JSON.parse(err.stdout);
+      assert.match(payload.error, /项目根目录内安装/);
+      return true;
+    }
+  );
 });

@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "$comment": "group 名 → skill 名列表的别名表。路径恒由 assets/<skills[i]>/ 推导——本文件只做聚合，不是第二条事实源。默认 group key 与 package.json.name 同名。",
+  "groups": {
+    "nx-nx": {
+      "skills": ["nx-nx"],
+      "summary": "主 skill：使用 nx-nx 生成项目（默认 install 装的就是这个）"
+    },
+    "nx-dev": {
+      "skills": ["nx-nx", "nx-dev"],
+      "summary": "开发组：在 templates/ 下创建新模板并完成案例验证（含主 skill 上下文）"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "$comment": "nx-dev 的安装钩子，经通用 hook 总线执行。事件平面开放（可加任意事件）；match 为正则，匹配 skill 名。",
+  "hooks": {
+    "skill:pre-install": [
+      {
+        "match": "^nx-dev$",
+        "hooks": [
+          { "type": "module", "use": "./install/check-root.mjs" }
+        ]
+      }
+    ]
+  }
+}

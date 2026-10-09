@@ -12,10 +12,11 @@ import { defineModules } from './types/module.js';
 import type { ActionShape } from './types/action.js';
 import { cliPathsOf } from './spec.js';
 import home from '../modules/home/index.js';
+import skill from '../modules/skill/index.js';
 
 // 编译期：defineModules 对模块/action id、CLI/HTTP 键查重 + 路由歧义检测；
 // 运行时：按 order 排序。
-export const MODULES = defineModules([home]);
+export const MODULES = defineModules([home, skill]);
 
 export interface BoundAction {
   id: string;

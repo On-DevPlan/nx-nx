@@ -7,29 +7,15 @@
 // 只有**文本**文件走 {{var}} 替换；判断依据是扩展名白名单 + 内容无 NUL 字节。
 import fsp from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { basename, dirname, join, relative, resolve, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { blocked, badInput } from './errors/index.js';
 import { renderString } from './templates.js';
+import { isTextPath } from './skills/text-util.js';
 import type { AbsolutePath } from './brand.js';
-
-// 走变量替换的文本扩展名。不在此列的按二进制原样复制。
-const TEXT_EXT = new Set([
-  '.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.json', '.md', '.txt',
-  '.css', '.html', '.yml', '.yaml', '.toml', '.ini', '.cfg', '.sh',
-  '.gitignore', '.npmrc', '.env', '.editorconfig', '',
-]);
 
 // 模板里不该带过去的东西
 const SKIP_NAMES = new Set(['.git', 'node_modules', '.DS_Store', 'template.json']);
 const SKIP_EXTS = new Set(['.log', '.tmp']);
-
-export function isTextPath(rel: string): boolean {
-  const name = basename(rel);
-  if (SKIP_NAMES.has(name)) return false;
-  const dot = name.lastIndexOf('.');
-  const ext = dot <= 0 ? '' : name.slice(dot).toLowerCase();
-  return TEXT_EXT.has(ext) || /\.(gitignore|npmrc|editorconfig)$/.test(name);
-}
 
 // 递归遍历模板树，产出相对路径清单（不读内容）。
 // dry-run 预览与实际生成共用它，因此「预览看到的」与「实际写出的」必然一致。

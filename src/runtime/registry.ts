@@ -13,10 +13,11 @@ import type { ActionShape } from './types/action.js';
 import { cliPathsOf } from './spec.js';
 import system from '../modules/system/index.js';
 import template from '../modules/template/index.js';
+import skill from '../modules/skill/index.js';
 
 // 编译期：defineModules 对模块/action id、CLI/HTTP 键查重 + 路由歧义检测；
 // 运行时：按 order 排序。
-export const MODULES = defineModules([system, template]);
+export const MODULES = defineModules([system, template, skill]);
 
 export interface BoundAction {
   id: string;

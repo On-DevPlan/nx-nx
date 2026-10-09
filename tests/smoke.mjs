@@ -13,11 +13,11 @@ const exec = promisify(execFile);
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = join(ROOT, 'bin', 'nx-nx.mjs');
 
-function run(cmdline, env = {}) {
+function run(cmdline, env = {}, cwd = tmpdir()) {
   // execFile 不走 shell，必须把命令串拆成 token 数组——
   // 整串塞进去会被当成一个 argv 元素，CLI 侧报「未知命令」。
   return exec(process.execPath, [BIN, ...cmdline.split(' ').filter(Boolean)], {
-    cwd: tmpdir(),
+    cwd,
     env: { ...process.env, ...env },
   });
 }
@@ -42,6 +42,34 @@ test('template list --json：至少一个模板，零错误', async () => {
   const r = JSON.parse(stdout);
   assert.ok(r.templates.length >= 1);
   assert.deepEqual(r.errors, []);
+});
+
+test('skill list + install：含主 skill 与 nx-dev，可装到指定目录', async () => {
+  const { stdout } = await run('skill list --json');
+  const r = JSON.parse(stdout);
+  for (const n of ['nx-nx', 'nx-dev']) assert.ok(r.skills.includes(n), `缺 skill ${n}`);
+  assert.equal(r.defaultGroup, 'nx-nx');
+
+  // nx-dev 的 preInstall 只允许在 nx-nx 仓库根安装 → cwd 传 ROOT
+  const dir = mkdtempSync(join(tmpdir(), 'nxnx-skill-'));
+  const { stdout: out2 } = await run(`skill install nx-dev --to ${dir} --json`, {}, ROOT);
+  const i = JSON.parse(out2);
+  assert.equal(i.status, 'ok');
+  assert.ok(i.files >= 1);
+});
+
+test('nx-dev 在非仓库目录安装被 preInstall 拒绝', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'nxnx-block-'));
+  await assert.rejects(
+    () => run(`skill install nx-dev --to ${dir} --json`, {}, dir),
+    (err) => {
+      // --json：错误负载走 stdout，exit 1
+      const payload = JSON.parse(err.stdout);
+      assert.equal(payload.ok, false);
+      assert.match(payload.error, /只能在 nx-nx 仓库/);
+      return true;
+    }
+  );
 });
 
 test('template create --dry-run：预览不落盘', async () => {

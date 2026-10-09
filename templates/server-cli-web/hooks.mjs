@@ -37,7 +37,9 @@ export default {
   // 生成前：端口没填就补一个可用的。
   // 放在这一步而不是 options 里，是因为用户可能显式清空端口要求「随便给一个」。
   async beforeGenerate(vars, ctx) {
-    const patch = {};
+    // PROJECT_ROOT 是「skill 安装期」占位（安装时由 hooks.json 的 handler
+    // 注入项目根路径）。生成期把它渲染成字面 {{PROJECT_ROOT}} 保留下来。
+    const patch = { PROJECT_ROOT: '{{PROJECT_ROOT}}' };
     if (!vars.port) {
       const [p] = await ctx.probePorts({ start: PORT_START, count: 1 });
       patch.port = p;

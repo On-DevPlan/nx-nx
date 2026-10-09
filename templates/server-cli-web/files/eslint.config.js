@@ -4,6 +4,7 @@
 // 把「谁可以依赖谁」写成机器可检查的规则。架构意图一旦只写在文档里，
 // 就会随提交次数慢慢衰减；写成 lint 规则则会当场拦下。
 import { defineConfig } from 'eslint/config';
+import react from 'eslint-plugin-react';
 
 const BASE_RULES = {
   'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
@@ -12,14 +13,29 @@ const BASE_RULES = {
   'prefer-const': 'error',
   'no-var': 'error',
   'no-console': 'off', // CLI 工具，输出就是产品
+  // 文件行数上限：防止单文件持续膨胀，超限应先拆分
+  'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
 };
 
 export default defineConfig([
   { ignores: ['src/web/public/**', 'node_modules/**', 'templates/**'] },
   {
     files: ['**/*.{js,mjs,jsx}'],
-    languageOptions: { ecmaVersion: 2023, sourceType: 'module' },
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: 'module',
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
     rules: BASE_RULES,
+  },
+
+  // JSX：基础 ESLint 的 no-unused-vars 不把 JSX 标签算作变量使用
+  // （TS 模板由 typescript-eslint 处理）。jsx-uses-vars 是标记规则，
+  // 让只在 JSX 中出现的组件/变量不被误报为未使用。
+  {
+    files: ['**/*.jsx'],
+    plugins: { react },
+    rules: { 'react/jsx-uses-vars': 'error' },
   },
 
   // ---- 分层约束（对应主文档「依赖只能向下 core ← modules ← runtime」）----
@@ -33,7 +49,10 @@ export default defineConfig([
         {
           patterns: [
             {
-              group: ['../modules/**', '../runtime/**', '../web/**'],
+              group: [
+                '../modules/**', '../runtime/**', '../web/**',
+                '../../modules/**', '../../runtime/**', '../../web/**',
+              ],
               message: 'core 是最底层，不得依赖 modules / runtime / web。',
             },
           ],
@@ -43,18 +62,11 @@ export default defineConfig([
   },
 
   {
-    // 模块之间禁止互相依赖，需要共享的下沉到 core/。
+    // 模块之间禁止互相值依赖，需要共享的下沉到 core/。
     //
-    // 用否定式 glob 而非逐模块枚举，这一点值得说明：
-    // 其他项目写的是手写列表 `['../repos/*', '../skills/*', ...]`，
-    // 新增模块忘了补，它就悄悄变成「谁都可以依赖」，而且没有任何测试会发现
-    // ——脚手架 skill 把这条列为「静默失效」的典型（枚举式规则随模块数衰减）。
-    //
-    // 否定式把默认翻过来：**一切同级目录都禁，白名单显式放行**。
-    // 实测语义（必须写成 `../*/**`，只写 `../*` 连白名单也会被拦掉）：
-    //   '../*/**'      拦所有兄弟模块，含尚未创建的新模块
-    //   '!../core/**'  放行 core
-    //   相对路径 './x.js' 不受影响（模块内部文件照常互相引用）
+    // 逐模块枚举（与 nx-nx / TS 模板一致）：新增模块时把它的路径补进
+    // files 与 group。枚举式规则的已知风险是「漏补静默」——靠
+    // tests/unit 的注册表一致性断言兜底。
     files: ['src/modules/**/*.{js,jsx}'],
     rules: {
       'no-restricted-imports': [
@@ -62,7 +74,7 @@ export default defineConfig([
         {
           patterns: [
             {
-              group: ['../*/**', '!../core/**'],
+              group: ['../home/*', '../home/**', '../skill/*', '../skill/**'],
               message: '模块之间不得互相依赖；共享逻辑请下沉到 core/。',
             },
           ],
@@ -97,4 +109,10 @@ export default defineConfig([
 
   // ---- 生成器专属区域：tools/ 要读模板树、写目标目录、spawn 进程 ----
   { files: ['tools/**/*.{js,mjs}'], rules: { 'no-restricted-imports': 'off' } },
+
+  // 开发/生成器脚本与工具：不强制行数上限（src 内的产品代码才强制）
+  {
+    files: ['scripts/**/*.{js,mjs}', 'tools/**/*.{js,mjs}'],
+    rules: { 'max-lines': 'off' },
+  },
 ]);
