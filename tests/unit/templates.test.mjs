@@ -168,9 +168,20 @@ test('walkTemplate: 跳过 node_modules / .git / template.json', async () => {
   assert.deepEqual(rels, ['keep.txt']);
 });
 
-test('isTextPath: 按扩展名分流（jsx/json/md 是文本，png/ico 是二进制）', () => {
+test('isTextPath: 按扩展名分流（文本会被渲染，其余按二进制原样拷贝）', () => {
+  // 文本侧：占位符会被替换
   assert.equal(isTextPath('src/a.jsx'), true);
   assert.equal(isTextPath('package.json'), true);
+  assert.equal(isTextPath('Makefile'), true, '无扩展名视为文本');
+  assert.equal(isTextPath('.gitignore'), true, '点文件视为文本');
+  // 非 JS 生态：mono-gf 模板踩过这一条 —— 漏了扩展名不会报错，
+  // 只会让生成的产物里字面留着占位符（静默坏掉）
+  assert.equal(isTextPath('app/server/main.go'), true, 'Go 源码');
+  assert.equal(isTextPath('go.mod'), true, 'go module 文件');
+  assert.equal(isTextPath('db/schema.sql'), true, 'SQL');
+  assert.equal(isTextPath('web/nginx.conf'), true, 'nginx 配置');
+  assert.equal(isTextPath('.env.example'), true, 'env 模板');
+  // 二进制侧：必须原样拷贝，否则会被 utf8 读写损坏
   assert.equal(isTextPath('logo.png'), false);
   assert.equal(isTextPath('favicon.ico'), false);
 });
@@ -179,6 +190,52 @@ test('assertTargetUsable: 已存在但为空 → 可用', async () => {
   const dir = tmp();
   const r = await assertTargetUsable(dir);
   assert.deepEqual(r, { exists: true });
+});
+
+test('模板库全部文本文件都能渲染（占位符写错只会在生成期才炸，这里提前红）', async () => {
+  // 背景：生成期的 renderString 遇到「未声明的变量」直接抛错，而模板文件里
+  // 每一次双花括号都会被当成变量。反面教材是 ESLint 的 messages/messageId 插值
+  // ——它的语法恰好也是双花括号，写进模板文件会让 `template create` 当场失败
+  // （smoke 只 dry-run 了 JS 模板，TS 模板没人兜）。
+  // 变量按模板自己的 option schema 派生，新增 option 自动覆盖。
+  //
+  // 例外：安装期占位符由 skill 安装钩子（hooks.json → install handler）注入，
+  // 生成期刻意不认它。渲染前先中和掉，否则这条测试会把「设计如此」当成失败。
+  const INSTALL_TIME_PLACEHOLDERS = ['PROJECT_ROOT'];
+  const { templates } = await listTemplates();
+  assert.ok(templates.length >= 1);
+  for (const meta of templates) {
+    const values = {};
+    for (const opt of meta.options ?? []) {
+      if (opt.default !== undefined) values[opt.name] = opt.default;
+      else if (opt.type === 'letters') values[opt.name] = 'zz';
+      else if (opt.type === 'number') values[opt.name] = 1;
+      else values[opt.name] = 'x';
+    }
+    const vars = resolveVars(meta, values);
+    const filesDir = join(TPL_ROOT, meta.id, 'files');
+    for (const rel of await walkTemplate(filesDir)) {
+      const raw = readFileSync(join(filesDir, rel));
+      if (!isTextPath(rel)) {
+        // 非文本文件会被**原样拷贝**：里面若含占位符，就会字面留在生成产物里。
+        // 这是静默失败（不报错、产物坏），所以宁可在这里拦死。
+        assert.ok(
+          !raw.includes('{{'),
+          `${meta.id}/${rel} 不是文本扩展名（isTextPath=false）却含占位符：` +
+            '生成时会原样拷贝、字面留下花括号。请把该扩展名补进 core/skills/text-util.ts 的 TEXT_EXT。'
+        );
+        continue;
+      }
+      let src = raw.toString('utf8');
+      for (const name of INSTALL_TIME_PLACEHOLDERS) {
+        src = src.split(`{{${name}}}`).join(name);
+      }
+      assert.doesNotThrow(
+        () => renderString(src, vars),
+        `${meta.id}/${rel} 渲染失败（多半是写了一个不是变量的双花括号占位符）`
+      );
+    }
+  }
 });
 
 test('cleanup', () => {

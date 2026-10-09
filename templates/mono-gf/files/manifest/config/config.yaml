@@ -1,0 +1,30 @@
+# 本机开发配置。容器里跑时用 config.docker.yaml 覆盖（compose 会挂载覆盖）。
+#
+# ⚠️ GoFrame 的 g.Cfg().Get/MustGet **不读环境变量**——只有 GetWithEnv/GetEffective
+# 会去查 GF_ 前缀。所以「以为改了环境变量就生效」在这里是失效的，
+# 要覆盖配置就改这个文件或挂载整个 manifest/config 目录。
+server:
+  address: ":{{apiPort}}"
+  # dev 打开自带面板：/swagger 是 GoFrame 从 api 定义自动生成的 OpenAPI 文档页。
+  # 生产环境请务必关掉（见 config.docker.yaml）——多一个入口就多一份暴露面。
+  openapiPath: "/api.json"
+  swaggerPath: "/swagger"
+  # 启动时打印路由表，便于确认某个接口到底挂在哪条路径上
+  dumpRouterMap: true
+
+logger:
+  level: "all"
+  stdout: true
+  path: "./temp/logs"
+  file: "{Y-m-d}.log"
+
+database:
+  logger:
+    level: "all"
+    stdout: true
+  default:
+    link: "pgsql:{{pgUser}}:{{pgPassword}}@tcp({{pgHost}}:{{pgPort}})/{{pgDatabase}}?sslmode=disable&search_path=public"
+    # 打印 SQL 便于开发；生产关掉（会把用户数据写进日志）
+    debug: true
+    maxIdle: 10
+    maxOpen: 50

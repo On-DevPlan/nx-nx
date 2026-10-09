@@ -1,0 +1,86 @@
+{
+  "id": "mono-gf",
+  "name": "mono-gf 全栈骨架",
+  "description": "GoFrame mono-repo 全栈骨架：Go 后端（GoFrame v2 + PostgreSQL）+ React 面板 + nginx 前置，一仓多应用，且从生成的第一秒就能跑通",
+  "nextSteps": [
+    "cd {{name}} && cp .env.example .env      # 可选，不建也能跑",
+    "docker compose up -d pg                   # 起 PostgreSQL（:{{pgPort}}）",
+    "make run                                  # 起 Go API（:{{apiPort}}）",
+    "cd web && npm install && npm run dev      # 起面板（:5173，已代理到 {{apiPort}}）",
+    "docker compose up -d                      # 或者整栈容器化：pg + api + nginx(:{{webPort}})",
+    "make tidy                                 # 改动 Go 依赖后才需要"
+  ],
+  "options": [
+    {
+      "name": "name",
+      "type": "string",
+      "label": "项目名",
+      "required": true,
+      "hint": "决定目录名、Go module、容器名、数据库名与环境变量前缀（1~40 位，建议小写连字符）"
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "label": "项目描述",
+      "default": "全栈骨架：GoFrame + React + nginx + PostgreSQL",
+      "hint": "写进 README、package.json 与面板副标题"
+    },
+    {
+      "name": "goModule",
+      "type": "string",
+      "label": "Go module 路径",
+      "hint": "留空则用 github.com/example/<项目名>，发布前记得改成自己的仓库地址"
+    },
+    {
+      "name": "apiPort",
+      "type": "number",
+      "label": "Go API 端口",
+      "hint": "留空则自动探测一个空闲端口（从 8000 起）"
+    },
+    {
+      "name": "webPort",
+      "type": "number",
+      "label": "nginx 前端端口",
+      "hint": "留空则自动探测一个空闲端口（从 8080 起）"
+    },
+    {
+      "name": "pgHost",
+      "type": "string",
+      "label": "PostgreSQL 主机",
+      "default": "127.0.0.1",
+      "hint": "本机开发用 127.0.0.1；容器里由 config.docker.yaml 覆盖成服务名 pg"
+    },
+    {
+      "name": "pgPort",
+      "type": "number",
+      "label": "PostgreSQL 端口",
+      "default": 5432,
+      "hint": "不探测：本机已有 PG 时你应该连它，而不是另起一个"
+    },
+    {
+      "name": "pgDatabase",
+      "type": "string",
+      "label": "数据库名",
+      "hint": "留空则用项目名（连字符换成下划线）"
+    },
+    {
+      "name": "pgUser",
+      "type": "string",
+      "label": "数据库用户",
+      "default": "postgres"
+    },
+    {
+      "name": "pgPassword",
+      "type": "string",
+      "label": "数据库口令",
+      "default": "postgres",
+      "hint": "本地开发默认值；生产环境务必改掉或挂载覆盖"
+    },
+    {
+      "name": "version",
+      "type": "string",
+      "label": "初始版本",
+      "default": "0.1.0"
+    }
+  ]
+}

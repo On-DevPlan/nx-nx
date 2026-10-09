@@ -1,0 +1,30 @@
+# 容器内运行时的配置。docker-compose 把它挂载**覆盖**成 manifest/config/config.yaml。
+#
+# 与 dev 配置的差别只有三处，每一处都是「开发方便、生产危险」：
+#   1. 关掉自带面板（openapiPath / swaggerPath）—— 生产不该多出 /swagger 与 /api.json 两个入口
+#   2. 关掉 SQL debug —— 否则用户数据会被写进容器日志
+#   3. 数据库指向 compose 的服务名 pg，而不是 127.0.0.1
+server:
+  address: ":{{apiPort}}"
+  openapiPath: ""
+  swaggerPath: ""
+  dumpRouterMap: false
+
+logger:
+  level: "info"
+  stdout: true
+  path: "./temp/logs"
+  file: "{Y-m-d}.log"
+
+database:
+  logger:
+    level: "info"
+    stdout: true
+  default:
+    # pg 是 compose 里的服务名，靠共享 docker 网络的 DNS 解析。
+    # 口令在这里是明文——生产请改用挂载的密钥文件或 docker secret，
+    # 不要把真实口令提交进仓库。
+    link: "pgsql:{{pgUser}}:{{pgPassword}}@tcp(pg:5432)/{{pgDatabase}}?sslmode=disable&search_path=public"
+    debug: false
+    maxIdle: 10
+    maxOpen: 50

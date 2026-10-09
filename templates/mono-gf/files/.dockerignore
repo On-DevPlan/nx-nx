@@ -1,0 +1,13 @@
+# 构建镜像时不需要进上下文的东西。
+# 少了这个文件，node_modules 会被整包发给 docker daemon（几百 MB、每次构建都传）。
+node_modules
+web/node_modules
+web/dist
+dist
+.git
+.github
+tmp
+temp
+*.log
+.env
+.env.local

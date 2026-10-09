@@ -1,0 +1,19 @@
+# gf gen dao 的配置：`make dao` 会读它（等价于 `gf gen dao -c hack/config.yaml`）。
+#
+# 表结构定下来之后跑一次，就会生成 internal/dao、internal/model/do、internal/model/entity。
+# 生成前请确认 link 指向的是**你自己的库**——这个文件会决定 gen 去连哪个 PostgreSQL。
+#
+# 注意：doPath / entityPath 是相对 path 的；path 默认 "internal" 已经正确，
+# 不要重复设置 path，否则 doPath 会被二次嵌套（这是真实踩过的坑）。
+gfcli:
+  gen:
+    dao:
+      - link: "pgsql:{{pgUser}}:{{pgPassword}}@tcp({{pgHost}}:{{pgPort}})/{{pgDatabase}}?sslmode=disable&search_path=public"
+        tables: "t_user"
+        path: "app/server/internal"
+        descriptionTag: true
+        jsonCase: "CamelLower"
+        gJsonSupport: true
+        stdTime: false
+        overwriteDao: true
+        removePrefix: "t_"

@@ -1,0 +1,52 @@
+name: CI
+
+# 每次 push / PR 做廉价校验：格式、编译、前端类型检查。
+# 不跑集成测试（那需要数据库）——需要时再加一个带 postgres service 的 job。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # 要 >= go.mod 里的 go 指令（1.23）
+          go-version: '1.23'
+          cache-dependency-path: go.sum
+
+      - name: 依赖
+        run: go mod download
+
+      # gofmt 用 -l（列出不合规文件）而不是 -w：CI 只判断，不改工作区
+      - name: Go 格式
+        run: |
+          unformatted=$(gofmt -l app)
+          if [ -n "$unformatted" ]; then
+            echo "以下文件需要 gofmt："
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Go 编译
+        run: go build ./...
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 前端依赖
+        working-directory: web
+        run: npm install --no-audit --no-fund
+
+      - name: 前端类型检查
+        working-directory: web
+        run: npm run typecheck
+
+      - name: 前端构建
+        working-directory: web
+        run: npm run build

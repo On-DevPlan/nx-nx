@@ -49,6 +49,21 @@ test('lint 通用块的 group 覆盖全部业务模块（互为禁列）', () =>
   );
 });
 
+test('两个模板的 lint 都带单文件字符数闸门（templates/** 不被根 lint 覆盖，只能靠这条守着）', () => {
+  // 背景：根 eslint.config.js 忽略 templates/**，模板自带的 eslint.config.js
+  // 只有在「生成出项目之后」才会被执行。也就是说模板里的 lint 规则改动，
+  // 在本仓库内没有任何东西会跑到它 —— 静默失效的典型地形。
+  // 这里钉住规则存在性；真正生效的验证在 e2e（生成项目跑 pnpm lint）。
+  for (const id of ['server-cli-web', 'server-cli-web-ts']) {
+    const config = readFileSync(join(ROOT, 'templates', id, 'files', 'eslint.config.js'), 'utf8');
+    assert.ok(
+      config.includes("'local/max-file-chars'"),
+      `${id} 的 eslint.config.js 缺少单文件字符数闸门（local/max-file-chars）。` +
+        '别只在其中一个模板上加。'
+    );
+  }
+});
+
 test('视图 tsx 不做 node 侧的值导入（import type 允许，编译后擦除）', () => {
   // 与 eslint 的前端规则互为备份：这条能在不跑 eslint 的环境下（如 node --test）兜底
   const { globSync } = readdirSyncGlobs();

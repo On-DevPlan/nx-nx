@@ -1,0 +1,57 @@
+# 整栈：PostgreSQL + Go API + nginx 前端。
+#
+# 所有变量都写成 ${VAR:-默认值} 的形式 —— **不配 .env 也能直接起来**。
+# 要改端口/库名就 cp .env.example .env，不要改这个文件。
+#
+# 容器间靠共享网络的 DNS 解析：nginx 用服务名 api，api 用服务名 pg。
+# 这也是为什么 config.docker.yaml 里的数据库主机是 pg 而不是 127.0.0.1 ——
+# 容器里的 127.0.0.1 是容器自己，不是数据库。
+services:
+  pg:
+    image: postgres:16-alpine
+    container_name: ${APP_NAME:-{{name}}}-pg
+    environment:
+      POSTGRES_DB: ${PG_DATABASE:-{{pgDatabase}}}
+      POSTGRES_USER: ${PG_USER:-{{pgUser}}}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-{{pgPassword}}}
+      # 中文排序/大小写行为在不同 locale 下不一致，显式固定，避免「我这儿查得到」类问题
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "${PG_PORT:-{{pgPort}}}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # 首次创建数据卷时自动执行；之后改 SQL 不会重跑（见 README 的说明）
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-{{pgUser}}} -d ${PG_DATABASE:-{{pgDatabase}}}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ${APP_NAME:-{{name}}}-api
+    depends_on:
+      pg:
+        # 等数据库真的能连了再起：否则第一次启动必然是一串连接失败日志
+        condition: service_healthy
+    volumes:
+      # 用容器版配置覆盖挂载，仓库里的 config.yaml 保持「本机开发」语义
+      - ./manifest/config/config.docker.yaml:/app/manifest/config/config.yaml:ro
+    ports:
+      - "${API_PORT:-{{apiPort}}}:{{apiPort}}"
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: ${APP_NAME:-{{name}}}-web
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-{{webPort}}}:80"
+
+volumes:
+  pgdata:

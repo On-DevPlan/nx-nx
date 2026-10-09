@@ -49,7 +49,7 @@ Node/server-cli-web 类模板：
 ```bash
 cd <案例目录>
 pnpm install
-pnpm test            # lint（含分层 / max-lines）→ typecheck → build → smoke → unit
+pnpm test            # lint（含分层 / max-lines / max-file-chars）→ typecheck → build → smoke → unit
 pnpm start           # 起面板，抽查关键 API 与页面
 ```
 

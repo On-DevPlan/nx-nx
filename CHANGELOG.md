@@ -2,6 +2,37 @@
 
 本文件记录对外可见的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.5.0] - 2026-10-09
+
+新增第一个**非 Node 生态**的模板（GoFrame 全栈），并把模板引擎的一个静默失败修掉。
+
+- **新模板 `mono-gf`：GoFrame mono-repo 全栈骨架**（与 `server-cli-web` 同级）。
+  Go 后端（GoFrame v2.10 + PostgreSQL）+ React 面板 + nginx 前置，一仓多应用：
+  `app/server` 带 api 契约（`/hello`、`/user/list`、`/user/create`）、
+  controller → logic → `g.DB()` 完整分层、`db/schema.sql`、`make dao` 的 gen 配置、
+  docker-compose（pg + api + web）、CI。实测：生成即 `go build` 通过、
+  前端 `tsc --noEmit` + `vite build` 通过、`docker compose config` 通过、
+  起服务后 `/hello` 返回 `{code:0,message:"OK",data:{…}}`、`/user/list` 能真连库
+  （无库时报连接失败而不是找不到驱动）、校验失败回 `code:51`。
+- **修复 `isTextPath` 的扩展名白名单漏项**：`.go .mod .sum .sql .conf .example .dockerignore`
+  之前不在白名单里 → 这些文件被当二进制**原样拷贝**，占位符字面留在生成产物里
+  （不报错的静默失败）。mono-gf 模板就是踩到这一点才暴露的。
+- 单测加固两条：`isTextPath` 覆盖非 JS 生态扩展名；
+  「模板库全部文本文件都能渲染」新增一条断言 —— **非文本扩展名的文件里不允许出现占位符**，
+  否则生成时会原样拷贝、静默坏掉。
+- **两个模板的 lint 新增「单文件有效字符数」闸门**（`local/max-file-chars`，上限 15000）：
+  `max-lines` 只管行数，把每行拉长照样能一直膨胀；字符数是同一件事的另一把尺子，
+  两者同口径、都只统计「有效代码」（跳过空行与注释）。
+  该闸门**不跟着 `max-lines` 给 `scripts/`、`tools/` 开豁免**：行数豁免的本意是
+  「开发脚本结构随意」，不是「体积可以无上限」——JS 模板里被免检的
+  `scripts/link-local.mjs`（约 12.7k 有效字符 / 528 行）现在也在闸门内。
+- 新增单元测试：两个模板的 `eslint.config.js` 都必须带这条闸门。根 lint 忽略
+  `templates/**`，模板规则没有别的地方会跑到，不钉住就没人发现。
+- 新增长期护栏：**模板库全部文本文件都必须能渲染**。这条规则本身就是踩出来的——
+  ESLint 的 `messages` / `messageId` 插值语法和模板引擎的占位符是同一套双花括号，
+  写进模板文件会让 `template create` 当场报「未声明的变量」（smoke 只 dry-run 了
+  JS 模板，TS 模板没人兜）。规则内改成字符串拼接，并把「渲染全部模板文件」钉成测试。
+
 ## [0.4.0] - 2026-10-09
 
 多 skill 编排与配置驱动 hook 总线，并把整套机制沉淀为标准模块植入两个模板。

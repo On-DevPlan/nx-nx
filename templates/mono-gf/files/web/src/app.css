@@ -1,0 +1,297 @@
+/* =============================================================================
+ * {{name}} 控制台 —— 黑白灰主题
+ *
+ * 设计规则（改样式前先读这段，这是从上一代控制台继承下来的约定）：
+ *
+ *   1. 唯一的色相来源是灰阶。不引入红/绿/蓝 —— 状态靠「明度 + 字重 + 边框粗细」表达：
+ *        · 主操作   → 实心近黑底 + 白字
+ *        · 危险操作 → 实心近黑底 + 白字 + 更粗的边框（比主操作更重）
+ *        · 选中/激活 → 左侧 3px 实心黑边 + 浅灰底
+ *        · 错误     → 浅灰底 + 左侧 3px 实心黑边（不用红色）
+ *   2. 组件类名用 BEM 简写，页面里直接引，不再另建样式层。
+ * ========================================================================== */
+
+:root {
+  --c-bg: #ffffff;
+  --c-bg-subtle: #fafafa;
+  --c-bg-inset: #f5f5f5;
+  --c-bg-hover: #f0f0f0;
+
+  --c-border: #e5e5e5;
+  --c-border-strong: #d4d4d4;
+
+  --c-text: #171717;
+  --c-text-2: #525252;
+  --c-text-3: #8f8f8f;
+  --c-text-inv: #ffffff;
+
+  --c-invert: #171717;
+  --c-invert-hover: #333333;
+
+  --radius: 6px;
+  --radius-sm: 4px;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --mono: ui-monospace, SFMono-Regular, 'JetBrains Mono', Consolas, monospace;
+
+  --sidebar-w: 216px;
+  --topbar-h: 56px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--c-text);
+  background: var(--c-bg-subtle);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+}
+
+a {
+  color: var(--c-text);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+code,
+.mono {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+/* ---- 骨架 ---- */
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  height: 100%;
+}
+
+.sidebar {
+  border-right: 1px solid var(--c-border);
+  background: var(--c-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.brand {
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--c-border);
+  font-weight: 600;
+}
+
+.brand-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  background: var(--c-invert);
+  color: var(--c-text-inv);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.nav {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-item {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--c-text-2);
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+
+.nav-item:hover {
+  background: var(--c-bg-hover);
+  text-decoration: none;
+}
+
+.nav-item[aria-current='page'] {
+  background: var(--c-bg-inset);
+  border-left-color: var(--c-invert);
+  color: var(--c-text);
+  font-weight: 600;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.topbar {
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-bg);
+}
+
+.content {
+  padding: 20px;
+  overflow: auto;
+}
+
+/* ---- 组件 ---- */
+
+.card {
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.card-title {
+  font-size: 13px;
+  color: var(--c-text-2);
+  margin-bottom: 12px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--c-invert);
+  background: var(--c-invert);
+  color: var(--c-text-inv);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--c-invert-hover);
+}
+
+.btn:disabled {
+  background: var(--c-bg-inset);
+  border-color: var(--c-border-strong);
+  color: var(--c-text-3);
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  background: var(--c-bg);
+  color: var(--c-text);
+  border-color: var(--c-border-strong);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--c-bg-hover);
+}
+
+.input {
+  padding: 7px 10px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 13px;
+  background: var(--c-bg);
+  color: var(--c-text);
+  min-width: 180px;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--c-invert);
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.table th {
+  color: var(--c-text-2);
+  font-weight: 600;
+  background: var(--c-bg-subtle);
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 6px 12px;
+  font-size: 13px;
+}
+
+.kv dt {
+  color: var(--c-text-3);
+}
+
+.kv dd {
+  margin: 0;
+}
+
+/* 错误用「浅灰底 + 左侧粗黑边」，不用红色 —— 在一屏灰阶里这样反而最跳眼 */
+.notice {
+  padding: 10px 12px;
+  border-left: 3px solid var(--c-invert);
+  background: var(--c-bg-inset);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.muted {
+  color: var(--c-text-3);
+}
+
+.tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--c-text-2);
+}

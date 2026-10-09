@@ -8,3 +8,7 @@ dist/
 
 # 面板静态产物目录（若由钩子实时产出则不入库）
 src/web/frontend/public/
+
+# 本机 agent 的工作数据（记忆、审计报告等）。与 go-ac 保持一致：
+# 这是「我这台机器上的东西」，不是仓库的一部分。
+.workbuddy/
