@@ -40,6 +40,11 @@ export default {
       // PG 标识符不接受连字符，换成下划线
       patch.pgDatabase = name.replace(/-/g, '_');
     }
+    if (!vars.initial) {
+      // 品牌标记的首字母。为什么不让模板自己取：模板只能做字符串替换，
+      // 取不了「首字符」；写死一个字母又会变成「生成出来的项目还带着模板的字母」。
+      patch.initial = (name.charAt(0) || 'M').toUpperCase();
+    }
     if (!vars.apiPort) {
       const [p] = await ctx.probePorts({ start: API_PORT_START, count: 1 });
       patch.apiPort = p;

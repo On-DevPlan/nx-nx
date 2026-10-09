@@ -26,6 +26,12 @@
       "hint": "写进 README、package.json 与面板副标题"
     },
     {
+      "name": "initial",
+      "type": "string",
+      "label": "品牌首字母",
+      "hint": "侧栏品牌标记与标签页图标用它；留空则自动取项目名首字符"
+    },
+    {
       "name": "goModule",
       "type": "string",
       "label": "Go module 路径",

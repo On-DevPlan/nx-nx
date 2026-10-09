@@ -24,7 +24,7 @@ export default function App() {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark">M</span>
+          <span className="brand-mark">{{initial}}</span>
           <span>{{name}}</span>
         </div>
         <nav className="nav">

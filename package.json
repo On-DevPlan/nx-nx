@@ -1,6 +1,6 @@
 {
   "name": "nx-nx",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "nx 系列项目生成器 — 把 server-cli-web 骨架物化成项目：CLI 与 Web 面板同源，提供 JS 与 TypeScript 两套模板（TS 模板带编译期类型安全）",
   "type": "module",
   "bin": {

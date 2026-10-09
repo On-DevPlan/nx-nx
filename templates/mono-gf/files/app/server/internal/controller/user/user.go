@@ -32,7 +32,13 @@ func (c *ControllerV1) List(ctx context.Context, req *v1.ListReq) (res *v1.ListR
 		if u.CreatedAt != nil {
 			// 统一在服务端格式化成字符串：前端拿到 Date 对象再各自格式化，
 			// 会因为时区与本地化在处理时间/日期边界时出现偏差。
-			item.CreatedAt = u.CreatedAt.Format("2006-01-02 15:04:05")
+			//
+			// ⚠️ gtime 有两个长得像的方法，语义完全不同：
+			//     t.Format("Y-m-d H:i:s")          自定义语法（PHP 风格）
+			//     t.Layout("2006-01-02 15:04:05")  标准库 layout
+			// 用反了**不报错**，只会把格式串原样当结果输出（时间列会变成字面
+			// "2006-01-02 15:04:05"）。这里要的是标准库语义，所以用 Layout。
+			item.CreatedAt = u.CreatedAt.Layout("2006-01-02 15:04:05")
 		}
 		list = append(list, item)
 	}
