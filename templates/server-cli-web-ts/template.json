@@ -1,0 +1,47 @@
+{
+  "id": "server-cli-web-ts",
+  "name": "server-cli-web TS 骨架",
+  "description": "TypeScript 版 serve 驱动骨架：CLI 与 API 同源、编译期类型安全（泛型 action builder / 注册表查重 / typed client）、eslint 带文件行数限制",
+  "namePrefix": "nx-",
+  "nextSteps": [
+    "cd {{name}} && pnpm install",
+    "pnpm dev            # vite + 后端 tsx 直跑源码，改码即生效",
+    "pnpm test           # lint(含行数限制) + typecheck + build + smoke + unit",
+    "pnpm start          # 构建并启动面板",
+    "{{name}} greet <名字>    # 试试与面板同源的 CLI 命令（可加 --loud、--json）"
+  ],
+  "options": [
+    {
+      "name": "letters",
+      "type": "letters",
+      "label": "项目字母",
+      "required": true,
+      "hint": "1~5 位小写字母，决定项目名（nx-<字母>）、数据目录与 bin 名"
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "label": "项目描述",
+      "default": "本机工具：TypeScript 版 CLI 与 Web 面板同源",
+      "hint": "写进 package.json 与面板副标题"
+    },
+    {
+      "name": "port",
+      "type": "number",
+      "label": "serve 端口",
+      "hint": "留空则自动探测一个空闲端口（家族从 7920 起）"
+    },
+    {
+      "name": "vitePort",
+      "type": "number",
+      "label": "vite dev 端口",
+      "hint": "留空则自动探测"
+    },
+    {
+      "name": "version",
+      "type": "string",
+      "label": "初始版本",
+      "default": "0.1.0"
+    }
+  ]
+}

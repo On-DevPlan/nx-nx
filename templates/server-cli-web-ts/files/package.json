@@ -1,0 +1,51 @@
+{
+  "name": "{{name}}",
+  "version": "{{version}}",
+  "description": "{{description}}",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "{{name}}": "./bin/{{letters}}.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "bin",
+    "assets"
+  ],
+  "scripts": {
+    "start": "pnpm build && node bin/{{letters}}.mjs serve",
+    "dev": "node scripts/dev.mjs",
+    "dev:serve": "node --import tsx src/runtime/cli.ts serve --no-open",
+    "build": "tsc -b tsconfig.node.json && vite build",
+    "typecheck": "tsc -b tsconfig.node.json tsconfig.web.json",
+    "lint": "eslint .",
+    "test:smoke": "node tests/smoke.mjs",
+    "test:unit": "node --import tsx --test tests/unit/*.test.mjs",
+    "test": "pnpm run lint && pnpm run typecheck && pnpm run build && pnpm run test:smoke && pnpm run test:unit"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "eslint": "^9.15.0",
+    "tsx": "^4.19.0",
+    "typescript": "~5.9.0",
+    "typescript-eslint": "^8.18.0",
+    "vite": "^6.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

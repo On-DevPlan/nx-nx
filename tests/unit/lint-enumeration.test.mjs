@@ -49,22 +49,32 @@ test('lint 通用块的 group 覆盖全部业务模块（互为禁列）', () =>
   );
 });
 
-test('view.jsx 只 import 前端壳与 react（不拖 node 侧代码进浏览器包）', () => {
+test('视图 tsx 不做 node 侧的值导入（import type 允许，编译后擦除）', () => {
   // 与 eslint 的前端规则互为备份：这条能在不跑 eslint 的环境下（如 node --test）兜底
   const { globSync } = readdirSyncGlobs();
   for (const file of globSync) {
     const src = readFileSync(file, 'utf8');
-    const bad = src.match(/from\s+'[^']*(core|runtime)\/[^']*';/g);
-    assert.equal(bad, null, `${file} 引用了 Node 侧代码: ${bad}`);
+    const badLines = src
+      .split('\n')
+      .filter(
+        (line) =>
+          /from\s+'[^']*(core|runtime)\//.test(line) && !/^\s*import\s+type\b/.test(line),
+      );
+    assert.deepEqual(
+      badLines,
+      [],
+      `${file} 对 Node 侧代码存在值导入（必须改为 import type）: ${badLines.join(' / ')}`,
+    );
   }
 });
 
 function readdirSyncGlobs() {
+  const VIEW_FILES = new Set(['view.tsx', 'templates-view.tsx']);
   const walk = (dir, acc = []) => {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
       const p = join(dir, e.name);
       if (e.isDirectory()) walk(p, acc);
-      else if (e.name.endsWith('.view.jsx') || e.name === 'view.jsx') acc.push(p);
+      else if (VIEW_FILES.has(e.name)) acc.push(p);
     }
     return acc;
   };

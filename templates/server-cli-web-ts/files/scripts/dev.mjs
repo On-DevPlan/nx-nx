@@ -17,8 +17,8 @@ import { fileURLToPath } from 'node:url';
 const ROOT = dirname(fileURLToPath(import.meta.url)).replace(/[\\/]scripts$/, '');
 const NODE = process.execPath;
 
-const BACKEND_PORT = Number(process.env.NX_NX_PORT) || 7880;
-const VITE_PORT = Number(process.env.NX_NX_VITE_PORT) || 5182;
+const BACKEND_PORT = Number(process.env.{{envPrefix}}_PORT) || {{port}};
+const VITE_PORT = Number(process.env.{{envPrefix}}_VITE_PORT) || {{vitePort}};
 
 const VITE_BIN = join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
 if (!existsSync(VITE_BIN)) {
@@ -94,7 +94,7 @@ if (!ready) {
 
 // dev 下后端直接用 tsx 跑 TS 源码（改码重启即生效），不走 bin→dist 的构建产物。
 start('serve', ['--import', 'tsx', join(ROOT, 'src', 'runtime', 'cli.ts'), 'serve', '--no-open'], {
-  NX_NX_PORT: String(BACKEND_PORT),
+  {{envPrefix}}_PORT: String(BACKEND_PORT),
 });
 
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
