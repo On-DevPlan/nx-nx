@@ -13,20 +13,23 @@
 nx-nx 把这套在多个真实项目上验证过的骨架沉淀为模板。用户只做两个决定：选哪套
 模板、用什么字母标识项目；其余由生成器完成。
 
-## 两套模板对比
+## 四套模板一览
 
-| | server-cli-web | server-cli-web-ts |
+| 模板 | 产出一个 | 适合 |
 | --- | --- | --- |
-| 语言 | JavaScript（.js / .jsx） | TypeScript（.ts / .tsx） |
-| 类型安全 | 运行时 + 装载期自检 | 额外的**编译期**检查 |
-| 适合 | 快速脚本型工具、不想接触类型 | 长期维护、希望编译器提前暴露问题 |
+| `server-cli-web`     | 可运行的 CLI + Web 面板项目（JS） | 快速脚本型本机工具，不想接触类型 |
+| `server-cli-web-ts`  | 同上，TypeScript 版              | 长期维护、希望编译器提前暴露问题 |
+| `mono-gf`            | GoFrame v2 + React + PostgreSQL 全栈 mono-repo | 后端用 Go、需要数据库、需要 docker-compose 一键起服 |
+| `std-a-lang`         | `a_<lang>/{sdk, proj, res, doc}` 四象限目录骨架 | 给某个语言铺工作区，不产出可运行项目（参考 `D:\code\` 布局；`--lang` 支持逗号分隔多值） |
 
-TS 模板的编译期检查包括：action 的 ctx 由声明精确派生（漏传参数、flag 类型写错
-即红）、模块 / action / CLI / HTTP 重复注册检查、typed client（未知 action、
-漏传参数即红，返回数据精确推导）、branded 路径类型、错误码穷尽映射。
+`server-cli-web` 与 `server-cli-web-ts` 的差别是 TS 多一层**编译期**检查：action 的
+ctx 由声明精确派生（漏传参数、flag 类型写错即红）、模块 / action / CLI / HTTP
+重复注册检查、typed client（未知 action、漏传参数即红，返回数据精确推导）、
+branded 路径类型、错误码穷尽映射。
 
-两套模板生成的项目结构一致：core（基础设施）、modules（功能域）、runtime
-（装配）、web（React 壳），一条 action 声明同时派生 CLI、HTTP 与 help。
+三套「可运行」模板生成的项目结构基本一致（分层：core 基础设施 / modules 功能域 /
+runtime 装配 / web 壳），一条 action 声明同时派生 CLI、HTTP 与 help。`std-a-lang`
+不在这一类——它只生成空目录，由用户往里填项目或资源。
 
 ## 使用背景与需求
 

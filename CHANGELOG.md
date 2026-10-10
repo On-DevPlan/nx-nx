@@ -2,6 +2,17 @@
 
 本文件记录对外可见的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.6.1] - 2026-10-10
+
+修一处 v0.5.0 加 `mono-gf` 时就遗留、本次加 `std-a-lang` 才显式报修的文档漂移：
+随包分发的 skill 文档里模板清单仍停留在「两套」，与实际四套不一致。
+
+- `assets/nx-nx/SKILL.md` 的「模板 id」列表更新到 4 套（`server-cli-web` /
+  `server-cli-web-ts` / `mono-gf` / `std-a-lang`），每套一行用途一句话
+- `assets/nx-nx/references/00-product.md` 的「两套模板对比」表重写为「四套模板
+  一览」：可运行的三套（JS / TS / GoFullstack）一行一列，`std-a-lang` 单独说明
+  「只铺目录、不产出可运行项目」，并点出 `--lang` 多值特性
+
 ## [0.6.0] - 2026-10-10
 
 新增第一个「不生成项目、只铺目录」的模板，并修掉 nx-nx 自己面板的图标 404。

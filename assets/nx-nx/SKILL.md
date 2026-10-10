@@ -35,8 +35,11 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 | `nx-nx skill list` | 列出可装的 skill 与 group |
 | 任何命令 + `--json` | 机器可读输出（agent 模式） |
 
-模板 id：`server-cli-web`（JavaScript）、`server-cli-web-ts`（TypeScript，带编译期
-类型安全）。
+模板 id（共 4 套）：
+
+- `server-cli-web` / `server-cli-web-ts` — CLI + Web 面板同源（JS / TS），本机工具通用基线
+- `mono-gf` — GoFrame v2 + React + PostgreSQL 全栈 mono-repo
+- `std-a-lang` — 只铺 `a_<lang>/{sdk, proj, res, doc}` 四象限的目录骨架，不生成可运行项目（参考 `D:\code\` 的命名空间布局）
 
 ## agent 典型会话
 
