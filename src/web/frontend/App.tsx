@@ -46,7 +46,27 @@ export default function App() {
     <>
       <header>
         <div className="brand">
-          <img src="/logo-rounded.png" alt="" />
+          {/* 同 index.html 的内联 SVG 思路：避免对 /logo-rounded.png 的 404。
+              字面「nx」与侧栏文字保持一致，色块和 favicon 同一套。 */}
+          <svg
+            className="brand-mark"
+            viewBox="0 0 32 32"
+            role="img"
+            aria-label="nx-nx"
+          >
+            <rect width="32" height="32" rx="7" fill="#171717" />
+            <text
+              x="16"
+              y="22.5"
+              fontFamily="sans-serif"
+              fontSize="17"
+              fontWeight={700}
+              fill="#ffffff"
+              textAnchor="middle"
+            >
+              nx
+            </text>
+          </svg>
           {appName}
           <span className="sub">nx-xx 项目生成器</span>
         </div>

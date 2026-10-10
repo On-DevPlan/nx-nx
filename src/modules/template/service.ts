@@ -113,13 +113,16 @@ export async function create({
   const { meta, dir } = await loadTemplate(id);
   const resolvedOptions = await resolveOptions(meta, dir, hookCtx());
   let vars = resolveVars({ ...meta, options: resolvedOptions }, options);
-  vars = await applyBeforeGenerate(dir, vars, hookCtx({ cwd }));
+
+  // rawDir 在钩子前就取好：std-a-lang 这类模板要在 beforeGenerate 里判断
+  // 「多语言且没给 --dir」并当场报错，而不是等到写盘才发现目录嵌套了。
+  const rawDir = options.dir;
+  vars = await applyBeforeGenerate(dir, vars, hookCtx({ cwd, dir: rawDir }));
 
   if (!vars.name) {
     throw badInput('模板没有产出项目名——请检查 template.json 是否声明了 namePrefix 与 letters 选项');
   }
 
-  const rawDir = options.dir;
   const targetDir: AbsolutePath = asAbsolutePath(
     rawDir
       ? isAbsolute(String(rawDir))

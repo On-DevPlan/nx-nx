@@ -1,0 +1,25 @@
+{
+  "id": "std-a-lang",
+  "name": "a_{语言} 命名空间骨架（可批量）",
+  "description": "D:\\code 的标准 a_{语言} 命名空间：sdk / proj / res / doc 四象限。单次可批量起多个语言工作区。",
+  "namePrefix": "a_",
+  "nextSteps": [
+    "ls   # 看一眼生成出来的 a_<lang>/ 们",
+    "git init",
+    "# 四象限说明：",
+    "# sdk   自研 / 二次封装的 SDK、客户端封装",
+    "# proj  该语言下的项目，建议统一前缀（nx- / pg- / go- …）",
+    "# res   第三方仓库、参考资料、下载资源",
+    "# doc   工具链笔记、规范、最佳实践"
+  ],
+  "options": [
+    {
+      "name": "lang",
+      "type": "string",
+      "label": "语言缩写",
+      "required": true,
+      "pattern": "^[a-z][a-z0-9_]{1,8}(\\s*,\\s*[a-z][a-z0-9_]{1,8})*$",
+      "hint": "单: ts / go / py；多: ts, go, py（用英文逗号分隔）"
+    }
+  ]
+}

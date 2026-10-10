@@ -2,6 +2,31 @@
 
 本文件记录对外可见的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.6.0] - 2026-10-10
+
+新增第一个「不生成项目、只铺目录」的模板，并修掉 nx-nx 自己面板的图标 404。
+
+- **新模板 `std-a-lang`：a_{语言} 命名空间骨架**。参考 `D:\code` 的实际布局
+  （`a_js/`、`a_go/`、`a_py/` …），把每个语言目录收敛成 **sdk / proj / res / doc**
+  四象限：sdk 放自研/封装的库，proj 放该语言的项目（建议统一前缀），res 放第三方
+  仓库与下载资源，doc 放工具链笔记。`--lang` 支持**逗号分隔的多个值**，一次起多个
+  语言工作区（`--lang "ts, go, py"`）；单语言留空 `--dir` 时默认在当前目录生成
+  `a_<lang>/`，多语言必须 `--dir` 指定空父目录——否则当场报错，而不是把
+  `a_<lang>/` 们嵌进 `a_<firstLang>/` 里。
+- **模板引擎：`--dir` 注入钩子 ctx**。`beforeGenerate(vars, ctx)` 之前拿不到
+  `--dir`，模板没机会在解析期判断「多语言却只给了可嵌套的默认目录」。现在
+  `ctx.dir` 即 CLI `--dir` 原值（`service.ts` 把 `rawDir` 的取值提到钩子之前）。
+  这是 `std-a-lang` 多语言校验的依据，也修掉了原先「钩子里改目录名没参与目标检查」
+  的一个时序隐患。
+- **修复 nx-nx 自身面板的图标全 404**：`index.html` 引用的 `/favicon-32.png`、
+  `/favicon-16.png`、`/favicon.ico`、`/logo-rounded.png`，以及 `App.tsx` 侧栏的
+  `<img src="/logo-rounded.png">`，在**整个项目里一个文件都不存在**，也没有
+  `public/` 目录——dev 与 prod 下全 404，侧栏 logo 图裂。根因与 v0.5.1 修 mono-gf
+  的 favicon 同源，但当时只修了「按模板生成的项目」，nx-nx 自己从没修过
+  （旧注释还误称「图标由生成器的 logo-gen 产出」——logo-gen 是模板钩子，
+  只在生成新项目时跑，nx-nx 自己永远不会被生成）。改法与 v0.5.1 一致：
+  **内联 SVG data URI**，零网络请求、零二进制依赖，字面与侧栏品牌字统一取 `nx`。
+
 ## [0.5.1] - 2026-10-09
 
 `mono-gf` 端到端实跑（真起 PostgreSQL + 真浏览器）之后修掉的两处 ——
