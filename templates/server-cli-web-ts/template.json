@@ -3,6 +3,7 @@
   "name": "server-cli-web TS 骨架",
   "description": "TypeScript 版 serve 驱动骨架：CLI 与 API 同源、编译期类型安全（泛型 action builder / 注册表查重 / typed client）、eslint 带文件行数与字符数限制",
   "namePrefix": "nx-",
+  "logo": false,
   "nextSteps": [
     "cd {{name}} && pnpm install",
     "pnpm dev            # vite + 后端 tsx 直跑源码，改码即生效",

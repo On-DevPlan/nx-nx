@@ -24,8 +24,8 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 | --- | --- |
 | `nx-nx template list` | 列出可用模板（agent 摸底从这里开始） |
 | `nx-nx template describe <id>` | 查看模板说明与可选项 |
-| `nx-nx template preview <id> --letters ab` | 预览将生成的文件清单（不写盘） |
-| `nx-nx template create <id> --letters ab [--dir D]` | 按模板生成项目 |
+| `nx-nx template preview <id> [--选项 值...]` | 预览将生成的文件清单（不写盘） |
+| `nx-nx template create <id> [--选项 值...] [--dir D]` | 按模板生成项目 |
 | `nx-nx template ports [--start N] [--count N]` | 探测空闲本机端口 |
 | `nx-nx template check-dir --dir D` | 检查输出目录是否可用（非空即不可用） |
 | `nx-nx serve [--port N] [--no-open]` | 启动 nx-nx 自己的 Web 面板（可视化创建） |
@@ -57,7 +57,8 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 ## 关键约束（避免踩坑）
 
 - 目标目录**非空即拒**，绝不覆盖——要重新生成就换新目录或清空目录
-- `--letters` 必须是 1~5 位小写字母；它与模板 namePrefix 拼出项目名（如 `nx-xx`）
+- **必填项因模板而异**：`server-cli-web` 家族是 `--letters`（1~5 位小写字母，与 namePrefix 拼出项目名，如 `nx-xx`），
+  `mono-gf` 是 `--name`，`std-a-lang` 是 `--lang`。动手前先 `template describe <id>` 看清楚，别照抄别的模板的参数
 - 生成项目的端口由模板钩子在创建时探测并写死，面板与 Vite 各一个
 - 生成的是**本机单用户工具**：状态存 `~/<项目名>/store.json`
 

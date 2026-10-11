@@ -111,7 +111,8 @@ export default defineModule({
       async (ctx) => {
         const d = await service.describe(ctx.id);
         const options = collectOptions(ctx, d.template.options || []);
-        return service.preview({ id: ctx.id, options });
+        // dir 走 options（与 create 同形）：siblings 模板的钩子按 ctx.dir 判断是否允许展开。
+        return service.preview({ id: ctx.id, options: { ...options, dir: ctx.dir as string | undefined } });
       },
       (r) => {
         const lines = [`将创建 ${r.count} 个文件 → ${r.vars.name || '(未命名)'}`, ''];

@@ -6,11 +6,19 @@
 //
 // 所有请求走类型安全 client：action id、路由参数、flag 值类型、返回数据
 // 全部由注册表类型推出，写错在编译期就红。
+//
+// 核心约束：**面板不认识任何具体的选项名**。必填与否、能不能点「生成项目」、
+// 输出目录叫什么，全部由模板的 option schema + resolveVars 的同一套规则推出
+// （判定逻辑见 option-form.ts）。曾经这里写死 `letters`——那是 server-cli-web
+// 家族的专属字段，mono-gf（name）与 std-a-lang（lang）因此永远点不动。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CliHints } from '../../web/frontend/components/CliHints.js';
 import { useToast, useDialog } from '../../web/frontend/components/ui.jsx';
 import { useStore } from '../../web/frontend/store.jsx';
 import { LogoPreview, SCHEME_PREVIEW } from './logo-preview.js';
+import { OptionField } from './option-field.js';
+import { blockingIssues, describeIssues, splitOptions, suggestProjectName } from './option-form.js';
+import type { OptionIssue, OptionValues } from './option-form.js';
 import type { MODULES } from '../../runtime/registry.js';
 import type { TypedClient } from '../../runtime/types/client.js';
 import type { OptionSpec, TemplateMeta } from '../../core/templates.js';
@@ -21,59 +29,36 @@ type PreviewResult = Awaited<ReturnType<C['template.preview']>>;
 type CreateResult = Awaited<ReturnType<C['template.create']>>;
 type CheckDirResult = Awaited<ReturnType<C['template.checkdir']>>;
 
-// 按 option.type 选控件。新增类型时**只需在这里加一条**——
-// 这正是 schema 驱动的好处：控件映射集中一处，而不是散在每个表单里。
-function OptionField({
-  opt,
-  value,
+// 一组同性质的选项（必填 / 可选）。没有选项的组直接不渲染——
+// 空标题只会让人以为模板缺东西。
+function OptionGroup({
+  title,
+  items,
+  values,
   onChange,
 }: {
-  opt: OptionSpec;
-  value: unknown;
-  onChange: (v: unknown) => void;
+  title: string;
+  items: OptionSpec[];
+  values: OptionValues;
+  onChange: (name: string, v: unknown) => void;
 }) {
-  const label = opt.label || opt.name;
-  const id = `opt-${opt.name}`;
-
-  if (opt.type === 'boolean') {
-    return (
-      <label className="opt-row" htmlFor={id}>
-        <input type="checkbox" id={id} checked={!!value} onChange={(e) => onChange(e.target.checked)} />
-        <span className="opt-label">{label}</span>
-      </label>
-    );
-  }
-
-  if (opt.type === 'enum') {
-    return (
-      <div className="opt-row">
-        <label className="opt-label" htmlFor={id}>{label}</label>
-        <select id={id} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
-          {(opt.values || []).map((v) => (
-            <option key={v} value={v}>{v}</option>
-          ))}
-        </select>
-        {opt.hint && <div className="opt-hint">{opt.hint}</div>}
-      </div>
-    );
-  }
-
+  if (!items.length) return null;
   return (
-    <div className="opt-row">
-      <label className="opt-label" htmlFor={id}>
-        {label}
-        {opt.required && <span className="req">*</span>}
-      </label>
-      <input
-        id={id}
-        value={String(value ?? '')}
-        type={opt.type === 'number' ? 'number' : 'text'}
-        placeholder={opt.default != null ? String(opt.default) : ''}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      {opt.hint && <div className="opt-hint">{opt.hint}</div>}
+    <div className="opt-group">
+      <div className="opt-group-head">
+        <span>{title}</span>
+        <span className="opt-group-count">{items.length}</span>
+      </div>
+      {items.map((o) => (
+        <OptionField key={o.name} opt={o} value={values[o.name]} onChange={(v) => onChange(o.name, v)} />
+      ))}
     </div>
   );
+}
+
+// siblings 模板缺输出目录时的固定阻塞项——同 issues 形态，让按钮门禁与底部提示走同一通道。
+function missingDirIssue(): OptionIssue {
+  return { kind: 'missing', name: 'dir', label: '输出目录', message: 'a_<lang>/ 们的父目录（必填，空目录）' };
 }
 
 export default function CreateView() {
@@ -120,19 +105,33 @@ export default function CreateView() {
     };
   }, [tplId, toast, client]);
 
-  const letters = String(values.letters || '');
   const scheme = String(values.scheme || 'mars');
+  const opts = tpl?.options || [];
+  const { required, optional } = splitOptions(opts);
+  const issues = blockingIssues(opts, values);
 
-  // 输出目录：默认跟着字母走，用户改过就不再自动覆盖
-  const suggestedDir = useMemo(() => {
-    const prefix = tpl?.namePrefix || '';
-    return letters ? prefix + letters : '';
-  }, [tpl, letters]);
+  // 项目名：由 schema 推（letters / name / 第一个必填项 + namePrefix），
+  // 推不出就留空——让用户自己填目录，比猜一个错名字强。
+  const projectName = useMemo(() => suggestProjectName(tpl, values), [tpl, values]);
 
+  // siblings 模板（outputMode='siblings'）的输出目录是 a_<lang>/ 们的父目录，必须用户填——
+  // 不能按 projectName 猜 a_ts，那会嵌出 a_ts/a_ts。
+  const siblingsMode = tpl?.outputMode === 'siblings';
+  // siblings + 空 outDir = 多一条阻塞，走 issues 单一来源让按钮与底部提示同源。
+  const allIssues = siblingsMode && !outDir ? [...issues, missingDirIssue()] : issues;
+
+  // 默认跟着 projectName 走，siblings 留空；用户改过就不再自动覆盖
   const dirTouched = useRef(false);
   useEffect(() => {
-    if (!dirTouched.current) setOutDir(suggestedDir);
-  }, [suggestedDir]);
+    if (dirTouched.current) return;
+    setOutDir(siblingsMode ? '' : projectName);
+  }, [projectName, siblingsMode]);
+
+  // logo 预览用字母；没有 letters 的模板从项目名里取（mono-gf 的项目名就很够看）
+  const logoLetters =
+    String(values.letters || '') ||
+    projectName.replace(/[^A-Za-z]/g, '').toLowerCase().slice(0, 5) ||
+    '?';
 
   // 目录可用性即时检查（防抖 400ms，避免每敲一个字都打接口）
   useEffect(() => {
@@ -155,6 +154,11 @@ export default function CreateView() {
     setValues((s) => ({ ...s, [name]: v })), []);
 
   const doPreview = async () => {
+    // 按钮已按 allIssues 禁用；这里是给键盘/竞态留的兜底，提示语与按钮下方同一套
+    if (allIssues.length) {
+      toast(describeIssues(allIssues));
+      return;
+    }
     setBusy(true);
     try {
       const r = await client['template.preview']({ id: tplId, ...values, dir: outDir });
@@ -168,8 +172,14 @@ export default function CreateView() {
   };
 
   const doCreate = async () => {
-    if (!letters) {
-      toast('请先填项目字母');
+    if (!tpl) {
+      toast('请先选一个模板');
+      return;
+    }
+    // 同一个 issues 判定，不认具体选项名：缺 name 的 mono-gf 与缺 lang 的
+    // std-a-lang 在这里走的是同一条分支（此前这里写死 letters，两者永远走不到）。
+    if (allIssues.length) {
+      toast(describeIssues(allIssues));
       return;
     }
     // 手动开确认框：node 渲染在组件根部，用户点「确定」resolve(true)。
@@ -209,8 +219,6 @@ export default function CreateView() {
     );
   }
 
-  const opts = tpl?.options || [];
-
   return (
     <>
       {/* useDialog 的弹窗 DOM 必须由调用方渲染——不渲染 node，dialog() 的
@@ -244,12 +252,15 @@ export default function CreateView() {
           <span className="tag mono">{tplId}</span>
         </div>
         <div className="opt-body">
-          {opts.map((o) => (
-            <OptionField key={o.name} opt={o} value={values[o.name]} onChange={(v) => setOpt(o.name, v)} />
-          ))}
+          {/* 必填在前、可选在后：填到哪儿、还差什么，一眼能看完 */}
+          <OptionGroup title="必填" items={required} values={values} onChange={setOpt} />
+          <OptionGroup title="可选" items={optional} values={values} onChange={setOpt} />
 
           <div className="opt-row">
-            <label className="opt-label" htmlFor="opt-dir">输出目录</label>
+            <label className="opt-label" htmlFor="opt-dir">
+              输出目录
+              {siblingsMode ? <span className="req" title="必填">*</span> : <span className="opt-badge">选填</span>}
+            </label>
             <input
               id="opt-dir"
               value={outDir}
@@ -258,6 +269,13 @@ export default function CreateView() {
                 setOutDir(e.target.value);
               }}
             />
+            <div className="opt-hint">
+              {siblingsMode
+                ? 'a_<lang>/ 们的父目录（必填、空目录，生成器拒绝非空）'
+                : projectName
+                  ? `留空则用项目名 ${projectName}（相对当前工作目录）`
+                  : '留空则用模板推导的项目名'}
+            </div>
             {dirState && (
               <div className={'opt-hint' + (dirState.usable ? '' : ' bad')}>
                 {dirState.usable
@@ -268,11 +286,18 @@ export default function CreateView() {
           </div>
         </div>
 
+        {/* 灰着的按钮必须说清自己在等什么：只禁用不解释，用户只能干瞪眼 */}
+        {allIssues.length > 0 && <div className="opt-blocked">{describeIssues(allIssues)}</div>}
+
         <div className="opt-actions">
-          <button className="btn ghost" onClick={doPreview} disabled={busy || !letters || !tpl}>
+          <button className="btn ghost" onClick={doPreview} disabled={busy || !tpl || allIssues.length > 0}>
             预览文件
           </button>
-          <button className="btn" onClick={doCreate} disabled={busy || !letters || !tpl || dirState?.usable === false}>
+          <button
+            className="btn"
+            onClick={doCreate}
+            disabled={busy || !tpl || allIssues.length > 0 || dirState?.usable === false}
+          >
             生成项目
           </button>
         </div>
@@ -284,13 +309,16 @@ export default function CreateView() {
       <div className="card">
         <div className="colhead">预览</div>
         <div className="preview-body">
-          <LogoPreview letters={letters || '?'} scheme={scheme} />
-          <div className="preview-name mono">
-            {(tpl?.namePrefix || '') + (letters || '??')}
-          </div>
-          <div className="muted" style={{ fontSize: 11 }}>
-            {SCHEME_PREVIEW[scheme]?.name || scheme} · {SCHEME_PREVIEW[scheme]?.bg}
-          </div>
+          {/* 模板声明 logo:false（纯目录骨架等）就不画 logo 与撞色行——是否画是模板的事实，面板照办。 */}
+          {tpl?.logo !== false && (
+            <>
+              <LogoPreview letters={logoLetters} scheme={scheme} />
+              <div className="muted" style={{ fontSize: 11 }}>
+                {SCHEME_PREVIEW[scheme]?.name || scheme} · {SCHEME_PREVIEW[scheme]?.bg}
+              </div>
+            </>
+          )}
+          <div className="preview-name mono">{projectName || '??'}</div>
 
           {preview && (
             <>

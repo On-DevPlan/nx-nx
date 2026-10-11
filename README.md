@@ -25,7 +25,7 @@ cd ../nx-zz && pnpm install && pnpm start
 | `nx-nx template list [--json]` | 列出全部模板（坏模板列出错误而不中断） |
 | `nx-nx template describe <id>` | 查看模板说明与全部可选项 |
 | `nx-nx template preview <id> [--选项 值...]` | 预览将生成的文件清单（不写盘） |
-| `nx-nx template create <id> --letters xx [--选项 值...]` | 生成项目 |
+| `nx-nx template create <id> [--选项 值...] [--dir <path>]` | 生成项目（必填项因模板而异，见 `template describe <id>`） |
 | `nx-nx template ports` | 探测本机空闲端口 |
 | `nx-nx template check-dir --dir <path>` | 检查目标目录是否可用 |
 | `nx-nx routes [--json]` | CLI ↔ HTTP 路由对照表 |

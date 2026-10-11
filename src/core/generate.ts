@@ -5,6 +5,12 @@
 //   1. 模板可能含二进制资产（图片、字体），读成 'utf8' 字符串再写会损坏
 //   2. 生成是流式的，模板再大也不吃内存
 // 只有**文本**文件走 {{var}} 替换；判断依据是扩展名白名单 + 内容无 NUL 字节。
+//
+// **列表变量**：当某个变量的值是数组，路径里包含它的文件会被复制成多份——
+// 例如 `files/a_{{lang}}/doc/README.md` 与 `vars.lang = ['ts','go']` 会在目标目录里
+// 铺出 `a_ts/doc/README.md` 与 `a_go/doc/README.md`，文本里的 {{lang}} 用各副本
+// 的对应标量值替换。这是「多份相同骨架」类模板（std-a-lang 的四象限铺多个语言）的
+// 原生机制；钩子侧不再需要「母版-复制」那套 workaround。
 import fsp from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
@@ -85,37 +91,42 @@ export async function generate({
   const targetRoot = resolve(targetDir);
 
   for (const rel of rels) {
-    // 路径本身也可能含占位符（如 bin/{{letters}}.mjs）
-    const outRel = renderString(rel, vars).split('/').join(sep);
+    // 列表变量展开：路径里含列表变量 → 每个列表元素各生成一份副本。
+    // 副本内：列表变量降为标量，其他变量同全局 vars；文本渲染也用同一份副本 vars。
+    const expansions = listVarExpansions(rel, vars);
+    for (const { path: outRel, vars: replicaVars } of expansions) {
+      // 路径本身也可能含占位符（如 bin/{{letters}}.mjs）
+      const norm = outRel.split('/').join(sep);
 
-    // 渲染后的每一段都必须是正常路径段：
-    //  - 含 '..' 段的一律拒绝，**即使 resolve 后仍在目标目录内**。
-    //    （'bin/../x' 规范化后是目标内的 'x'，逃逸检查抓不住它；
-    //    但「模板变量把 .. 带进路径」本身就说明输入没洗干净——
-    //    让它悄悄变成另一个目录名，不如当场报错。）
-    //  - 盘符/绝对路径段同理。
-    if (outRel.split(sep).some((s) => s === '..' || s === '.' || /^[A-Za-z]:$/.test(s))) {
-      throw badInput(`渲染后的路径含非法段（.. 或 . 或盘符）: ${rel} → ${outRel}`);
-    }
+      // 渲染后的每一段都必须是正常路径段：
+      //  - 含 '..' 段的一律拒绝，**即使 resolve 后仍在目标目录内**。
+      //    （'bin/../x' 规范化后是目标内的 'x'，逃逸检查抓不住它；
+      //    但「模板变量把 .. 带进路径」本身就说明输入没洗干净——
+      //    让它悄悄变成另一个目录名，不如当场报错。）
+      //  - 盘符/绝对路径段同理。
+      if (norm.split(sep).some((s) => s === '..' || s === '.' || /^[A-Za-z]:$/.test(s))) {
+        throw badInput(`渲染后的路径含非法段（.. 或 . 或盘符）: ${rel} → ${outRel}`);
+      }
 
-    // 防穿越：解析成绝对路径后必须仍落在目标目录内。
-    // 比对解析结果，而不是字符串前缀——后者挡不住编码变形。
-    const abs = resolve(targetDir, outRel) as AbsolutePath;
-    if (abs !== targetRoot && !abs.startsWith(targetRoot + sep)) {
-      throw badInput(`渲染后的路径越出目标目录: ${rel} → ${outRel}`);
-    }
+      // 防穿越：解析成绝对路径后必须仍落在目标目录内。
+      // 比对解析结果，而不是字符串前缀——后者挡不住编码变形。
+      const abs = resolve(targetDir, norm) as AbsolutePath;
+      if (abs !== targetRoot && !abs.startsWith(targetRoot + sep)) {
+        throw badInput(`渲染后的路径越出目标目录: ${rel} → ${outRel}`);
+      }
 
-    written.push(outRel.split(sep).join('/'));
-    if (dryRun) continue;
+      written.push(norm.split(sep).join('/'));
+      if (dryRun) continue;
 
-    await fsp.mkdir(dirname(abs), { recursive: true });
+      await fsp.mkdir(dirname(abs), { recursive: true });
 
-    const srcAbs = join(srcRoot, rel);
-    if (isTextPath(rel)) {
-      const text = await fsp.readFile(srcAbs, 'utf8');
-      await fsp.writeFile(abs, renderString(text, vars), 'utf8');
-    } else {
-      await fsp.copyFile(srcAbs, abs);
+      const srcAbs = join(srcRoot, rel);
+      if (isTextPath(rel)) {
+        const text = await fsp.readFile(srcAbs, 'utf8');
+        await fsp.writeFile(abs, renderString(text, replicaVars), 'utf8');
+      } else {
+        await fsp.copyFile(srcAbs, abs);
+      }
     }
   }
 
@@ -125,4 +136,57 @@ export async function generate({
 // 相对路径工具：面板展示用（绝对路径太长）
 export function relTo(base: string, p: string): string {
   return relative(base, p).split(sep).join('/');
+}
+
+/**
+ * 列表变量展开：路径里包含数组变量时，按数组各元素复制出多份副本。
+ *
+ * 没有列表变量：单副本，vars 不动。
+ * 有列表变量：按列表元素的笛卡尔积展开；副本内列表变量降为标量、其余同全局 vars。
+ * 多份副本各自走路径安全检查（越出目标目录 / 含非法段都会当场报错），
+ * 文本渲染也用各副本的 vars，因此 README 里的 {{lang}} 会落到对应语言。
+ *
+ * 边界：模板里有不在列表变量子树下的文件时（路径不含列表变量），那份文件
+ * 仍按全局 vars 渲染——若全局 vars 里列表变量本身仍是数组，那次渲染会把数组
+ * 字符串化（`String(['ts','go'])`）。约定：模板作者要么把全部内容放进列表
+ * 子树，要么确保列表变量在「不展开」的副本里不会被引用。
+ */
+export function listVarExpansions(
+  rel: string,
+  vars: Record<string, unknown>,
+): { path: string; vars: Record<string, unknown> }[] {
+  const keys = extractKeyNames(rel);
+  const listKeys = keys.filter((k) => Array.isArray(vars[k]));
+  if (listKeys.length === 0) {
+    return [{ path: renderString(rel, vars), vars }];
+  }
+  const lists = listKeys.map((k) => vars[k] as unknown[]);
+  const out: { path: string; vars: Record<string, unknown> }[] = [];
+  for (const combo of cartesian(lists)) {
+    const sub: Record<string, unknown> = { ...vars };
+    listKeys.forEach((key, idx) => {
+      sub[key] = combo[idx];
+    });
+    out.push({ path: renderString(rel, sub), vars: sub });
+  }
+  return out;
+}
+
+function extractKeyNames(rel: string): string[] {
+  const out: string[] = [];
+  const re = /\{\{([\w-]+)\}\}/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(rel))) out.push(m[1]!);
+  return out;
+}
+
+function cartesian(arrays: unknown[][]): unknown[][] {
+  if (!arrays.length) return [[]];
+  let acc: unknown[][] = [[]];
+  for (const arr of arrays) {
+    const next: unknown[][] = [];
+    for (const a of acc) for (const x of arr) next.push([...a, x]);
+    acc = next;
+  }
+  return acc;
 }

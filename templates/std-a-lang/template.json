@@ -3,9 +3,11 @@
   "name": "a_{语言} 命名空间骨架（可批量）",
   "description": "D:\\code 的标准 a_{语言} 命名空间：sdk / proj / res / doc 四象限。单次可批量起多个语言工作区。",
   "namePrefix": "a_",
+  "logo": false,
+  "outputMode": "siblings",
   "nextSteps": [
-    "ls   # 看一眼生成出来的 a_<lang>/ 们",
-    "git init",
+    "ls   # 看一眼生成的 a_<lang>/ 们（单 lang 一个、多 lang 平级兄弟）",
+    "git init   # 想给哪个起 git 就进哪个目录再跑",
     "# 四象限说明：",
     "# sdk   自研 / 二次封装的 SDK、客户端封装",
     "# proj  该语言下的项目，建议统一前缀（nx- / pg- / go- …）",
@@ -19,7 +21,7 @@
       "label": "语言缩写",
       "required": true,
       "pattern": "^[a-z][a-z0-9_]{1,8}(\\s*,\\s*[a-z][a-z0-9_]{1,8})*$",
-      "hint": "单: ts / go / py；多: ts, go, py（用英文逗号分隔）"
+      "hint": "单: ts；批量: ts, go, py（英文逗号分隔，一次起多个）。「输出目录」是 a_<lang>/ 们的父目录（必填，空目录）"
     }
   ]
 }

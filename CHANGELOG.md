@@ -2,6 +2,66 @@
 
 本文件记录对外可见的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.6.3] - 2026-10-10
+
+把「list 可变模板」做成引擎原生能力，并补上面板/元数据的小开关。
+
+- **引擎原生支持列表变量**（`core/generate.ts: listVarExpansions`）。
+  模板里形如 `a_{{lang}}/...` 的路径，只要对应变量（`vars.lang`）的值是数组，就按
+  元素复制出多份子树；副本内该变量降为标量、其余变量同全局 `vars`，文本里的
+  `{{lang}}` 用各副本的标量值替换。这就是 `std-a-lang` 这类「同一骨架铺多份」的
+  原生机制——钩子不再需要「母版-复制」那套 workaround（v0.6.0~0.6.2 的
+  beforeGenerate 留 `{{lang}}` 字面、afterGenerate 复制母版再清理），所有路径安全检查、
+  文本/二进制分流都直接走引擎，不会分叉。
+- **`std-a-lang` 用上列表变量后，「框架很奇怪」变成「按 schema 自然展开」**。
+  模板树就是 `files/a_{{lang}}/{doc,sdk,proj,res}/`——输入 `ts, go, py` 时引擎直接铺
+  `a_ts/ a_go/ a_py/` 平级到父目录。`template.json` 新增 `outputMode: "siblings"`，
+  service 看到它就不再从 `vars.name` 倒推 `targetDir`；siblings 模板**单 lang 与多 lang
+  都要求 `--dir`**（统一语义：「输出目录 = a_<lang>/ 们的父目录」）。钩子从
+  32 行的母版+复制变成 12 行——拆列表、强制 `--dir`、设 `vars.lang = list`。
+- **`outputMode: "siblings"` 让面板知道不要乱猜**。
+  选中 `std-a-lang` 时面板的「输出目录」留空、标必填 `*`，底部提示
+  「a_<lang>/ 们的父目录（必填、空目录，生成器拒绝非空）」；多出的「缺输出目录」
+  阻塞项走 issues 单一通道，按钮门禁与底部提示同源。`template.preview` 也跟着
+  接受 `--dir` 并走 list-var 展开——预览看到的清单 = 落盘时的清单，不会出现
+  「preview 显示 `a_ts/a_ts/` 但生成的是 `a_ts/`」的错位。
+- **模板元数据支持 `logo: false`**。面板按它决定是否画 logo 预览与撞色行。
+  `std-a-lang`（纯目录骨架）与 `server-cli-web-ts`（无 logo 二进制产物）设了它——
+  默认马尔斯绿撞色行只会误导；`server-cli-web`（有 scheme）与 `mono-gf`（有品牌首字母）
+  继续保留。是否画是模板的事实，面板**不猜**。
+- **`mono-gf` 的 `goModule` 提示**：
+  「推荐与 GitHub 仓库保持一致：github.com/<用户>/<仓库名>；留空则用
+  github.com/example/<项目名>，发布前记得改」——把「保持一致」摆到第一位，发布前再改。
+- **测试**：`tests/unit/templates.test.mjs` 新增一条端到端回归——std-a-lang 单语言只生
+  一个 `a_ts/`、多语言平级 `a_ts/` `a_go/`、副本文本 `# a_<lang> · <lang>` 用各副本
+  标量替换、单/多 lang 缺 `--dir` 钩子当场拒。锁住 `a_ts/a_ts/` 这个 bug 形状。
+  `option-form.test.mjs` 的回归断言也跟到新的 `allIssues.length > 0`。
+
+## [0.6.2] - 2026-10-10
+
+修 `mono-gf` 与 `std-a-lang` 在 Web 面板上「生成项目」点不动，并把必填 / 可选的呈现统一到一处。
+
+- **面板的按钮门禁改为 schema 驱动**。此前 `view.tsx` 把可点性硬编码在 `letters` 上——那是
+  `server-cli-web` 家族的专属选项。`mono-gf` 的必填项是 `name`、`std-a-lang` 是 `lang`，
+  两个模板无论怎么填都够不到那条分支，「预览文件 / 生成项目」恒灰。判定改由
+  `modules/scaffold/option-form.ts` 承担：必填项、格式、目录建议全部从模板的 option schema 推出，
+  面板不再认识任何具体选项名。输出目录的默认建议也跟着改了（`namePrefix + letters` → 按 schema 推项目名），
+  `mono-gf` 填完项目名自动带出目录，`std-a-lang` 填 `lang=ts` 建议 `a_ts`；多语言（`ts, go`）
+  不是合法目录名就不猜，交给用户填。
+- **必填 / 可选的显示统一**。必填的红色 `*` 此前只画在 string / number 上，enum 与 boolean 完全没有标记，
+  同一份 schema 在面板上有两种读法。现在三种控件共用一个 `FieldBadge`：必填带 `*`，选填一律带「选填」徽标；
+  表单按「必填 / 可选」分组；按钮上方直接写明还差什么（`还差必填项：项目名`）——灰着的按钮必须说清在等什么。
+  模板列表视图原来的表头叫「可选项」却把必填项混在里面列出，现在同样按必填 / 可选分组并逐项打标。
+- **`pattern` 从此真的生效**。`std-a-lang` 的 `lang` 早就在 `template.json` 里声明了格式正则，
+  但引擎从头到尾没读过它——声明是契约，不执行就是骗模板作者，也让面板无从校验。
+  `resolveVars` 现在会执行它（`readTemplateMeta` 也会把非法正则判成坏模板，不拖到生成期）。
+- **测试**：新增 `tests/unit/option-form.test.mjs`，拿真实模板库与 `resolveVars` **对拍**——
+  面板说能生成，服务端必须收；面板说缺必填，服务端必须拒；规则漂移直接红。
+  另有一条把 bug 的形状钉死：视图里不得再出现按具体选项名门禁的写法。
+  控件标记的一致性用 `renderToStaticMarkup` 断言，不依赖浏览器。
+- 文档：README / `assets/nx-nx/SKILL.md` / `assets/nx-dev/references/51-verification-loop.md`
+  的命令表不再把 `--letters` 写成通用参数（它只是 `server-cli-web` 家族的必填项）。
+
 ## [0.6.1] - 2026-10-10
 
 修一处 v0.5.0 加 `mono-gf` 时就遗留、本次加 `std-a-lang` 才显式报修的文档漂移：

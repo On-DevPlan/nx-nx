@@ -332,10 +332,50 @@ main { padding: 16px; }
 .opt-row:last-child { margin-bottom: 0; }
 .opt-label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
 .opt-label .req { color: var(--bad); margin-left: 3px; }
+/* 选填徽标：与必填的红色 * 同一位置、同一字号，读法才一致 */
+.opt-badge { font-size: 11px; font-weight: 400; color: var(--mid); margin-left: 6px; }
 .opt-row input[type='text'],
 .opt-row input[type='number'],
 .opt-row select { width: 100%; }
+/* 勾选框不跟随 28px 行高与 100% 宽——它和文字在同一行里 */
+.opt-row input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  margin: 0 6px 0 0;
+  vertical-align: -2px;
+  accent-color: var(--ink);
+}
 .opt-hint { font-size: 11px; color: var(--mid); margin-top: 3px; line-height: 1.4; }
+
+/* 分组标题（必填 / 可选）：11px 弱化字 + 1px 底线，与全站的分隔语言一致 */
+.opt-group { margin-bottom: 16px; }
+.opt-group:last-child { margin-bottom: 0; }
+.opt-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--mid);
+  margin-bottom: 8px;
+}
+.opt-group-head::after { content: ''; flex: 1; height: 1px; background: var(--soft-2); }
+.opt-group-count { color: var(--mid); font-size: 11px; }
+
+/* 只读的选项清单（模板列表视图）：整行卡片，没有 .opt-body 的内边距兜底，
+   分组标题自己补上，否则会贴到卡片左边框上。 */
+.opt-list { padding: 4px 0 0; }
+.opt-list .opt-group-head { padding: 0 12px; margin-top: 8px; }
+
+/* 按钮为什么灰着：紧贴操作区上方，不占正文空间 */
+.opt-blocked {
+  padding: 8px 12px;
+  border-top: var(--border);
+  background: var(--soft);
+  color: var(--bad);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .opt-actions {
   display: flex;
   justify-content: flex-end;

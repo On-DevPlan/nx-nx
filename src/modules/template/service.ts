@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { listTemplates as coreList, loadTemplate, resolveVars, renderString, decorateMeta } from '../../core/templates.js';
 import { resolveOptions, applyBeforeGenerate, applyAfterGenerate, readTemplateReadme } from '../../core/template-hooks.js';
-import { generate, walkTemplate } from '../../core/generate.js';
+import { generate, listVarExpansions, walkTemplate } from '../../core/generate.js';
 import { badInput } from '../../core/errors/index.js';
 import { asAbsolutePath, type AbsolutePath } from '../../core/brand.js';
 import type { HookCtx } from '../../core/template-hooks.js';
@@ -72,16 +72,30 @@ export async function describe(id: unknown, opts: { vars?: Record<string, unknow
 }
 
 // 预览：不写盘，返回将创建的文件清单 + 解析后的变量。
-// 与 create 共用同一套 walkTemplate/generate(dryRun)，
+// 与 create 共用同一套 listVarExpansions / walkTemplate（dryRun 模式），
 // 所以「预览看到的」与「实际生成的」必然一致——不可能各算各的。
-export async function preview({ id, options = {} }: { id: unknown; options?: Record<string, unknown> }) {
+export async function preview({
+  id,
+  options = {},
+}: {
+  id: unknown;
+  options?: Record<string, unknown>;
+}) {
   const { meta, dir } = await loadTemplate(id);
   const resolvedOptions = await resolveOptions(meta, dir, hookCtx());
   let vars = resolveVars({ ...meta, options: resolvedOptions }, options);
-  vars = await applyBeforeGenerate(dir, vars, hookCtx());
+  // preview 也要传 dir：siblings 模板（如 std-a-lang）的钩子按 ctx.dir 决定
+  // 是否允许展开——没给就报缺 --dir，preview 跑不起来，面板也就看不到 a_<lang>/ 们。
+  const rawDir = options.dir;
+  vars = await applyBeforeGenerate(dir, vars, hookCtx({ dir: rawDir }));
 
   const files = await walkTemplate(join(dir, 'files') as AbsolutePath);
-  const rendered = files.map((f) => renderString(f, vars)).sort();
+  // 与 generate() 同步：列表变量展开为多份，单变量照旧一份。预览看到的清单就是
+  // 落盘时的清单，不会有「preview 显示 a_ts/a_ts 但生成的是 a_ts/」这种错位。
+  const rendered = files
+    .flatMap((f) => listVarExpansions(f, vars))
+    .map((e) => e.path)
+    .sort();
 
   return {
     status: 'ok',
@@ -114,12 +128,13 @@ export async function create({
   const resolvedOptions = await resolveOptions(meta, dir, hookCtx());
   let vars = resolveVars({ ...meta, options: resolvedOptions }, options);
 
-  // rawDir 在钩子前就取好：std-a-lang 这类模板要在 beforeGenerate 里判断
-  // 「多语言且没给 --dir」并当场报错，而不是等到写盘才发现目录嵌套了。
+  // rawDir 在钩子前就取好：list-var 类模板（outputMode=siblings，如 std-a-lang）的钩子
+  // 要在 beforeGenerate 里判断「缺 --dir」并当场报错，而不是等到写盘才发现目录嵌错。
   const rawDir = options.dir;
   vars = await applyBeforeGenerate(dir, vars, hookCtx({ cwd, dir: rawDir }));
 
-  if (!vars.name) {
+  // siblings 模板：targetDir 始终来自 --dir，name 不派生；普通模板依旧用 vars.name 兜底。
+  if (!rawDir && !vars.name && meta.outputMode !== 'siblings') {
     throw badInput('模板没有产出项目名——请检查 template.json 是否声明了 namePrefix 与 letters 选项');
   }
 

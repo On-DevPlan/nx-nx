@@ -11,12 +11,13 @@ cd <nx-nx 检出目录>
 # 免构建（迭代首选）
 node --import tsx src/runtime/cli.ts template list --json
 node --import tsx src/runtime/cli.ts template describe <id> --json
-node --import tsx src/runtime/cli.ts template preview <id> --letters xx --json
-node --import tsx src/runtime/cli.ts template create <id> --letters xx --dir <案例目录> --json
+# 必填项因模板而异（letters / name / lang），以 describe 的输出为准
+node --import tsx src/runtime/cli.ts template preview <id> --<必填项> <值> --json
+node --import tsx src/runtime/cli.ts template create <id> --<必填项> <值> --dir <案例目录> --json
 
 # 发布形态（最终确认）
 pnpm build
-node bin/nx-nx.mjs template create <id> --letters xx --dir <案例目录>
+node bin/nx-nx.mjs template create <id> --<必填项> <值> --dir <案例目录>
 ```
 
 验收点：

@@ -35,7 +35,7 @@
       "name": "goModule",
       "type": "string",
       "label": "Go module 路径",
-      "hint": "留空则用 github.com/example/<项目名>，发布前记得改成自己的仓库地址"
+      "hint": "推荐与 GitHub 仓库保持一致：github.com/<用户>/<仓库名>；留空则用 github.com/example/<项目名>，发布前记得改"
     },
     {
       "name": "apiPort",

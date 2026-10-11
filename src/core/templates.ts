@@ -29,6 +29,9 @@ export interface OptionSpec {
   default?: unknown;
   values?: readonly string[];
   hint?: string;
+  /** 值格式约束（正则源码）。声明了就必须被执行—— */
+  /** 否则模板作者会以为它生效，实际只有 hint 在起作用。 */
+  pattern?: string;
   [k: string]: unknown;
 }
 
@@ -37,6 +40,21 @@ export interface TemplateMeta {
   name: string;
   description?: string;
   namePrefix?: string;
+  /**
+   * 面板的 logo 预览开关。
+   *  true（默认）/ 不声明：面板画 logo 预览与撞色行；
+   *  false：模板声明自己没有 logo 概念（纯目录骨架、TS 版无 logo 二进制产物等），
+   *         面板只展示项目名，**不去猜**——是否画是模板元数据的事实。
+   */
+  logo?: boolean;
+  /**
+   * 输出布局模式。默认（不声明）= 单工作区：targetDir 默认 cwd/<name>。
+   * 'siblings' = 多个兄弟工作区平级落在父目录里，必须用 --dir 指定父目录，
+   *              service 不会从 vars.name 倒推 targetDir。
+   *              由模板的「列表变量」（如 a_{{lang}}/{...}）配合引擎原生展开。
+   * 模板作者的语义标记——面板、CLI 按它决定要不要强制要求 --dir。
+   */
+  outputMode?: string;
   nextSteps?: string[];
   options?: OptionSpec[];
   [k: string]: unknown;
@@ -109,6 +127,17 @@ async function readTemplateMeta(dir: AbsolutePath, dirName: string): Promise<Loa
     }
     if (t === 'enum' && !Array.isArray(opt.values)) {
       throw specError(`模板 ${dirName} 的枚举选项 ${opt.name} 缺少 values 数组`);
+    }
+    // pattern 是模板作者写下的契约，写错必须像 schema 写错一样当场红：
+    // 拖到生成期才炸，用户已经填完一整张表了。
+    if (opt.pattern != null) {
+      try {
+        new RegExp(String(opt.pattern));
+      } catch (err) {
+        throw specError(
+          `模板 ${dirName} 的选项 ${opt.name} 的 pattern 不是合法正则: ${opt.pattern}（${(err as Error).message}）`,
+        );
+      }
     }
   }
 
@@ -234,7 +263,13 @@ function coerceOption(opt: OptionSpec, raw: unknown): unknown {
     }
     return s;
   }
-  return String(raw);
+  const s = String(raw);
+  // pattern 兜在最后：类型规则已经排除掉的形态不必再报格式错，
+  // 剩下的（std-a-lang 的「语言缩写」）按模板自己声明的约束走。
+  if (opt.pattern && !new RegExp(opt.pattern).test(s)) {
+    throw badInput(`选项 ${opt.label || opt.name} 格式不对: ${raw}（要求匹配 ${opt.pattern}）`);
+  }
+  return s;
 }
 
 // 把目标目录里的 {{var}} 渲染出来（用于 gitignore 里排除自身等场景）

@@ -7,7 +7,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { renderString, resolveVars, listTemplates, loadTemplate } from '../../src/core/templates.js';
 import { generate, walkTemplate, assertTargetUsable } from '../../src/core/generate.js';
+import { applyBeforeGenerate } from '../../src/core/template-hooks.js';
 import { isTextPath } from '../../src/core/skills/text-util.js';
+import { sampleValues } from './sample-values.mjs';
 
 const TPL_ROOT = new URL('../../templates/', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 
@@ -83,6 +85,44 @@ test('resolveVars: number 强转 + 非法值报错', () => {
   const meta = { id: 't', options: [{ name: 'port', type: 'number' }] };
   assert.equal(resolveVars(meta, { port: '7881' }).port, 7881);
   assert.throws(() => resolveVars(meta, { port: 'abc' }), /必须是数字/);
+});
+
+test('resolveVars: 模板声明的 pattern 必须被执行（不是只有 hint 在说话）', () => {
+  // 背景：std-a-lang 的 lang 早就写了 pattern，但引擎从头到尾没读过它——
+  // 声明是契约，不执行就是骗模板作者，也让面板无从校验（面板与引擎各说各话）。
+  const meta = {
+    id: 't',
+    options: [{ name: 'lang', type: 'string', pattern: '^[a-z]{2}$', hint: '两个小写字母' }],
+  };
+  assert.equal(resolveVars(meta, { lang: 'ts' }).lang, 'ts');
+  assert.throws(() => resolveVars(meta, { lang: 'TS' }), /格式不对/);
+  assert.throws(() => resolveVars(meta, { lang: '../evil' }), /格式不对/);
+  assert.throws(() => resolveVars(meta, { lang: 'ts, go' }), /格式不对/, '多值要由 pattern 自己开口子');
+
+  // std-a-lang 的真 pattern 开口子给多语言：引擎照它的意思办，钩子再去拆列表
+  const multi = {
+    id: 'multi',
+    options: [
+      {
+        name: 'lang',
+        type: 'string',
+        pattern: '^[a-z][a-z0-9_]{1,8}(\\s*,\\s*[a-z][a-z0-9_]{1,8})*$',
+      },
+    ],
+  };
+  assert.equal(resolveVars(multi, { lang: 'ts, go, py' }).lang, 'ts, go, py');
+});
+
+test('resolveVars: 模板库里的 pattern 全部编译得过（readTemplateMeta 的前置闸门）', async () => {
+  // loadTemplate 只认仓库内的 templates/，临时目录造不出「坏模板」；
+  // 于是这条改为钉住同一件事的行为面：真模板库里没有编译不过的 pattern。
+  const { templates, errors } = await listTemplates();
+  assert.deepEqual(errors, [], '模板库里有 pattern 编译不过的模板');
+  for (const meta of templates) {
+    for (const opt of meta.options || []) {
+      if (opt.pattern) assert.doesNotThrow(() => new RegExp(opt.pattern), `${meta.id}.${opt.name}`);
+    }
+  }
 });
 
 test('listTemplates: 真实模板库至少有一个合法模板', async () => {
@@ -198,6 +238,8 @@ test('模板库全部文本文件都能渲染（占位符写错只会在生成�
   // ——它的语法恰好也是双花括号，写进模板文件会让 `template create` 当场失败
   // （smoke 只 dry-run 了 JS 模板，TS 模板没人兜）。
   // 变量按模板自己的 option schema 派生，新增 option 自动覆盖。
+  // 样例值必须合法（type / values / pattern 都要过），否则这条长跑测试会因为
+  // 模板自己的校验而红，而它想验的根本不是校验规则。
   //
   // 例外：安装期占位符由 skill 安装钩子（hooks.json → install handler）注入，
   // 生成期刻意不认它。渲染前先中和掉，否则这条测试会把「设计如此」当成失败。
@@ -205,13 +247,7 @@ test('模板库全部文本文件都能渲染（占位符写错只会在生成�
   const { templates } = await listTemplates();
   assert.ok(templates.length >= 1);
   for (const meta of templates) {
-    const values = {};
-    for (const opt of meta.options ?? []) {
-      if (opt.default !== undefined) values[opt.name] = opt.default;
-      else if (opt.type === 'letters') values[opt.name] = 'zz';
-      else if (opt.type === 'number') values[opt.name] = 1;
-      else values[opt.name] = 'x';
-    }
+    const values = sampleValues(meta);
     const vars = resolveVars(meta, values);
     const filesDir = join(TPL_ROOT, meta.id, 'files');
     for (const rel of await walkTemplate(filesDir)) {
@@ -236,6 +272,56 @@ test('模板库全部文本文件都能渲染（占位符写错只会在生成�
       );
     }
   }
+});
+
+test('std-a-lang 列表变量展开：单/多语言都铺到父目录，不嵌套（v0.6.3 钉）', async () => {
+  // 背景：files/a_{{lang}}/{...} 的 {{lang}} 是**列表变量**——引擎在 core/generate.ts
+  // 的 listVarExpansions 里看到 vars.lang 是数组就把整棵子树复制 N 份，副本里的
+  // {{lang}} 用各元素的标量值替换。
+  //   - 单 lang：父目录里只生 a_ts/；
+  //   - 多 lang：父目录里平级生 a_ts/ a_go/。
+  // 此前的「母版-复制」钩子方案（v0.6.0~0.6.2）会因 files/a_{{lang}}/ + 输出目录默认 a_ts
+  // 而生成 a_ts/a_ts/ 双层——这条钉死新方案的不嵌套形状。
+  const { meta, dir } = await loadTemplate('std-a-lang');
+  const baseCtx = { probePort: async () => true, probePorts: async () => [8000] };
+
+  // 单 lang：父目录里只生 a_ts/，禁止 a_ts/a_ts/ 嵌套
+  const parent1 = mkdtempSync(join(tmpdir(), 'nxnx-stdalang-single-'));
+  const v1 = await applyBeforeGenerate(dir, resolveVars(meta, { lang: 'ts' }), { ...baseCtx, cwd: tmp(), dir: parent1 });
+  await generate({ templateDir: dir, targetDir: parent1, vars: v1 });
+  assert.equal(existsSync(join(parent1, 'a_ts', 'doc', 'README.md')), true, '四象限必须在 a_ts/ 下');
+  assert.equal(existsSync(join(parent1, 'a_ts', 'sdk', '.gitkeep')), true);
+  assert.equal(existsSync(join(parent1, 'a_ts', 'a_ts')), false, '禁止 a_ts/a_ts 嵌套');
+  // 文本里的 {{lang}} 用副本标量替换：a_ts/doc/README.md 的标题应是 a_ts · ts
+  assert.match(
+    readFileSync(join(parent1, 'a_ts', 'doc', 'README.md'), 'utf8'),
+    /^# a_ts · ts$/m,
+    '副本内文本用各副本的标量值替换',
+  );
+
+  // 多 lang：父目录里 a_ts/ a_go/ 平级；没有多生 a_py/
+  const parent2 = mkdtempSync(join(tmpdir(), 'nxnx-stdalang-multi-'));
+  const v2 = await applyBeforeGenerate(
+    dir,
+    resolveVars(meta, { lang: 'ts, go' }),
+    { ...baseCtx, cwd: tmp(), dir: parent2 },
+  );
+  await generate({ templateDir: dir, targetDir: parent2, vars: v2 });
+  assert.equal(existsSync(join(parent2, 'a_ts', 'doc', 'README.md')), true);
+  assert.equal(existsSync(join(parent2, 'a_go', 'sdk', '.gitkeep')), true);
+  assert.equal(existsSync(join(parent2, 'a_py')), false, '没有 py 就别生 a_py/');
+  assert.match(readFileSync(join(parent2, 'a_go', 'doc', 'README.md'), 'utf8'), /^# a_go · go$/m);
+
+  // 缺 --dir：钩子当场拒（不拖到写盘才发现目录嵌错）
+  await assert.rejects(
+    () => applyBeforeGenerate(dir, resolveVars(meta, { lang: 'ts, go' }), baseCtx),
+    /空目录/,
+  );
+  // 单 lang 也必须给 --dir——siblings 模板的语义统一
+  await assert.rejects(
+    () => applyBeforeGenerate(dir, resolveVars(meta, { lang: 'ts' }), baseCtx),
+    /空目录/,
+  );
 });
 
 test('cleanup', () => {
