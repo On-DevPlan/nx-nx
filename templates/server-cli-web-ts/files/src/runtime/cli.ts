@@ -4,7 +4,13 @@
 // renderXxx 四处重复登记。现在命令表、help 文本、参数校验全部由 action 声明派生，
 // 新增命令只需在所属模块的 actions 里加一条。
 import { readFileSync } from 'node:fs';
-import { APP_NAME, APP_TITLE, DEFAULT_PORT, storePathFromEnv } from '../core/paths.js';
+import {
+  APP_NAME,
+  APP_TITLE,
+  DEFAULT_PORT,
+  STORE_ENV,
+  storePathFromEnv,
+} from '../core/paths.js';
 import { toErrorPayload, exitCodeOf, badInput } from '../core/errors/index.js';
 import { ACTIONS } from './registry.js';
 import {
@@ -271,7 +277,7 @@ async function cmdServe(ctx: { port?: number; 'no-open'?: boolean }): Promise<vo
 
 export async function runCli(argv: string[]): Promise<void> {
   const { rest, json, store } = splitGlobals(argv);
-  if (store) process.env.NX_NX_STORE = store;
+  if (store) process.env[STORE_ENV] = store;
 
   const hit = resolveCommand(rest);
 

@@ -46,6 +46,7 @@ export default function App() {
     <>
       <header>
         <div className="brand">
+          <img src="/logo-rounded.png" alt="" />
           {appName}
           <span className="sub">{boot?.app?.description || '{{description}}'}</span>
         </div>
