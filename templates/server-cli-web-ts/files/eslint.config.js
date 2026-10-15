@@ -137,7 +137,7 @@ export default tseslint.config(
   {
     // 业务模块：模块之间禁止互相值依赖。新增模块时把它的路径补进 files 与
     // group 枚举（逐模块枚举，漏补会静默失效）。
-    files: ['src/modules/home/**/*.{ts,tsx}', 'src/modules/skill/**/*.{ts,tsx}'],
+    files: ['src/modules/home/**/*.{ts,tsx}', 'src/modules/skill/**/*.{ts,tsx}', 'src/modules/settings/**/*.{ts,tsx}'],
     plugins: { '@typescript-eslint': tseslint.plugin },
     rules: {
       '@typescript-eslint/no-restricted-imports': [
@@ -145,7 +145,7 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ['../home/*', '../home/**', '../skill/*', '../skill/**'],
+              group: ['../home/*', '../home/**', '../skill/*', '../skill/**', '../settings/*', '../settings/**'],
               allowTypeImports: true,
               message:
                 '模块之间不得做值依赖；共享逻辑请下沉到 core/（类型引用允许 import type）。',
@@ -162,7 +162,11 @@ export default tseslint.config(
     //
     // 关键：Node 侧的**类型**导入是允许的（typed client 的类型由注册表推出），
     // 因此用 allowTypeImports 放行；node:* 内置连类型一起禁。
-    files: ['src/web/frontend/**/*.{ts,tsx}', 'src/modules/home/**/*.tsx'],
+    files: [
+      'src/web/frontend/**/*.{ts,tsx}',
+      'src/modules/home/**/*.tsx',
+      'src/modules/settings/**/*.tsx',
+    ],
     plugins: { '@typescript-eslint': tseslint.plugin },
     rules: {
       '@typescript-eslint/no-restricted-imports': [

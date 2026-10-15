@@ -136,7 +136,7 @@ export default defineConfig([
         {
           patterns: [
             {
-              group: ['../home/*', '../home/**', '../skill/*', '../skill/**'],
+              group: ['../home/*', '../home/**', '../skill/*', '../skill/**', '../settings/*', '../settings/**'],
               message: '模块之间不得互相依赖；共享逻辑请下沉到 core/。',
             },
           ],
@@ -148,7 +148,12 @@ export default defineConfig([
   {
     // 前端：这条规则的价值最高——把 Node 侧代码 import 进视图，
     // Vite 会把 node: 内置模块一起打进浏览器包，构建期报错或运行期炸掉。
-    files: ['src/web/frontend/**/*.{js,jsx}'],
+    files: [
+      'src/web/frontend/**/*.{js,jsx}',
+      // 模块里的视图也要盖住：只写 web/frontend 的话，真正写视图的
+      // modules/<域>/view.jsx 反而不受「前端别导 node:」这条规则约束（规则形同虚设）
+      'src/modules/**/*.jsx',
+    ],
     rules: {
       'no-restricted-imports': [
         'error',

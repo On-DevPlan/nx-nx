@@ -40,18 +40,34 @@ function loadUi(): UiState {
   }
 }
 
+// 面板的设置数据（含**页面清单**与导航配置）。
+// 「有哪些页面」的唯一来源在后端 core/views.ts，随 /api/settings 发给面板——
+// 前端不重复一份清单（重复必然分叉），只按 id 去 registry 的 COMPONENTS 取组件。
+export interface SettingsResponse {
+  settings: {
+    navGroups: { title: string; views: string[] }[];
+    navHidden: string[];
+    navOrder: string[];
+  };
+  views: { id: string; title: string; order: number; hidden?: boolean }[];
+  schema: { key: string; hint: string }[];
+}
+
 interface StoreValue {
   boot: BootData | null;
+  settings: SettingsResponse | null;
   ui: UiState;
   client: TypedClient<typeof MODULES>;
   patchUi: (patch: Partial<UiState> | ((u: UiState) => Partial<UiState>)) => void;
   refreshBoot: () => Promise<BootData>;
+  refreshSettings: () => Promise<SettingsResponse>;
 }
 
 const StoreCtx = createContext<StoreValue | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [boot, setBoot] = useState<BootData | null>(null);
+  const [settings, setSettings] = useState<SettingsResponse | null>(null);
   const [ui, setUi] = useState<UiState>(loadUi);
 
   // UI 选择变化即落盘（同步、廉价、无版本迁移问题——字段级合并已兜底）
@@ -69,9 +85,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return b;
   }, []);
 
+  const refreshSettings = useCallback(async () => {
+    const s = await api<SettingsResponse>('/api/settings');
+    setSettings(s);
+    return s;
+  }, []);
+
   useEffect(() => {
     refreshBoot().catch(() => {});
-  }, [refreshBoot]);
+    // 导航（分组 / 隐藏）与页面清单一起拿；失败不阻塞面板其余部分
+    refreshSettings().catch(() => {});
+  }, [refreshBoot, refreshSettings]);
 
   // 支持对象 patch 与函数式 patch（函数式用于「基于最新 state 修剪」场景，
   // 避免闭包里的旧值把新值覆盖回去）
@@ -83,8 +107,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const client = useMemo(() => makeTypedClient(() => boot?.commands), [boot]);
 
   const value = useMemo(
-    () => ({ boot, ui, client, patchUi, refreshBoot }),
-    [boot, ui, client, patchUi, refreshBoot],
+    () => ({ boot, settings, ui, client, patchUi, refreshBoot, refreshSettings }),
+    [boot, settings, ui, client, patchUi, refreshBoot, refreshSettings],
   );
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
 }

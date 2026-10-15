@@ -3,11 +3,12 @@
 // 一处声明，两端生效：CLI 的 `--flag` 与 HTTP 的 query/body 都走同一套强转与校验。
 // 这正是历史上 `parseInt(flags.depth, 10) || 3` 散落在各处的根源——两端各写一遍解析，
 // 迟早分叉。现在 depth 只在 action 声明里写一次 `{ type: 'number', default: 3 }`。
+import { readFileSync } from 'node:fs';
 import { badInput } from '../core/errors/index.js';
 import { APP_NAME } from '../core/paths.js';
 import type { ActionShape, ArgEntry, FlagSpec, CtxOf } from './types/action.js';
 
-const TYPES = new Set(['string', 'number', 'boolean', 'array']);
+const TYPES = new Set(['string', 'number', 'boolean', 'array', 'json', 'kv']);
 
 // 取 action 的 CLI 路径列表。支持两种写法：
 //   单路径   cli: ['repo', 'list']
@@ -77,6 +78,38 @@ function coerceOne(name: string, spec: FlagSpec, raw: unknown): unknown {
   if (type === 'array') {
     if (Array.isArray(raw)) return raw.map((x) => String(x).trim()).filter(Boolean);
     return String(raw).split(',').map((x) => x.trim()).filter(Boolean);
+  }
+  if (type === 'json') {
+    // HTTP 侧直接就是对象/数组；CLI 侧是字符串：`--groups '[{…}]'` 或 `--groups @groups.json`
+    if (typeof raw === 'object') return raw;
+    const s = String(raw).trim();
+    if (s.startsWith('@')) {
+      const p = s.slice(1);
+      try {
+        return JSON.parse(readFileSync(p, 'utf8'));
+      } catch (e) {
+        throw badInput(`参数 --${name} 读取文件失败: ${p}（${(e as Error).message}）`);
+      }
+    }
+    try {
+      return JSON.parse(s);
+    } catch (e) {
+      throw badInput(`参数 --${name} 不是合法 JSON: ${(e as Error).message}`);
+    }
+  }
+  if (type === 'kv') {
+    // CLI：`--set name=值`（可重复，解析器会把同名 flag 收成数组）
+    // HTTP：`{set: {name: '值'}}` 或 `{set: ['name=值']}`
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) return { ...(raw as Record<string, unknown>) };
+    const list = Array.isArray(raw) ? raw : [raw];
+    const out: Record<string, string> = {};
+    for (const item of list) {
+      const s = String(item);
+      const eq = s.indexOf('=');
+      if (eq <= 0) throw badInput(`参数 --${name} 需要 key=value 形式，收到 ${JSON.stringify(item)}`);
+      out[s.slice(0, eq).trim()] = s.slice(eq + 1);
+    }
+    return out;
   }
   return String(raw);
 }

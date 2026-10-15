@@ -78,3 +78,24 @@ test('skill install：项目根安装注入路径，非项目目录拒绝', asyn
     }
   );
 });
+
+test('setting：导航分组 / 隐藏 / 平铺顺序经 CLI 往返（同一个 store），坏 id 明确报错', async () => {
+  const dir = mkdtempSync(join(tmpdir(), '{{name}}-nav-'));
+  const env = { ...process.env, {{envPrefix}}_STORE: join(dir, 'store.json') };
+  const cli = (args) => exec(process.execPath, [BIN, ...args], { cwd: tmpdir(), env });
+
+  const get0 = JSON.parse((await cli(['setting', 'get', '--json'])).stdout);
+  assert.ok(Array.isArray(get0.settings.navGroups) && get0.settings.navGroups.length === 0, '默认无分组');
+  assert.ok(get0.views.some((v) => v.id === 'home'), '要带上页面清单（头部据此渲染）');
+
+  await cli(['setting', 'set', '--set', 'navGroups=[{"title":"系统","views":["home","settings"]}]', '--json']);
+  await cli(['setting', 'set', '--set', 'navHidden=settings', '--json']);
+  await cli(['setting', 'set', '--set', 'navOrder=["settings","home"]', '--json']);
+  const get1 = JSON.parse((await cli(['setting', 'get', '--json'])).stdout);
+  assert.deepEqual(get1.settings.navGroups[0].views, ['home', 'settings'], '组内顺序原样保存');
+  assert.deepEqual(get1.settings.navHidden, ['settings']);
+  assert.deepEqual(get1.settings.navOrder, ['settings', 'home'], '平铺顺序也落盘');
+
+  const bad = await cli(['setting', 'set', '--set', 'navHidden=no_such_page', '--json']).catch((e) => e);
+  assert.match(String(bad.stdout || bad.message), /不存在/, '坏页面 id 必须报错而不是静默写入');
+});

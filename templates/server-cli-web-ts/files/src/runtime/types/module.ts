@@ -109,12 +109,19 @@ export type FilterNever<T extends readonly unknown[]> = T extends readonly [infe
     : [H, ...FilterNever<R>]
   : [];
 
+// 模式键带上**方法**：同一个路径挂 GET 与 PATCH 两条 action 是常规 REST 写法
+// （例如 GET /api/settings 读、PATCH /api/settings 写），不该被判成歧义；
+// 真正该报的是「同一路径 + 同一方法」的重复声明，以及 /x/:a 与 /x/:b 这种结构性重叠。
 export type ActionPatterns<AA> = FilterNever<
   AA extends readonly unknown[]
     ? {
         [K in keyof AA]: AA[K] extends { http: infer H }
-          ? H extends readonly [string, infer P]
-            ? P
+          ? H extends readonly [infer M, infer P]
+            ? M extends string
+              ? P extends string
+                ? `${M} ${P}`
+                : never
+              : never
             : never
           : never;
       }

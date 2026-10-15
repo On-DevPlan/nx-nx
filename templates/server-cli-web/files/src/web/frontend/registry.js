@@ -1,10 +1,17 @@
-// 视图注册表：新增面板 = 在模块里写 view.jsx + 在这里登记一行。
-// App 的 tab 导航、hash 路由、懒加载全部由这张表驱动，改面板不用动壳。
+// 视图组件表：id → 懒加载组件。**这里只有组件**。
 //
-// 与后端 src/runtime/registry.js 的模块表一一对应；
-// tests/unit/registry.test.mjs 会断言两侧对齐——漏登记（或登记了不存在的视图）都会直接测试失败。
+// 「有哪些页面、叫什么名字、什么顺序、出厂默认显不显示」全部由后端 core/views.js 决定，
+// 随 GET /api/settings 一起发给面板——所以清单只有一份，前端不重复一份（重复必然分叉）。
+//
+// 必须用**字面量** import：变量拼路径会让 Vite 静态分析失效、丢掉代码分割。
+// 新增页面 = 写 modules/<域>/view.jsx + core/views.js 加一行 + 这里加一行；
+// tests/unit/registry.test.mjs 三方对账，漏一处直接测试失败。
 import { lazy } from 'react';
 
-export const VIEWS = [
-  { id: 'home', title: '首页', component: lazy(() => import('../../modules/home/view.jsx')) },
-];
+export const COMPONENTS = {
+  home: lazy(() => import('../../modules/home/view.jsx')),
+  settings: lazy(() => import('../../modules/settings/view.jsx')),
+};
+
+/** 供一致性测试对账用。 */
+export const COMPONENT_IDS = Object.keys(COMPONENTS);
