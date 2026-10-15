@@ -23,6 +23,8 @@
     "start": "pnpm build && node bin/{{letters}}.mjs serve",
     "dev": "node scripts/dev.mjs",
     "dev:serve": "node --import tsx src/runtime/cli.ts serve --no-open",
+    "link:local": "node scripts/link-local.mjs",
+    "unlink:local": "node scripts/link-local.mjs --unlink",
     "build": "tsc -b tsconfig.node.json && vite build",
     "typecheck": "tsc -b tsconfig.node.json tsconfig.web.json",
     "lint": "eslint .",
