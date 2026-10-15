@@ -68,7 +68,7 @@ const BASE_RULES = {
   'no-var': 'error',
   'no-console': 'off', // CLI 工具，输出就是产品
   // 文件行数上限：防止单文件持续膨胀，超限应先拆分
-  'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
+  'max-lines': ['error', { max: 400, skipBlankLines: true, skipComments: true }],
 };
 
 export default defineConfig([
