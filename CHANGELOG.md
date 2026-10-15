@@ -2,6 +2,21 @@
 
 本文件记录对外可见的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.7.0] - 2026-10-15
+
+两份模板（server-cli-web / server-cli-web-ts）都带上**完全模块化的 tab 导航**——分组、隐藏、平铺排序全是配置，壳只做投影。沉淀自 nx-sk 的「栏目管理」。
+
+- **新增 `core/views`**：「有哪些页面」的**单一来源**（纯数据、零 import，前后端共用）——前端按 id 拼懒加载组件（保住 Vite 代码分割），后端按 id 校验导航配置（坏 id 当场报错，而不是只校验形状）。新增页面 = 写 `modules/<域>/view` + 这里加一行 + registry 的 COMPONENTS 加一行，`tests/unit/registry.test.mjs` 三方对账。
+- **新增 `modules/settings`**：设置页承载「栏目管理」，并给出 `setting get` / `setting set`（`--set k=v`，值可以是 JSON 数组）。容器模型：平铺 / 各分组 / **隐藏**（不是开关，是与分组同构的容器）；拖拽编排 + **实时预览**（拖到一半就看到松手后的顺序）。
+- **纯模型 `web/frontend/components/navModel.*`**：容器判定、插入位换算（同容器往下拖要让位）、平铺顺序、校验——管理逻辑集中一处且可单测。
+- 壳：未分组页面按 `navOrder` 排 → 分组下拉（悬浮展开 + 菜单上沿透明桥 + 离开延迟）→ 隐藏项只藏入口，深链仍可直达。
+- `runtime/spec` 补 `json` / `kv` 两种 flag 类型（`@file.json` 也认）；CLI 补「同名 flag 收成数组」（`--set a=1 --set b=2` 后者不再覆盖前者）。
+- 模板内新增 `tests/unit`：nav-model（容器 / 插入位 / 平铺顺序 / 校验）、settings（三项导航配置的校验与归一）、registry（清单 ↔ 组件 ↔ 模块目录 ↔ eslint 三方对账）；smoke 补 `setting` 往返。
+
+### Fixed
+
+- **JS 模板的前端 lint 规则没覆盖模块视图**：原先只写 `src/web/frontend/**`，而真正写视图的 `modules/<域>/view.jsx` 从不受「前端别导 node:」这条约束——规则形同虚设。改为 `src/modules/**/*.jsx`（通配）。
+
 ## [0.6.3] - 2026-10-10
 
 把「list 可变模板」做成引擎原生能力，并补上面板/元数据的小开关。
