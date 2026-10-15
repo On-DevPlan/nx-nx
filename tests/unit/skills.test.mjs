@@ -10,6 +10,7 @@ import {
   loadGroups,
   installOne,
   installGroup,
+  installAll,
 } from '../../src/core/skills/index.js';
 import { getSkill, listRefs } from '../../src/core/skills/get.js';
 
@@ -100,6 +101,48 @@ test('installGroup: nx-dev 组一次装齐两个；未知 group 报 INVALID_INPU
     assert.match(err.message, /nx-dev/);
     return true;
   });
+});
+
+test('installAll: 一次装齐全部内置 skill；再次执行全部 skipped', async () => {
+  const to = tmp();
+  const r = await installAll({ to });
+  assert.equal(r.status, 'ok');
+  assert.equal(r.group, '*');
+  assert.deepEqual(r.skills.map((x) => x.name).sort(), ['nx-dev', 'nx-nx']);
+  assert.ok(existsSync(join(to, 'nx-nx', 'SKILL.md')));
+  assert.ok(existsSync(join(to, 'nx-dev', 'SKILL.md')));
+
+  const again = await installAll({ to });
+  assert.ok(again.skills.every((x) => x.status === 'skipped'));
+});
+
+test('installAll: 事实源是目录扫描——groups.json 漏登记的 skill 也会被装上', async () => {
+  const root = tmp();
+  seedAssets(root, ['a', 'b', 'c']);
+  // groups.json 只登记 a；b、c 是「清单外」skill
+  writeFileSync(
+    join(root, 'groups.json'),
+    JSON.stringify({ groups: { a: { skills: ['a'] } } }),
+  );
+  process.env.NX_NX_ASSETS = root;
+  const to = tmp();
+  const r = await installAll({ to });
+  assert.deepEqual(r.skills.map((x) => x.name).sort(), ['a', 'b', 'c']);
+  assert.ok(existsSync(join(to, 'b', 'SKILL.md')));
+  assert.ok(existsSync(join(to, 'c', 'SKILL.md')));
+});
+
+test('installAll: 任一冲突 → 整体 conflict、不落任何新文件', async () => {
+  const root = tmp();
+  seedAssets(root, ['a', 'b']);
+  process.env.NX_NX_ASSETS = root;
+  const to = tmp();
+  await installOne('a', { to });
+  writeFileSync(join(root, 'a', 'SKILL.md'), '# a\n变\n');
+  const r = await installAll({ to });
+  assert.equal(r.status, 'conflict');
+  assert.equal(r.skills.length, 1);
+  assert.ok(!existsSync(join(to, 'b')), '冲突时未预检的 skill 也不应被装入');
 });
 
 test('installGroup: 组内有冲突且未 force → 整体 conflict、不落新文件', async () => {

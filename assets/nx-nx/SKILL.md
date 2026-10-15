@@ -31,7 +31,7 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 | `nx-nx serve [--port N] [--no-open]` | 启动 nx-nx 自己的 Web 面板（可视化创建） |
 | `nx-nx routes` | CLI 命令 ↔ HTTP 路由对照表 |
 | `nx-nx health` | 自检 |
-| `nx-nx skill install [name] [--group G] [--to D]` | 安装随包 skill |
+| `nx-nx skill install [name] [--group G] [--all] [--to D]` | 安装单个 / 一组 / 全部随包 skill（`--all` 与 name、`--group` 互斥） |
 | `nx-nx skill list` | 列出可装的 skill 与 group |
 | 任何命令 + `--json` | 机器可读输出（agent 模式） |
 

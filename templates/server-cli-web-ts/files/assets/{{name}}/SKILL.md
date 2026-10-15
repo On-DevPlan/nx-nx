@@ -27,6 +27,7 @@ node bin/{{letters}}.mjs health
 node bin/{{letters}}.mjs skill list
 node bin/{{letters}}.mjs skill get {{name}}
 node bin/{{letters}}.mjs skill install {{name}}
+node bin/{{letters}}.mjs skill install --all   # 一次装全部 skill（与 name / --group 互斥）
 ```
 
 加 `--json` 可获取机器可读输出（错误时同样输出 JSON）。

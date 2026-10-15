@@ -99,3 +99,30 @@ test('skill install：项目根安装注入路径，非项目目录拒绝', asyn
     }
   );
 });
+
+test('skill install --all：一次装全部 skill；与 name/--group 互斥', async () => {
+  const to = mkdtempSync(join(tmpdir(), '{{name}}-all-'));
+  const r = JSON.parse(
+    (await run(`skill install --all --to ${to} --json`, ROOT)).stdout
+  );
+  assert.equal(r.status, 'ok');
+  assert.equal(r.group, '*');
+  assert.ok(r.skills.length >= 1);
+  assert.ok(r.skills.some((x) => x.name === '{{name}}'));
+  assert.ok(existsSync(join(to, '{{name}}', 'SKILL.md')));
+
+  // 再跑一次：全部 skipped（幂等）
+  const again = JSON.parse(
+    (await run(`skill install --all --to ${to} --json`, ROOT)).stdout
+  );
+  assert.ok(again.skills.every((x) => x.status === 'skipped'));
+
+  // 互斥校验
+  await assert.rejects(
+    () => run(`skill install {{name}} --all --to ${to} --json`, ROOT),
+    (err) => {
+      assert.match(JSON.parse(err.stdout).error, /--all/);
+      return true;
+    }
+  );
+});

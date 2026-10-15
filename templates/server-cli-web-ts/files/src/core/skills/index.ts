@@ -239,11 +239,28 @@ export async function installGroup(
   if (!spec) {
     throw badInput(`未知 group: ${key}（可用: ${Object.keys(manifest.groups).join(', ')}）`);
   }
+  return installNames([...new Set(spec.skills)], key, opts);
+}
 
-  const names = [...new Set(spec.skills)];
+// 一键装全部内置 skill（--all）。事实源是 assets/ 目录扫描，与 groups.json 无关——
+// 即使清单漏登记某个 skill，--all 也不会漏掉它。
+export async function installAll(
+  opts: { to?: string; force?: boolean } = {},
+): Promise<GroupInstallResult> {
+  const names = await bundledSkillNames();
+  if (!names.length) throw specError('assets/ 内没有可安装的 skill（找不到任何 SKILL.md）');
+  return installNames(names, '*', opts);
+}
 
+// 批量安装共用实现：无副作用预检 → 任一冲突整体不落文件 → 逐项安装。
+// label 为 group key；'*' 表示 --all（渲染时据此换措辞）。
+async function installNames(
+  names: string[],
+  label: string,
+  opts: { to?: string; force?: boolean },
+): Promise<GroupInstallResult> {
   // 无副作用预检：任一项「已存在且有差异」→ 整体 conflict，不落任何文件。
-  // 有安装钩子的 skill：先跑 preInstall 取 vars（pre 抛错 = 整组拒绝），
+  // 有安装钩子的 skill：先跑 preInstall 取 vars（pre 抛错 = 整批拒绝），
   // 再按渲染结果比较；无钩子走字节 diff。
   if (!opts.force) {
     const conflicts: InstallResult[] = [];
@@ -270,12 +287,12 @@ export async function installGroup(
         conflicts.push({ status: 'conflict', name: n, path: targetDir, files: changed.length });
       }
     }
-    if (conflicts.length) return { status: 'conflict', group: key, skills: conflicts };
+    if (conflicts.length) return { status: 'conflict', group: label, skills: conflicts };
   }
 
   const skills = [];
   for (const n of names) skills.push(await installOne(n, { to: opts.to, force: opts.force }));
-  return { status: 'ok', group: key, skills };
+  return { status: 'ok', group: label, skills };
 }
 
 // 对比两棵树，返回内容不同的相对路径（安装器据此判断跳过 / 冲突 / 覆盖）。

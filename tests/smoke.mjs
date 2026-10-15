@@ -58,6 +58,29 @@ test('skill list + install：含主 skill 与 nx-dev，可装到指定目录', a
   assert.ok(i.files >= 1);
 });
 
+test('skill install --all：一次装齐 nx-nx 与 nx-dev；与 name 互斥', async () => {
+  // nx-dev 的 preInstall 只允许在 nx-nx 仓库根安装 → cwd 传 ROOT
+  const dir = mkdtempSync(join(tmpdir(), 'nxnx-all-'));
+  const { stdout } = await run(`skill install --all --to ${dir} --json`, {}, ROOT);
+  const r = JSON.parse(stdout);
+  assert.equal(r.status, 'ok');
+  assert.equal(r.group, '*');
+  assert.deepEqual(r.skills.map((x) => x.name).sort(), ['nx-dev', 'nx-nx']);
+
+  // 幂等：再跑一次全部 skipped
+  const { stdout: again } = await run(`skill install --all --to ${dir} --json`, {}, ROOT);
+  assert.ok(JSON.parse(again).skills.every((x) => x.status === 'skipped'));
+
+  // 互斥：--all 不能带 name
+  await assert.rejects(
+    () => run(`skill install nx-nx --all --to ${dir} --json`, {}, ROOT),
+    (err) => {
+      assert.match(JSON.parse(err.stdout).error, /--all/);
+      return true;
+    }
+  );
+});
+
 test('nx-dev 在非仓库目录安装被 preInstall 拒绝', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'nxnx-block-'));
   await assert.rejects(
