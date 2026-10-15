@@ -114,14 +114,18 @@ test('setting：导航分组 / 隐藏 / 平铺顺序经 CLI 往返（同一个 s
   const get0 = JSON.parse((await cli(['setting', 'get', '--json'])).stdout);
   assert.ok(Array.isArray(get0.settings.navGroups) && get0.settings.navGroups.length === 0, '默认无分组');
   assert.ok(get0.views.some((v) => v.id === 'home'), '要带上页面清单（头部据此渲染）');
+  assert.ok(!get0.views.some((v) => v.id === 'settings'), '出厂不再有独立 settings 页');
 
-  await cli(['setting', 'set', '--set', 'navGroups=[{"title":"系统","views":["home","settings"]}]', '--json']);
-  await cli(['setting', 'set', '--set', 'navHidden=settings', '--json']);
-  await cli(['setting', 'set', '--set', 'navOrder=["settings","home"]', '--json']);
+  await cli(['setting', 'set', '--set', 'navGroups=[{"title":"系统","views":["home"]}]', '--json']);
+  await cli(['setting', 'set', '--set', 'navOrder=["home"]', '--json']);
   const get1 = JSON.parse((await cli(['setting', 'get', '--json'])).stdout);
-  assert.deepEqual(get1.settings.navGroups[0].views, ['home', 'settings'], '组内顺序原样保存');
-  assert.deepEqual(get1.settings.navHidden, ['settings']);
-  assert.deepEqual(get1.settings.navOrder, ['settings', 'home'], '平铺顺序也落盘');
+  assert.deepEqual(get1.settings.navGroups, [{ title: '系统', views: ['home'] }], '分组原样保存');
+  assert.deepEqual(get1.settings.navOrder, ['home'], '平铺顺序也落盘');
+
+  // 隐藏 home：先把分组撤掉（home 不能同时在分组和隐藏里），再隐藏
+  await cli(['setting', 'set', '--set', 'navGroups=[]', '--set', 'navHidden=home', '--json']);
+  const get2 = JSON.parse((await cli(['setting', 'get', '--json'])).stdout);
+  assert.deepEqual(get2.settings.navHidden, ['home']);
 
   const bad = await cli(['setting', 'set', '--set', 'navHidden=no_such_page', '--json']).catch((e) => e);
   assert.match(String(bad.stdout || bad.message), /不存在/, '坏页面 id 必须报错而不是静默写入');

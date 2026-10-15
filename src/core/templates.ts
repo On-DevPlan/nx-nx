@@ -197,6 +197,8 @@ export async function loadTemplate(id: unknown): Promise<LoadedTemplate> {
 //      模板不必自己拼字符串，也就不会各拼各的
 export function resolveVars(meta: TemplateMeta, input: Record<string, unknown> = {}): Record<string, unknown> {
   const vars: Record<string, unknown> = {};
+  // 显式传空（CLI --prefix= / 面板清空前缀框）= 真的不要前缀，不能被默认值盖掉
+  const prefixExplicit = Object.prototype.hasOwnProperty.call(input, 'prefix');
 
   for (const opt of meta.options || []) {
     const type = opt.type || 'string';
@@ -217,11 +219,15 @@ export function resolveVars(meta: TemplateMeta, input: Record<string, unknown> =
     vars[opt.name] = coerceOption(opt, raw);
   }
 
+  if (prefixExplicit && (input.prefix === '' || input.prefix === null)) vars.prefix = '';
+
   // ---- 派生变量 ----
   // 约定：名为 letters 的选项是项目字母。有 namePrefix 的模板据此派生 name。
+  // 前缀可被「prefix」选项覆盖（默认 nx-，也可改成别的或清空），非 nx 项目同样能生成。
   const letters = vars.letters;
   if (letters && meta.namePrefix) {
-    const name = meta.namePrefix + letters;
+    const prefix = vars.prefix === undefined ? meta.namePrefix : String(vars.prefix);
+    const name = prefix + letters;
     vars.name = name;
     if (name === meta.id) {
       throw badInput(`字母 ${letters} 会生成与模板同名的项目 ${name}，请换一组`);

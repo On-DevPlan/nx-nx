@@ -48,6 +48,7 @@ export interface SettingsResponse {
     navGroups: { title: string; views: string[] }[];
     navHidden: string[];
     navOrder: string[];
+    theme: string;
   };
   views: { id: string; title: string; order: number; hidden?: boolean }[];
   schema: { key: string; hint: string }[];

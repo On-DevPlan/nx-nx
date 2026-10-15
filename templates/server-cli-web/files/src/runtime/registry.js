@@ -10,9 +10,8 @@
 import { cliPathsOf } from './spec.js';
 import home from '../modules/home/index.js';
 import skill from '../modules/skill/index.js';
-import settings from '../modules/settings/index.js';
 
-export const MODULES = [home, skill, settings].sort((a, b) => (a.order ?? 100) - (b.order ?? 100));
+export const MODULES = [home, skill].sort((a, b) => (a.order ?? 100) - (b.order ?? 100));
 
 export const ACTIONS = MODULES.flatMap((m) =>
   (m.actions || []).map((a) => ({ ...a, module: m.id }))

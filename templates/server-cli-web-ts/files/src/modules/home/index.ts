@@ -1,14 +1,25 @@
-// home 模块：面板启动聚合（bootstrap/routes/health）+ 一个演示业务动作（greet）。
+// home 模块：面板落地页，承担「启动聚合 + 演示业务 + 本机设置」三类职责。
 //
 // 这是新骨架自带的示例功能域，演示一条 action 如何同时暴露为 CLI 与 HTTP：
 //   - 面板上的问候按钮 ↔ `{{name}} greet <名字>` 是同一份声明
+//   - 设置（主题 / 头部导航）↔ `{{name}} setting get|set` 是同一份声明
 //   - 参数名、flag 类型、返回数据全部由类型系统在编译期检查
+//
+// 为什么首页和设置合成一个模块：两者都是「关于这个应用本身」的内容——
+// 启动上下文（bootstrap / 命令表 / 健康）、演示动作（greet）与本机设置（主题 / 头部导航）。
+// 拆成两个模块，初始就凭空多出一个只有 meta 信息的空壳页；合成一个，出厂模块都有真实内容。
 import { readFileSync } from 'node:fs';
 import { APP_NAME, APP_DESC, APP_TITLE, STORE_ENV, storePathFromEnv } from '../../core/paths.js';
 import { defineAction } from '../../runtime/types/action.js';
 import { defineModule } from '../../runtime/types/module.js';
 import { commandEntry } from '../../runtime/help.js';
-import { greet } from './service.js';
+import {
+  greet,
+  getSettings,
+  setSettings,
+  renderSettings,
+  renderSettingSet,
+} from './service.js';
 
 const VERSION = (
   JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')) as { version: string }
@@ -111,6 +122,29 @@ export default defineModule({
     })(
       (ctx) => greet(ctx.name, !!ctx.loud),
       (r) => r.greeting,
+    ),
+
+    defineAction({
+      id: 'setting.get',
+      cli: ['setting', 'get'],
+      http: ['GET', '/api/settings'],
+      summary: '读取全部设置（含头部导航分组 / 隐藏 / 平铺顺序）',
+    })(() => getSettings(), (d) => renderSettings(d)),
+
+    defineAction({
+      id: 'setting.set',
+      cli: ['setting', 'set'],
+      http: ['PATCH', '/api/settings'],
+      summary: '修改设置（PATCH 语义：只改传入的项）',
+      flags: {
+        key: { type: 'string', hint: '设置项名' },
+        value: { type: 'string', hint: '取值' },
+        set: { type: 'kv', hint: 'k=v，可重复（值可以是 JSON 数组，如 navGroups=[{...}]）' },
+        'dry-run': { type: 'boolean' },
+      },
+    })(
+      (ctx) => setSettings(ctx as { key?: string; value?: unknown; set?: Record<string, unknown>; 'dry-run'?: boolean }),
+      (d) => renderSettingSet(d),
     ),
   ],
 });

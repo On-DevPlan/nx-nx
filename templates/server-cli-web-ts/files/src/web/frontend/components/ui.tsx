@@ -182,7 +182,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, BoundarySt
   }
 
   override componentDidCatch(error: Error, info: unknown) {
-    console.error('[nx-nx] 视图渲染失败:', error, info);
+    console.error('[{{name}}] 视图渲染失败:', error, info);
   }
 
   override render() {

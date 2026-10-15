@@ -10,7 +10,6 @@ import { lazy } from 'react';
 
 export const COMPONENTS = {
   home: lazy(() => import('../../modules/home/view.jsx')),
-  settings: lazy(() => import('../../modules/settings/view.jsx')),
 };
 
 /** 供一致性测试对账用。 */

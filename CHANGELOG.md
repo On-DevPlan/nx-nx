@@ -2,6 +2,28 @@
 
 本文件记录对外可见的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.8.0] - 2026-10-15
+
+打磨两套模板的开箱体验：可选项目名前缀、黑夜模式、端口被占用时复用已运行实例，头部导航改为更有质感的「分段控件」；并把出厂的「首页 / 设置」合并为一个落地页。
+
+### Added
+
+- **项目名前缀（`prefix`）成为可配置项**：默认 `nx-`，可改成任意前缀（如 `my-`），CLI 显式传空（`--prefix=`）则生成无前缀项目——非 `nx` 项目也能正常生成。`core/templates` 的 `resolveVars` 能识别「显式空值」，面板表单与 `template.json` 同步。
+- **色彩主题（`theme`：light / dark / auto）**：设置写入 `<html data-theme>`，CSS 只覆盖 token，深色下自动切换暗色变量；头部新增主题切换按钮，设置页有外观卡。
+- **端口被占用时复用已运行实例**：`serve` 捕获 `EADDRINUSE` 后先探测该端口（`GET /api/bootstrap`，短超时）——若跑的是本服务则**不重复启动，直接打开浏览器**；被别的服务占用则顺延到下一个空闲端口。新增 `probeInstance` / `findFreePort`。
+
+### Changed
+
+- **头部导航改为「分段控件」**：整块浅底圆角容器（大按钮）包裹 pill tab（小按钮），激活项是一块内嵌白色滑块，视觉连贯、不再靠边框逐个描边（参考 nx-rh / nx-kv）。分组入口 pill 带计数徽章与三角 caret，下拉菜单完整可见。
+- **出厂的「首页 home」与「设置 settings」合并为一个 home**：保留模块 id 与「首页」标题作为落地页，栏目管理（navManager）并入 home；删除 modules/settings。合并后命令总数为 13（BUILTINS 3 + home 6 + skill 4）。
+- **版本徽章**：版本从头部右侧小 mono 文本改为品牌名旁的徽章（如 `nx-qq [v0.1.0]`）。
+- **ESLint 升级到 10.x**（TS 模板 typescript-eslint 同步到 8.x）；JS 模板在 `pnpm.peerDependencyRules` 放行 eslint-plugin-react 对 ESLint 10 的 peer 要求。
+
+### Fixed
+
+- **栏目拖拽分组闪烁**：根因是拖动时实时重排整个列表、DOM 移到指针下再触发 dragover 形成反馈回路。改为「静态列表 + 落点指示线」——拖动不重排 DOM，被拖行原地变淡，只画指示线，松手才一次性提交。
+- 修复 5 处细节缺陷：help 摘要硬编码 `nx-nx` 且缺右括号、启动横幅重复名、TS help 误显「项目生成器」、TS ErrorBoundary 日志前缀硬编码、横幅多显 APP_TITLE。
+
 ## [0.7.0] - 2026-10-15
 
 两份模板（server-cli-web / server-cli-web-ts）都带上**完全模块化的 tab 导航**——分组、隐藏、平铺排序全是配置，壳只做投影。沉淀自 nx-sk 的「栏目管理」。

@@ -3,7 +3,7 @@
 // 这一层**只做投影**，不认识任何业务：
 //   有哪些页面   ← 后端 core/views.ts（随 /api/settings 发来）
 //   页面组件     ← ./registry.ts 的 COMPONENTS（id → 懒加载组件）
-//   怎么摆/显不显示 ← settings.navGroups / navHidden（在「设置」页里改）
+//   怎么摆/显不显示 ← settings.navGroups / navHidden（在首页里改）
 // 于是「收拢分组、隐藏不常用的页」全是配置，壳不用动。
 //
 // 隐藏只隐藏**入口**：`#/被隐藏的页` 直达仍然渲染（不删功能）。
@@ -11,6 +11,7 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { useStore } from './store.js';
 import { COMPONENTS } from './registry.js';
 import { ErrorBoundary } from './components/ui.jsx';
+import { ThemeToggle, currentTheme } from './components/theme.jsx';
 import type { SettingsResponse } from './store.js';
 
 type ViewItem = SettingsResponse['views'][number];
@@ -78,6 +79,12 @@ export default function App() {
     return () => window.removeEventListener('hashchange', onHash);
   }, [patchUi]);
 
+  // 色彩主题：写到 <html data-theme>，CSS 按 token 覆盖（light/dark/auto）
+  const theme = currentTheme(settings);
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
   const appName = boot?.app?.name || '{{name}}';
 
   return (
@@ -86,6 +93,7 @@ export default function App() {
         <div className="brand">
           <img src="/logo-rounded.png" alt="" />
           {appName}
+          <span className="ver-tag">{boot ? `v${boot.app.version}` : ''}</span>
           <span className="sub">{boot?.app?.description || '{{description}}'}</span>
         </div>
         <nav>
@@ -107,7 +115,9 @@ export default function App() {
             </span>
           )}
         </nav>
-        <div className="meta">{boot ? `v${boot.app.version}` : ''}</div>
+        <div className="head-acts">
+          <ThemeToggle />
+        </div>
       </header>
       <main>
         {views.length === 0 ? (

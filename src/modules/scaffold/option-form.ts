@@ -131,5 +131,9 @@ export function suggestProjectName(meta: TemplateMeta | null, values: OptionValu
   const opts = meta.options || [];
   const primary = opts.find((o) => o.required);
   const src = slug(values.letters) || slug(values.name) || (primary ? slug(values[primary.name]) : '');
-  return src ? `${meta.namePrefix || ''}${src}` : '';
+  // 前缀与服务端对齐：用户填了 prefix 就用它，否则退回模板的 namePrefix（默认 nx-）
+  const prefix = values.prefix === undefined || values.prefix === null
+    ? meta.namePrefix || ''
+    : String(values.prefix);
+  return src ? `${prefix}${src}` : '';
 }

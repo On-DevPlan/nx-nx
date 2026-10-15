@@ -25,6 +25,8 @@ export interface Settings {
   navHidden: string[];
   /** 平铺区的显示顺序（页面 id 数组；没列进去的按页面自身顺序跟在后面） */
   navOrder: string[];
+  /** 色彩主题：light（浅色）/ dark（深色）/ auto（跟随系统） */
+  theme: string;
   [k: string]: unknown;
 }
 
@@ -37,7 +39,7 @@ export interface StoreState {
 export function initialState(): StoreState {
   return {
     version: 1,
-    settings: { navGroups: [], navHidden: [], navOrder: [] },
+    settings: { navGroups: [], navHidden: [], navOrder: [], theme: 'light' },
   };
 }
 

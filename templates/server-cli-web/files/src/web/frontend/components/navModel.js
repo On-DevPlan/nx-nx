@@ -2,7 +2,7 @@
 //
 // 为什么单独一层：这块的逻辑（增删改、排序、可用性、校验）比渲染多得多，
 // 混在 JSX 里既说不清也测不了。表现层只管画，动手改数据一律走这里——
-// 于是「管理逻辑」只有一份，前端拦一道、后端（modules/settings）再拦一道，两边同口径。
+// 于是「管理逻辑」只有一份，前端拦一道、后端（modules/home）再拦一道，两边同口径。
 //
 // 配置形状（与 settings.navGroups / navHidden / navOrder 一一对应）：
 //   { groups: [{ title, views: [页面id…] }], hidden: [页面id…], order: [页面id…] }
@@ -72,15 +72,17 @@ export const removeView = (cfg, gi, vid) => ({
 // —— 容器：平铺 / 分组 / 隐藏 ——
 
 /**
- * 页面现在在哪个容器里，以及在该容器里的位置（拖拽预览要用它做索引换算）。
- * 三种容器都有位置：平铺区的位置来自 order（没排过的按页面自身顺序），分组与隐藏各自是数组。
+ * 页面现在在哪个容器里，以及在该容器里的**渲染位置**（拖拽落点换算用它）。
+ * 三种容器都有位置：平铺区返回它在「平铺列表」poolIds 里的位置（已剔除分组/隐藏项，
+ * 与界面实际渲染一致——若用 poolOrder，排在前面的分组项会把平铺行的位置顶高）；
+ * 分组与隐藏各自是数组下标。
  */
 export function containerOf(cfg, vid, allIds = []) {
   const hi = cfg.hidden.indexOf(vid);
   if (hi >= 0) return { kind: 'hidden', index: hi };
   const gi = cfg.groups.findIndex((g) => g.views.includes(vid));
   if (gi >= 0) return { kind: 'group', gi, index: cfg.groups[gi].views.indexOf(vid) };
-  return { kind: 'pool', index: poolOrder(cfg, allIds).indexOf(vid) };
+  return { kind: 'pool', index: poolIds(cfg, allIds).indexOf(vid) };
 }
 
 /**
@@ -167,7 +169,7 @@ export function availableFor(cfg, gi, allIds) {
 }
 
 /**
- * 前端先拦一道（后端 modules/settings 用同一套口径再拦一次）。
+ * 前端先拦一道（后端 modules/home 用同一套口径再拦一次）。
  * 返回 [{ field, message }]，空数组 = 可以保存。
  */
 export function validate(cfg, allIds) {

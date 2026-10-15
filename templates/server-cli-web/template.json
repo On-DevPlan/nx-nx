@@ -19,7 +19,15 @@
       "type": "letters",
       "label": "项目字母",
       "required": true,
-      "hint": "1~5 位小写字母，决定项目名（nx-<字母>）、数据目录与 logo"
+      "hint": "1~5 位小写字母，决定项目名（前缀+字母）、数据目录与 logo"
+    },
+    {
+      "name": "prefix",
+      "type": "string",
+      "label": "项目名前缀",
+      "default": "nx-",
+      "pattern": "^[a-z0-9_-]*$",
+      "hint": "默认 nx-；可改成其他前缀（如 my-）或清空（项目名仅字母），支持非 nx 项目"
     },
     {
       "name": "description",

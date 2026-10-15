@@ -6,7 +6,6 @@
 import { readFileSync } from 'node:fs';
 import {
   APP_NAME,
-  APP_TITLE,
   DEFAULT_PORT,
   STORE_ENV,
   storePathFromEnv,
@@ -63,7 +62,7 @@ const BUILTINS: AnyCommand[] = [
   {
     id: 'help',
     cli: ['help'],
-    summary: '显示帮助（可跟模块名或命令组，如 nx-nx help template）',
+    summary: '显示帮助（可跟模块名或命令组，如 {{name}} help home）',
     args: [{ name: 'topic', required: false }],
     // 走标准 action 形态：--json 时 emit 会序列化返回的条目，
     // 于是 `help --json` 输出的是可解析的命令表而非帮助文本
@@ -258,15 +257,38 @@ function fail(err: unknown, json: boolean): void {
 }
 
 async function cmdServe(ctx: { port?: number; 'no-open'?: boolean }): Promise<void> {
-  const { startServer } = await import('./server.js');
+  const { startServer, probeInstance, findFreePort } = await import('./server.js');
   const { openBrowser } = await import('../core/open.js');
-  const port = ctx.port || DEFAULT_PORT;
-  const server = await startServer({ port, host: '127.0.0.1' });
-  const bound = server.address();
-  const actualPort = typeof bound === 'object' && bound ? bound.port : port;
-  const addr = `http://127.0.0.1:${actualPort}`;
+  const host = '127.0.0.1';
+  const desiredPort = ctx.port || DEFAULT_PORT;
 
-  console.log(APP_NAME + ' · ' + APP_TITLE + ' v' + VERSION);
+  let server;
+  try {
+    server = await startServer({ port: desiredPort, host });
+  } catch (err) {
+    if (!err || (err as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw err;
+
+    // 默认端口被占：最常见的是「本服务已经在跑」——直接打开已有的页面，不重复启动。
+    const existing = await probeInstance(desiredPort, host);
+    if (existing && existing.app && existing.app.name === APP_NAME) {
+      const addr = `http://${host}:${desiredPort}`;
+      console.log(APP_NAME + ' 已在运行：' + addr);
+      console.log('直接打开浏览器（不重复启动）；如需重启请先停掉旧实例');
+      if (!ctx['no-open']) openBrowser(addr);
+      return;
+    }
+
+    // 被别的服务占用（或不是本面板）：顺延到下一个空闲端口再起。
+    const nextPort = await findFreePort(desiredPort + 1, host);
+    console.log(`端口 ${desiredPort} 已被占用，改用 ${nextPort}`);
+    server = await startServer({ port: nextPort, host });
+  }
+
+  const bound = server.address();
+  const actualPort = typeof bound === 'object' && bound ? bound.port : desiredPort;
+  const addr = `http://${host}:${actualPort}`;
+
+  console.log(APP_NAME + ' v' + VERSION);
   console.log(`面板:   ${addr}`);
   console.log(`存储:   ${storePathFromEnv()}`);
   console.log('CLI:    ' + APP_NAME + ' help（每个按钮都有对应命令，agent 可加 --json）');

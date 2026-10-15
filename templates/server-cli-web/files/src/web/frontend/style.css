@@ -24,8 +24,10 @@
   --soft-2: #ebedf0;
   --mid: #8b9096;
   --bad: #b3261e;
+  --on-bad: #fff;
 
   --border: 1px solid var(--soft-2);
+  --overlay: rgba(0, 0, 0, 0.28);
   --row-h: 28px;
   --btn-h: 32px;
   --fs-core: 12px;
@@ -38,6 +40,45 @@
     inset -1px -1px 2px rgba(255, 255, 255, 0.7);
   --shadow-relief-inset: inset 1px 1px 2px rgba(20, 22, 26, 0.06),
     inset -1px -1px 2px rgba(255, 255, 255, 0.9);
+}
+
+/* 深色主题：只覆盖 token，原子类与版式不用动（这就是分层的意义）。
+   触发方式：<html data-theme="dark">；auto 随系统偏好，在媒体查询里处理。 */
+[data-theme='dark'] {
+  --ink: #e6e8eb;
+  --paper: #15171a;
+  --soft: #1d2024;
+  --soft-2: #2b2f36;
+  --mid: #8d949e;
+  --bad: #f28b82;
+  --on-bad: #3b1410;
+
+  --overlay: rgba(0, 0, 0, 0.55);
+
+  /* 深色下的立体感：高光几乎不可见，靠投影压出层次（白色高光在深色上是噪点） */
+  --shadow-relief: -1px -1px 2px rgba(255, 255, 255, 0.05), 2px 2px 6px rgba(0, 0, 0, 0.45);
+  --shadow-relief-press: inset 1px 1px 2px rgba(0, 0, 0, 0.5),
+    inset -1px -1px 2px rgba(255, 255, 255, 0.06);
+  --shadow-relief-inset: inset 1px 1px 2px rgba(0, 0, 0, 0.4),
+    inset -1px -1px 2px rgba(255, 255, 255, 0.05);
+}
+
+[data-theme='auto'] {
+  @media (prefers-color-scheme: dark) {
+    --ink: #e6e8eb;
+    --paper: #15171a;
+    --soft: #1d2024;
+    --soft-2: #2b2f36;
+    --mid: #8d949e;
+    --bad: #f28b82;
+    --on-bad: #3b1410;
+    --overlay: rgba(0, 0, 0, 0.55);
+    --shadow-relief: -1px -1px 2px rgba(255, 255, 255, 0.05), 2px 2px 6px rgba(0, 0, 0, 0.45);
+    --shadow-relief-press: inset 1px 1px 2px rgba(0, 0, 0, 0.5),
+      inset -1px -1px 2px rgba(255, 255, 255, 0.06);
+    --shadow-relief-inset: inset 1px 1px 2px rgba(0, 0, 0, 0.4),
+      inset -1px -1px 2px rgba(255, 255, 255, 0.05);
+  }
 }
 
 /* ============================================================
@@ -80,7 +121,7 @@ body {
 .btn:disabled { background: var(--soft); color: var(--mid); box-shadow: var(--shadow-relief-inset); cursor: not-allowed; }
 .btn.ghost { background: var(--soft); color: var(--ink); }
 .btn.small { height: 22px; padding: 0 8px; font-size: 11px; border-radius: 6px; }
-.btn.danger { background: var(--bad); color: #fff; }
+.btn.danger { background: var(--bad); color: var(--on-bad); }
 
 /* --- 表单 --- */
 input, select {
@@ -142,7 +183,7 @@ input:focus, select:focus { outline: none; box-shadow: var(--shadow-relief-inset
   font-size: 11px;
 }
 .tag.strong { background: var(--ink); color: var(--paper); }
-.tag.bad { background: var(--bad); color: #fff; }
+.tag.bad { background: var(--bad); color: var(--on-bad); }
 
 /* --- 键值表 --- */
 .kv { margin: 0; }
@@ -208,7 +249,7 @@ table.levels tbody tr:last-child td { border-bottom: 0; }
 .dlg, .modal {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.28);
+  background: var(--overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -252,11 +293,41 @@ header {
 
 .brand { font-weight: 700; letter-spacing: 0.5px; display: inline-flex; align-items: center; gap: 8px; }
 .brand img { width: 22px; height: 22px; border-radius: 6px; display: block; }
+/* 版本徽章：紧跟品牌名，比右侧小 mono 文本更显眼（头部必须看得出当前版本） */
+.brand .ver-tag {
+  font-weight: 600;
+  font-size: 11px;
+  font-family: ui-monospace, Consolas, monospace;
+  color: var(--mid);
+  background: var(--soft);
+  border: 1px solid var(--soft-2);
+  border-radius: 5px;
+  padding: 1px 6px;
+  line-height: 1.4;
+}
 .brand .sub { font-weight: 400; color: var(--mid); margin-left: 8px; font-size: 12px; }
 
-header nav { display: flex; flex-wrap: wrap; gap: 4px; }
-header .meta {
+/* 分段控件：整块浅底（大按钮）包裹 pill tab（小按钮），取代带边框的直角 tab——
+   视觉连贯、有质感，且激活项是一块内嵌滑块，不再靠边框+阴影逐个描边。
+   刻意 overflow: visible——分组下拉菜单要能探出 nav 外，不能被裁掉；
+   放不下时让 nav 内部换行（见下方 flex-wrap）。 */
+header nav {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  background: var(--soft);
+  border-radius: 16px;
+  min-width: 0;
+}
+header .head-acts {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+header .meta {
   min-width: 0;
   max-width: 46vw;
   overflow: hidden;
@@ -267,24 +338,124 @@ header .meta {
   font-family: ui-monospace, Consolas, monospace;
 }
 
-.tab {
-  border: 1px solid transparent;
-  background: none;
-  padding: 5px 10px;
+/* 主题切换按钮：头部的图标按钮（无 emoji，SVG 描边），与 tab 同高 */
+.theme-toggle {
   height: var(--btn-h);
+  width: var(--btn-h);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--soft-2);
   border-radius: 6px;
+  background: var(--soft);
+  color: var(--ink);
+  cursor: pointer;
+  transition: box-shadow 0.12s;
+}
+.theme-toggle:hover { box-shadow: var(--shadow-relief); }
+.theme-toggle:active { box-shadow: var(--shadow-relief-press); }
+.theme-toggle svg { width: 16px; height: 16px; display: block; }
+
+/* 分段选择器（首页主题三选一）：当前项用内凹 + 深色底 */
+.seg { display: inline-flex; border: 1px solid var(--soft-2); border-radius: 6px; overflow: hidden; }
+.seg button {
+  border: 0;
+  background: var(--paper);
+  color: var(--mid);
+  font: inherit;
+  font-size: var(--fs-core);
+  height: 26px;
+  padding: 0 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.seg button + button { border-left: 1px solid var(--soft-2); }
+.seg button:hover { background: var(--soft); }
+.seg button.active { background: var(--ink); color: var(--paper); font-weight: 600; }
+.seg button svg { width: 13px; height: 13px; }
+
+.tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  padding: 0 14px;
+  height: 28px;
+  border-radius: 999px;
   cursor: pointer;
   color: var(--mid);
   font-size: 13px;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
 }
-.tab:hover { background: var(--soft); }
+.tab:hover { color: var(--ink); background: transparent; }
 .tab.active {
   color: var(--ink);
-  border-color: var(--soft-2);
-  background: var(--soft);
+  background: var(--paper);
   font-weight: 600;
   box-shadow: var(--shadow-relief);
 }
+
+/* ── 头部分组入口（GroupTab）：一个 pill 收拢多个页面 ─────────
+   外层 span 定位，内部按钮复用 .tab；下拉菜单是 paper 浮层。 */
+.tab-group { position: relative; display: inline-flex; flex: 0 0 auto; }
+.tab .count {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--mid);
+  background: var(--soft-2);
+  border-radius: 999px;
+  padding: 2px 5px;
+  min-width: 16px;
+  text-align: center;
+}
+.tab.active .count { color: var(--ink); background: var(--soft); }
+.tab .caret {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  margin-left: 1px;
+  opacity: 0.7;
+}
+.tab-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 180px;
+  max-height: 320px;
+  overflow: auto;
+  margin: 0;
+  padding: 4px;
+  background: var(--paper);
+  border: var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-relief);
+  z-index: 20;
+}
+.tab-menu-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: none;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--ink);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.tab-menu-row:hover { background: var(--soft); }
+.tab-menu-row.current { font-weight: 600; background: var(--soft); }
 
 main { padding: 16px; }
 .panel { display: none; }
@@ -293,7 +464,7 @@ main { padding: 16px; }
 /* 并排卡片用 .cols，避免每个视图各写一套 flex */
 .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; align-items: start; }
 
-/* ── 栏目管理（设置页）：容器 + 拖拽 ─────────────────────
+/* ── 栏目管理（首页）：容器 + 拖拽 ─────────────────────
    结构用版面表达、改结构用拖拽表达——所以这里只有把手、输入框与两个动作，
    没有一排 上移/下移/移除 按钮（按钮越多越看不出「现在是什么结构」）。 */
 .grip {
@@ -326,6 +497,14 @@ main { padding: 16px; }
 .nav-row { padding: 0 8px; }
 .nav-row.dragging { opacity: 0.45; }
 .nav-list { display: flex; flex-direction: column; }
+/* 落点指示线：拖动时列表不重排，只在落点画一条横线，避免「拖出重算→一直闪」 */
+.drop-ind {
+  height: 0;
+  border-top: 2px solid var(--ink);
+  margin: 1px 6px;
+  border-radius: 1px;
+  flex: 0 0 auto;
+}
 /* 「隐藏」与分组同构，只是语气更弱：它是"不显示"的容器 */
 .nav-hidden .colhead { color: var(--mid); }
 .nav-hidden .row .name { color: var(--mid); }

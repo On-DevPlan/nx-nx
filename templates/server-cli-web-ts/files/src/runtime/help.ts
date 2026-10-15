@@ -1,9 +1,14 @@
 // help 文本与命令条目的派生。从 cli.ts 拆出以控制单文件行数。
 //
 // 全部由命令表生成——help 因此不可能与实际注册的命令脱节。
+import { readFileSync } from 'node:fs';
 import { APP_NAME, STORE_ENV, storePathFromEnv } from '../core/paths.js';
 import { cliPathsOf, usageOf } from './spec.js';
 import type { ActionShape } from './types/action.js';
+
+const VERSION = (
+  JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string }
+).version;
 
 export interface CommandEntry {
   id: string;
@@ -63,7 +68,7 @@ export function helpEntries(topic: unknown, all: CommandEntry[]): CommandEntry[]
 export function renderHelp(entries: CommandEntry[], topic?: unknown): string {
   const lines: string[] = [];
   if (!topic) {
-    lines.push(`${APP_NAME} · 项目生成器`);
+    lines.push(`${APP_NAME} v${VERSION}`);
     lines.push('CLI 与 Web 面板共享同一 action 声明。');
     lines.push(`存储: ${storePathFromEnv()}    （环境变量 ${STORE_ENV} 或 --store 覆盖）`);
     lines.push('');

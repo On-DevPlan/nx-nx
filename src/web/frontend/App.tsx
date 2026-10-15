@@ -68,6 +68,7 @@ export default function App() {
             </text>
           </svg>
           {appName}
+          <span className="ver-tag">{boot ? `v${boot.app.version}` : ''}</span>
           <span className="sub">nx-xx 项目生成器</span>
         </div>
         <nav>
@@ -86,7 +87,6 @@ export default function App() {
             </span>
           )}
         </nav>
-        <div className="meta">{boot ? `v${boot.app.version}` : ''}</div>
       </header>
       <main>
         {!current ? (

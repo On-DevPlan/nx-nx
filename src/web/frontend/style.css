@@ -253,9 +253,30 @@ header {
 .brand { font-weight: 700; letter-spacing: 0.5px; display: inline-flex; align-items: center; gap: 8px; }
 .brand img { width: 22px; height: 22px; border-radius: 6px; display: block; }
 .brand-mark { width: 22px; height: 22px; display: block; }
+/* 版本徽章：紧跟品牌名，头部必须一眼看得出当前版本 */
+.brand .ver-tag {
+  font-weight: 600;
+  font-size: 11px;
+  font-family: ui-monospace, Consolas, monospace;
+  color: var(--mid);
+  background: var(--soft);
+  border: 1px solid var(--soft-2);
+  border-radius: 5px;
+  padding: 1px 6px;
+  line-height: 1.4;
+}
 .brand .sub { font-weight: 400; color: var(--mid); margin-left: 8px; font-size: 12px; }
 
-header nav { display: flex; flex-wrap: wrap; gap: 4px; }
+/* 分段控件：整块浅底（大按钮）包裹 pill tab（小按钮），与生成的模板保持一致。 */
+header nav {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  background: var(--soft);
+  border-radius: 16px;
+  min-width: 0;
+}
 header .meta {
   margin-left: auto;
   min-width: 0;
@@ -269,20 +290,24 @@ header .meta {
 }
 
 .tab {
-  border: 1px solid transparent;
-  background: none;
-  padding: 5px 10px;
-  height: var(--btn-h);
-  border-radius: 6px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  padding: 0 14px;
+  height: 28px;
+  border-radius: 999px;
   cursor: pointer;
   color: var(--mid);
   font-size: 13px;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
 }
-.tab:hover { background: var(--soft); }
+.tab:hover { color: var(--ink); background: transparent; }
 .tab.active {
   color: var(--ink);
-  border-color: var(--soft-2);
-  background: var(--soft);
+  background: var(--paper);
   font-weight: 600;
   box-shadow: var(--shadow-relief);
 }

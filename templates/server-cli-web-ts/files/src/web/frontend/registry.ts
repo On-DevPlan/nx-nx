@@ -12,7 +12,6 @@ import type { ComponentType, LazyExoticComponent } from 'react';
 
 export const COMPONENTS: Record<string, LazyExoticComponent<ComponentType>> = {
   home: lazy(() => import('../../modules/home/view')),
-  settings: lazy(() => import('../../modules/settings/view')),
 };
 
 /** 供一致性测试对账用。 */

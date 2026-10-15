@@ -12,11 +12,11 @@ import { dirname } from 'node:path';
 import { storePathFromEnv } from './paths.js';
 
 // 项目自己的存储结构。改这里即可扩展，老数据由 normalize 自动补齐。
-// settings 里的导航三项是**显示配置**：分组 / 隐藏 / 平铺顺序。
+// settings 里的导航三项是**显示配置**：分组 / 隐藏 / 平铺顺序；theme 是色彩主题。
 export function initialState() {
   return {
     version: 1,
-    settings: { navGroups: [], navHidden: [], navOrder: [] },
+    settings: { navGroups: [], navHidden: [], navOrder: [], theme: 'light' },
   };
 }
 

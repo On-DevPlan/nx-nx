@@ -2,7 +2,7 @@
 //
 // 为什么放 core 而不是前端注册表：这份清单两端都要读——
 //   - 前端（web/frontend/registry.ts）按 id 拼出懒加载组件，渲染头部导航
-//   - 后端（modules/settings）按 id 校验「导航分组 / 隐藏」配置，坏 id 当场报错
+//   - 后端（modules/home）按 id 校验「导航分组 / 隐藏」配置，坏 id 当场报错
 // 放 core 且不 import 任何东西，两边都能安全引用（前端不会因此把 node: 打进包里）。
 //
 // 新增一个页面 = 写 modules/<域>/view.tsx + 这里加一行 + registry.ts 的 COMPONENTS 加一行。
@@ -12,13 +12,12 @@ export interface ViewMeta {
   id: string;
   title: string;
   order: number;
-  /** 出厂默认是否隐藏（用户可在设置页改；配置存在后以配置为准） */
+  /** 出厂默认是否隐藏（用户可在首页改；配置存在后以配置为准） */
   hidden?: boolean;
 }
 
 export const VIEWS_META: readonly ViewMeta[] = [
   { id: 'home', title: '首页', order: 10 },
-  { id: 'settings', title: '设置', order: 90 },
 ];
 
 export function viewMetaOf(id: string): ViewMeta | null {

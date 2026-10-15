@@ -135,16 +135,19 @@ test('setting：导航分组经 CLI 往返（同一个 store），坏 id 明确�
   const get0 = JSON.parse((await cli(['setting', 'get', '--json'])).stdout);
   assert.ok(Array.isArray(get0.settings.navGroups) && get0.settings.navGroups.length === 0, '默认无分组');
   assert.ok(get0.views.some((v) => v.id === 'home'), '要带上页面清单（头部据此渲染）');
+  assert.ok(!get0.views.some((v) => v.id === 'settings'), '出厂不再有独立 settings 页');
 
-  await cli(['setting', 'set', '--set', 'navGroups=[{"title":"求职","views":["home","settings"]}]', '--json']);
+  await cli(['setting', 'set', '--set', 'navGroups=[{"title":"求职","views":["home"]}]', '--json']);
+  await cli(['setting', 'set', '--set', 'navOrder=["home"]', '--json']);
   const get1 = JSON.parse((await cli(['setting', 'get', '--json'])).stdout);
-  assert.deepEqual(get1.settings.navGroups[0].views, ['home', 'settings'], '组内顺序原样保存');
+  assert.deepEqual(get1.settings.navGroups, [{ title: '求职', views: ['home'] }], '分组原样保存');
+  assert.deepEqual(get1.settings.navOrder, ['home']);
 
-  // 被隐藏的页面：入口不显示，但清单里还在（`#/id` 直达仍可用）
-  await cli(['setting', 'set', '--set', 'navHidden=settings', '--json']);
+  // 被隐藏的页面：入口不显示，但清单里还在（`#/id` 直达仍可用）——先撤分组
+  await cli(['setting', 'set', '--set', 'navGroups=[]', '--set', 'navHidden=home', '--json']);
   const get2 = JSON.parse((await cli(['setting', 'get', '--json'])).stdout);
-  assert.deepEqual(get2.settings.navHidden, ['settings']);
-  assert.ok(get2.views.some((v) => v.id === 'settings'));
+  assert.deepEqual(get2.settings.navHidden, ['home']);
+  assert.ok(get2.views.some((v) => v.id === 'home'));
 
   const bad = await cli(['setting', 'set', '--set', 'navHidden=no_such_page', '--json']).catch((e) => e);
   assert.match(String(bad.stdout || bad.message), /不存在/, '坏页面 id 必须报错而不是静默写入');

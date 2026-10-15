@@ -32,6 +32,13 @@
     "logo": "node tools/logo-gen/cli.mjs"
   },
   "packageManager": "pnpm@10.33.0",
+  "pnpm": {
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "eslint-plugin-react>eslint": "^10"
+      }
+    }
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/On-DevPlan/{{name}}.git"
@@ -43,8 +50,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
-    "eslint": "^9.17.0",
-    "eslint-plugin-react": "^7.37.0",
+    "eslint": "^10.0.0",
+    "eslint-plugin-react": "^7.37.5",
     "vite": "^6.0.7"
   }
 }
