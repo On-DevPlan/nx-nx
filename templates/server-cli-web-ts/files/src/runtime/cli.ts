@@ -4,7 +4,13 @@
 // renderXxx 四处重复登记。现在命令表、help 文本、参数校验全部由 action 声明派生，
 // 新增命令只需在所属模块的 actions 里加一条。
 import { readFileSync } from 'node:fs';
-import { APP_NAME, APP_TITLE, DEFAULT_PORT, storePathFromEnv } from '../core/paths.js';
+import {
+  APP_NAME,
+  APP_TITLE,
+  DEFAULT_PORT,
+  STORE_ENV,
+  storePathFromEnv,
+} from '../core/paths.js';
 import { toErrorPayload, exitCodeOf, badInput } from '../core/errors/index.js';
 import { ACTIONS } from './registry.js';
 import {
@@ -157,19 +163,28 @@ function parseRest(rest: string[], cmd: AnyCommand): ParsedRest {
     }
     const eq = a.indexOf('=');
     if (eq > 2) {
-      flags[a.slice(2, eq)] = a.slice(eq + 1);
+      setFlag(flags, a.slice(2, eq), a.slice(eq + 1));
       continue;
     }
     const key = a.slice(2);
     const next = rest[i + 1];
     if (!bools.has(key) && next !== undefined && !next.startsWith('--')) {
-      flags[key] = next;
+      setFlag(flags, key, next);
       i++;
     } else {
       flags[key] = true;
     }
   }
   return { positionals, flags };
+}
+
+// 同名 flag 出现多次 → 收成数组（`--set a=1 --set b=2`）。
+// 不这么做的话后者会静默覆盖前者——`--set` / `--hidden` 这类可重复 flag 全靠它。
+function setFlag(flags: Record<string, unknown>, key: string, value: unknown): void {
+  const prev = flags[key];
+  if (prev === undefined) flags[key] = value;
+  else if (Array.isArray(prev)) prev.push(value);
+  else flags[key] = [prev, value];
 }
 
 // 位置参数按声明顺序映射成具名输入；末尾声明 { rest: true } 的收集剩余全部
@@ -271,7 +286,7 @@ async function cmdServe(ctx: { port?: number; 'no-open'?: boolean }): Promise<vo
 
 export async function runCli(argv: string[]): Promise<void> {
   const { rest, json, store } = splitGlobals(argv);
-  if (store) process.env.NX_NX_STORE = store;
+  if (store) process.env[STORE_ENV] = store;
 
   const hit = resolveCommand(rest);
 

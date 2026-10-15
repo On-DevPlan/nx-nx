@@ -9,7 +9,7 @@
 
 import type { ParamsCovered } from './http.js';
 
-export type FlagType = 'string' | 'number' | 'boolean' | 'array';
+export type FlagType = 'string' | 'number' | 'boolean' | 'array' | 'json' | 'kv';
 
 export interface FlagSpec {
   type?: FlagType;

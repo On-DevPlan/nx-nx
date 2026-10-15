@@ -1,10 +1,12 @@
-// 模板钩子：生成器在「解析选项时」与「生成前」调用。
+// 模板钩子：生成器在「解析选项时」「生成前」与「生成完成后」调用。
 //
 // 为什么需要钩子：模板的某些选项值域依赖**运行环境**——比如可用端口。
-// 写死在 template.json 里只能是过期数据。
+// 写死在 template.json 里只能是过期数据。而 logo 这种二进制产物，
+// 也该由模板自己产出，不该让通用生成器认识「图片」这个概念。
 //
 // 契约：默认导出 { options?, beforeGenerate?, afterGenerate? }，三者皆为可选、可 async。
-// 本模板没有二进制产物要现算，因此不实现 afterGenerate。
+import { join } from 'node:path';
+import { generateAll, SCHEMES } from './files/tools/logo-gen/index.mjs';
 
 // 家族端口起点：避开 7800/7866/7880 等已占用段
 const PORT_START = 7920;
@@ -25,6 +27,10 @@ export default {
         default: vitePort,
         hint: `已探测空闲端口 ${vitePort}（vite dev 用）`,
       },
+      {
+        name: 'scheme',
+        hint: `撞色方案，可选: ${Object.keys(SCHEMES).join(' / ')}`,
+      },
     ];
   },
 
@@ -43,5 +49,18 @@ export default {
       patch.vitePort = v;
     }
     return patch;
+  },
+
+  // 生成后：产出 logo 全套（svg + png + ico）到前端的静态目录。
+  //
+  // 刻意**不在模板里预置二进制 logo**：那样每次生成都是同一张图，
+  // 而「图与项目名对不上」正是这个家族已经踩过的坑（两个仓库的图标
+  // 来自不同批次的生成，肉眼可见不一致）。改成每次现算，从根上消除漂移。
+  async afterGenerate(targetDir, vars) {
+    return generateAll(
+      join(targetDir, 'src', 'web', 'frontend', 'public'),
+      vars.letters,
+      vars.scheme || 'mars'
+    );
   },
 };

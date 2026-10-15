@@ -1,6 +1,5 @@
 // 编程入口：供其他工具 / agent 以库方式调用。
 // 导出的是各模块的 service（业务真相源），不是 CLI/HTTP 壳——库用方自己组织 I/O。
-export * as store from './core/store.js';
 export * as errors from './core/errors/index.js';
 
 export * as home from './modules/home/service.js';

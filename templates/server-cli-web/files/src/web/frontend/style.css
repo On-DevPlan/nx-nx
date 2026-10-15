@@ -292,3 +292,40 @@ main { padding: 16px; }
 
 /* 并排卡片用 .cols，避免每个视图各写一套 flex */
 .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; align-items: start; }
+
+/* ── 栏目管理（设置页）：容器 + 拖拽 ─────────────────────
+   结构用版面表达、改结构用拖拽表达——所以这里只有把手、输入框与两个动作，
+   没有一排 上移/下移/移除 按钮（按钮越多越看不出「现在是什么结构」）。 */
+.grip {
+  width: 10px;
+  height: 14px;
+  flex: 0 0 auto;
+  cursor: grab;
+  background-image: radial-gradient(circle, var(--mid) 1px, transparent 1px);
+  background-size: 4px 4px;
+  opacity: 0.5;
+}
+.grip:active { cursor: grabbing; }
+.nav-title {
+  font: inherit;
+  font-size: var(--fs-core);
+  font-weight: 600;
+  min-width: 12ch;
+  padding: 2px 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px dashed var(--soft-2);
+}
+.nav-title:focus { outline: none; border-bottom-color: var(--ink); }
+.nav-group .colhead { display: flex; align-items: center; gap: 8px; }
+.nav-pool { padding: 8px 10px; background: var(--paper); border: var(--border); border-radius: 8px; }
+/* 拖拽落点：一眼看出「松手会放到这儿」 */
+.nav-pool.drop-target,
+.nav-group.drop-target { outline: 2px dashed var(--ink); outline-offset: -2px; background: var(--soft); }
+.nav-group .colhead.drop-target { background: var(--soft); }
+.nav-row { padding: 0 8px; }
+.nav-row.dragging { opacity: 0.45; }
+.nav-list { display: flex; flex-direction: column; }
+/* 「隐藏」与分组同构，只是语气更弱：它是"不显示"的容器 */
+.nav-hidden .colhead { color: var(--mid); }
+.nav-hidden .row .name { color: var(--mid); }

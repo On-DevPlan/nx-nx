@@ -358,3 +358,98 @@ main { padding: 16px; }
 .ok-line { color: var(--ink); font-weight: 600; font-size: 12px; margin-bottom: 4px; }
 
 .readme-body { padding: 12px; max-height: 60vh; overflow: auto; }
+
+/* ── 分组入口：一个 pill 收拢多个页面（同域页面不再挤成一排） ── */
+.tab-group { position: relative; display: inline-flex; }
+.tab-group .tab { display: inline-flex; align-items: center; gap: 6px; }
+.tab-group .count { color: var(--mid); font-size: 11px; font-variant-numeric: tabular-nums; }
+/* 展开指示用 CSS 三角，不引字符/图标 */
+.tab-group .caret {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid var(--mid);
+}
+.tab-group .tab.active .caret { border-top-color: var(--ink); }
+
+/* 上下列表：与面板同一套立体语言（单层 relief） */
+.tab-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 40;
+  min-width: 172px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--paper);
+  border: var(--border);
+  border-radius: var(--radius-btn);
+  box-shadow: var(--shadow-relief);
+}
+/* 桥：盖住 pill 与菜单之间那几像素的「死区」——鼠标下滑穿过它时不能被判成离开，
+   否则菜单刚探出头就消失（hover 菜单的经典坑） */
+.tab-menu::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -5px;
+  height: 5px;
+}
+.tab-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--row-h);
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-core);
+  text-align: left;
+  cursor: pointer;
+}
+.tab-menu-row:hover { background: var(--soft); }
+.tab-menu-row.current { font-weight: 600; }
+
+/* ── 栏目管理（设置页）：容器 + 拖拽 ─────────────────────
+   结构用版面表达、改结构用拖拽表达——所以这里只有把手、输入框与两个动作，
+   没有一排 上移/下移/移除 按钮（按钮越多越看不出「现在是什么结构」）。 */
+.grip {
+  width: 10px;
+  height: 14px;
+  flex: 0 0 auto;
+  cursor: grab;
+  background-image: radial-gradient(circle, var(--mid) 1px, transparent 1px);
+  background-size: 4px 4px;
+  opacity: 0.5;
+}
+.grip:active { cursor: grabbing; }
+.nav-title {
+  font: inherit;
+  font-size: var(--fs-core);
+  font-weight: 600;
+  min-width: 12ch;
+  padding: 2px 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px dashed var(--soft-2);
+}
+.nav-title:focus { outline: none; border-bottom-color: var(--ink); }
+.nav-group .colhead { display: flex; align-items: center; gap: 8px; }
+.nav-pool { padding: 8px 10px; background: var(--paper); border: var(--border); border-radius: 8px; }
+/* 拖拽落点：一眼看出「松手会放到这儿」 */
+.nav-pool.drop-target,
+.nav-group.drop-target { outline: 2px dashed var(--ink); outline-offset: -2px; background: var(--soft); }
+.nav-group .colhead.drop-target { background: var(--soft); }
+.nav-row { padding: 0 8px; }
+.nav-row.dragging { opacity: 0.45; }
+.nav-list { display: flex; flex-direction: column; }
+/* 「隐藏」与分组同构，只是语气更弱：它是"不显示"的容器 */
+.nav-hidden .colhead { color: var(--mid); }
+.nav-hidden .row .name { color: var(--mid); }

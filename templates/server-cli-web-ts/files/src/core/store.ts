@@ -12,16 +12,32 @@ import { dirname } from 'node:path';
 import { storePathFromEnv } from './paths.js';
 
 // 项目自己的存储结构。改这里即可扩展，老数据由 normalize 自动补齐。
+export interface NavGroup {
+  title: string;
+  /** 组内页面 id（数组顺序 = 头部展开列表里的顺序） */
+  views: string[];
+}
+
+export interface Settings {
+  /** 头部导航分组：数组顺序 = 显示顺序；一个页面最多属于一个组 */
+  navGroups: NavGroup[];
+  /** 被隐藏的页面 id：头部不显示入口，`#/id` 直达仍可用 */
+  navHidden: string[];
+  /** 平铺区的显示顺序（页面 id 数组；没列进去的按页面自身顺序跟在后面） */
+  navOrder: string[];
+  [k: string]: unknown;
+}
+
 export interface StoreState {
   version: number;
-  settings: Record<string, unknown>;
+  settings: Settings;
   [k: string]: unknown;
 }
 
 export function initialState(): StoreState {
   return {
     version: 1,
-    settings: {},
+    settings: { navGroups: [], navHidden: [], navOrder: [] },
   };
 }
 

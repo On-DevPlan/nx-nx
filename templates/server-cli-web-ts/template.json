@@ -3,7 +3,6 @@
   "name": "server-cli-web TS 骨架",
   "description": "TypeScript 版 serve 驱动骨架：CLI 与 API 同源、编译期类型安全（泛型 action builder / 注册表查重 / typed client）、eslint 带文件行数与字符数限制",
   "namePrefix": "nx-",
-  "logo": false,
   "nextSteps": [
     "cd {{name}} && pnpm install",
     "pnpm dev            # vite + 后端 tsx 直跑源码，改码即生效",
@@ -17,7 +16,7 @@
       "type": "letters",
       "label": "项目字母",
       "required": true,
-      "hint": "1~5 位小写字母，决定项目名（nx-<字母>）、数据目录与 bin 名"
+      "hint": "1~5 位小写字母，决定项目名（nx-<字母>）、数据目录、bin 名与 logo"
     },
     {
       "name": "description",
@@ -37,6 +36,13 @@
       "type": "number",
       "label": "vite dev 端口",
       "hint": "留空则自动探测"
+    },
+    {
+      "name": "scheme",
+      "type": "enum",
+      "label": "logo 撞色",
+      "default": "mars",
+      "values": ["klein", "mars", "hermes", "tiffany", "red", "vandyke", "prussian"]
     },
     {
       "name": "version",
