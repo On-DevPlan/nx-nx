@@ -2,6 +2,21 @@
 
 本文件记录对外可见的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.8.1] - 2026-10-19
+
+三份项目模板的产物根都自带标准 `CHANGELOG.md`；模板 `link-local` 重构、行数上限放宽；pnpm 同步到 12.x。
+
+### Added
+
+- **三份项目模板的产物根都自带 `CHANGELOG.md`**：`server-cli-web` / `server-cli-web-ts` / `mono-gf` 的 `files/` 各自新增一份，遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)（带维护约定与初始 `[Unreleased]`）。从生成的第一秒起，新项目就有可维护的版本日志，CI 与 agent 都能直接读。`std-a-lang` 不生成项目（只铺 `a_<lang>/` 目录骨架），故不配。
+- **TS 模板补齐 `link-local.mjs` 与 `link:local` / `unlink:local` 脚本**（此前只有 JS 模板有），实现与 JS 版同源。
+
+### Changed
+
+- **模板的 `link-local` 重写为「自定位 + 幂等覆盖」**：只做一件事——覆盖 PATH 上现成的全局启动器（volta / npm / pnpm 一视同仁）；`ROOT` 改由 `import.meta.url` 运行时推导，项目搬迁或换机器后重跑一次脚本即指向新路径；已有转发器不再被误当原件备份（原件持久化到 `~/.<name>/dev/backups.json`）。删掉 volta 快照模式、PATH 编辑、一次性 receipt 这些过度设计。
+- **模板 lint 的 `max-lines` 上限 300 → 400**：两份模板的 `eslint.config.js` 同步放宽——`link-local` 这类单文件自包含脚本天然偏长，收紧的上限只会逼人把一件事拆散。
+- **`packageManager` 升级到 pnpm 12.11.2**（原 10.33.0）。CI 端 `pnpm/action-setup@v4` 会按字段自动装对应版本，workflow 本身无需钉死。
+
 ## [0.8.0] - 2026-10-15
 
 打磨两套模板的开箱体验：可选项目名前缀、黑夜模式、端口被占用时复用已运行实例，头部导航改为更有质感的「分段控件」；并把出厂的「首页 / 设置」合并为一个落地页。
