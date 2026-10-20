@@ -60,6 +60,10 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 - **必填项因模板而异**：`server-cli-web` 家族是 `--letters`（1~5 位小写字母，与 namePrefix 拼出项目名，如 `nx-xx`），
   `mono-gf` 是 `--name`，`std-a-lang` 是 `--lang`。动手前先 `template describe <id>` 看清楚，别照抄别的模板的参数
 - 生成项目的端口由模板钩子在创建时探测并写死，面板与 Vite 各一个
+- `serve` 遇到端口被占不会报错：上面已经是本面板就**直接打开它**（不重复启动），
+  是别的服务就顺延到下一个空闲端口再起自己的面板——两种情况都会开浏览器
+- `NX_SERVE_NO_OPEN=1` 让所有 nx-xx 项目的 `serve` 都不自动开浏览器；
+  `--no-open` 只影响这一次调用
 - 生成的是**本机单用户工具**：状态存 `~/<项目名>/store.json`
 
 ## 什么时候不用

@@ -47,7 +47,7 @@ const BUILTINS: AnyCommand[] = [
   {
     id: 'serve',
     cli: ['serve'],
-    summary: '启动 Web 面板',
+    summary: `启动 Web 面板（默认 :${DEFAULT_PORT}；--port N 改端口；--no-open 不开浏览器；端口上已是本面板则直接打开它；NX_SERVE_NO_OPEN=1 全局不开浏览器）`,
     flags: {
       port: { type: 'number', default: DEFAULT_PORT },
       'no-open': { type: 'boolean' },
@@ -245,11 +245,40 @@ function fail(err: unknown, json: boolean): void {
 async function cmdServe(ctx: { port?: number; 'no-open'?: boolean }): Promise<void> {
   const { startServer } = await import('./server.js');
   const { openBrowser } = await import('../core/open.js');
-  const port = ctx.port || DEFAULT_PORT;
-  const server = await startServer({ port, host: '127.0.0.1' });
+  const { autoOpenEnabled, resolvePortConflict, describeOccupant } = await import('../core/serve-port.js');
+  const host = '127.0.0.1';
+  const desiredPort = ctx.port || DEFAULT_PORT;
+  // --no-open 与 NX_SERVE_NO_OPEN 都看这里：后者是所有 nx-xx 项目共享的开关
+  const canOpen = autoOpenEnabled(ctx['no-open']);
+
+  let server: Awaited<ReturnType<typeof startServer>>;
+  try {
+    server = await startServer({ port: desiredPort, host });
+  } catch (err) {
+    if (!err || (err as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw err;
+
+    // 端口被占：先问一句「上面跑的是不是我」。
+    const decision = await resolvePortConflict(desiredPort, APP_NAME, host);
+
+    if (decision.action === 'reuse') {
+      // 自己的面板已经在跑：不重复启动，直接把浏览器指过去。
+      const addr = `http://${host}:${desiredPort}`;
+      console.log(APP_NAME + ' 已在运行：' + addr);
+      console.log('直接打开浏览器（不重复启动）；如需重启请先停掉旧实例');
+      if (canOpen) openBrowser(addr);
+      return;
+    }
+
+    // 别人占的：顺延到下一个空闲端口，再起自己的面板。
+    console.log(
+      `端口 ${desiredPort} 已被占用（占用者: ${describeOccupant(decision.occupant)}），改用 ${decision.port}`
+    );
+    server = await startServer({ port: decision.port, host });
+  }
+
   const bound = server.address();
-  const actualPort = typeof bound === 'object' && bound ? bound.port : port;
-  const addr = `http://127.0.0.1:${actualPort}`;
+  const actualPort = typeof bound === 'object' && bound ? bound.port : desiredPort;
+  const addr = `http://${host}:${actualPort}`;
 
   console.log(APP_NAME + ' · ' + APP_TITLE + ' v' + VERSION);
   console.log(`面板:   ${addr}`);
@@ -257,7 +286,7 @@ async function cmdServe(ctx: { port?: number; 'no-open'?: boolean }): Promise<vo
   console.log('CLI:    ' + APP_NAME + ' help（每个按钮都有对应命令，agent 可加 --json）');
   console.log('按 Ctrl+C 停止');
 
-  if (!ctx['no-open']) openBrowser(addr);
+  if (canOpen) openBrowser(addr);
 
   const shutdown = () => {
     console.log('\n正在停止...');
