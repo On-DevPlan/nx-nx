@@ -17,6 +17,11 @@ export function shouldServeLocally(url) {
   return FRONTEND_ASSET.test(path) ? path : undefined; // 真值 = 交回 Vite
 }
 
+// 后端端口：默认 {{port}}，但 dev 脚本会在端口被占时改用别的端口——
+// 代理目标必须跟着后端**实际监听**的端口走。
+// 写死 {{port}} 的话，dev 前端会去连占用那个端口的别的服务：页面能开、数据全错。
+const BACKEND_PORT = Number(process.env.{{envPrefix}}_PORT) || {{port}};
+
 export default defineConfig({
   root: 'src/web/frontend',
   plugins: [react()],
@@ -25,7 +30,7 @@ export default defineConfig({
     port: {{vitePort}},
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:{{port}}',
+        target: `http://127.0.0.1:${BACKEND_PORT}`,
         bypass: (req) => shouldServeLocally(req.url),
       },
     },

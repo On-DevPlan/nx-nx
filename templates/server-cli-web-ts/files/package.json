@@ -21,7 +21,7 @@
   ],
   "scripts": {
     "start": "pnpm build && node bin/{{letters}}.mjs serve",
-    "dev": "node scripts/dev.mjs",
+    "dev": "node --import tsx scripts/dev.mjs",
     "dev:serve": "node --import tsx src/runtime/cli.ts serve --no-open",
     "link:local": "node scripts/link-local.mjs",
     "unlink:local": "node scripts/link-local.mjs --unlink",

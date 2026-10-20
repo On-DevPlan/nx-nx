@@ -1,6 +1,6 @@
 {
   "name": "nx-nx",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "nx 系列项目生成器 — 把 server-cli-web 骨架物化成项目：CLI 与 Web 面板同源，提供 JS 与 TypeScript 两套模板（TS 模板带编译期类型安全）",
   "type": "module",
   "bin": {
@@ -25,7 +25,7 @@
   "scripts": {
     "build": "node scripts/clean-dist.mjs && tsc -b --force tsconfig.node.json && vite build",
     "typecheck": "tsc -b tsconfig.node.json tsconfig.web.json",
-    "dev": "node scripts/dev.mjs",
+    "dev": "node --import tsx scripts/dev.mjs",
     "dev:vite": "vite --host 127.0.0.1",
     "dev:serve": "node --import tsx src/runtime/cli.ts serve --no-open",
     "start": "pnpm run build && node bin/nx-nx.mjs serve",
