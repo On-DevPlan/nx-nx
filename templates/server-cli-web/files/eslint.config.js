@@ -60,6 +60,127 @@ const FILE_SIZE = {
   },
 };
 
+// 操作成对闸门：一条 action 要么同时有 CLI 与 HTTP，要么显式承认只做 CLI。
+//
+// 运行时注册表已经在装载期拦「没有 CLI 的 action」，但那是启动后才失败；
+// 而且「http: null」一直是个无声出口——写了纯 CLI 命令没人知道是有意还是漏了。
+// 这条规则把判决提前到编辑器/lint：http: null 必须二选一——
+//   a) 属于豁免前缀（serve / server / skill，这些天然是 CLI 侧能力），或
+//   b) 显式写 web: false，表明「这个操作就是不给面板入口」。
+// 反向也管：同时声明 http 与 web: false 是语义冲突，当场报错。
+//
+// 规则扫的是 action 对象字面量（以 id 字符串为锚点，兼容 JS 的 run 写法和
+// TS 的 defineAction 两段式写法），不是运行时值——所以它不需要跑起来。
+const ACTION_PARITY = {
+  rules: {
+    'action-parity': {
+      meta: {
+        type: 'problem',
+        docs: {
+          description: 'action 必须同时声明 CLI 与 HTTP；纯 CLI 需显式 web: false 或属于豁免前缀',
+        },
+        schema: [
+          {
+            type: 'object',
+            properties: { cliOnlyPrefixes: { type: 'array', items: { type: 'string' } } },
+            additionalProperties: false,
+          },
+        ],
+      },
+      create(context) {
+        const opts = context.options[0] || {};
+        // 豁免名单同时也是 runtime/registry 的常量；两处必须一致（有单测对账）
+        const prefixes = opts.cliOnlyPrefixes || ['serve', 'server', 'skill'];
+
+        // 读对象里的字面量属性（只认 Identifier / Literal 键，不碰计算属性）
+        const propOf = (obj, name) =>
+          obj.properties.find(
+            (p) =>
+              !p.computed &&
+              ((p.key.type === 'Identifier' && p.key.name === name) ||
+                (p.key.type === 'Literal' && p.key.value === name))
+          );
+        const literalString = (node) =>
+          node && node.type === 'Literal' && typeof node.value === 'string' ? node.value : null;
+
+        // CLI 可能写成 ['a','b']，也可能写成 [[别名路径], ['另一条路径']]
+        function firstCliSegment(cliProp) {
+          if (!cliProp || cliProp.value.type !== 'ArrayExpression') return null;
+          const first = cliProp.value.elements[0];
+          if (!first) return null;
+          if (first.type === 'Literal') return literalString(first);
+          if (first.type === 'ArrayExpression') return literalString(first.elements[0]);
+          return null;
+        }
+
+        return {
+          ObjectExpression(node) {
+            const idProp = propOf(node, 'id');
+            const id = idProp ? literalString(idProp.value) : null;
+            if (!id) return;
+
+            const cliProp = propOf(node, 'cli');
+            const httpProp = propOf(node, 'http');
+            const webProp = propOf(node, 'web');
+            const runProp = propOf(node, 'run');
+
+            // 只认 action 字面量：模块对象（id + actions）不满足下面任一特征
+            if (!runProp && !cliProp && !httpProp) return;
+
+            const report = (n, message) => context.report({ node: n || node, message });
+
+            if (
+              !cliProp ||
+              cliProp.value.type !== 'ArrayExpression' ||
+              cliProp.value.elements.length === 0
+            ) {
+              report(cliProp || idProp, `action ${id} 必须声明非空 cli（Web 操作必须有 CLI 等价命令）`);
+            }
+
+            if (!httpProp) {
+              report(idProp, `action ${id} 必须声明 http 路由；纯 CLI 请写 http: null 并标注 web: false`);
+              return;
+            }
+
+            const httpValue = httpProp.value;
+            const isNull = httpValue.type === 'Literal' && httpValue.value === null;
+            const webFalse =
+              webProp && webProp.value.type === 'Literal' && webProp.value.value === false;
+
+            if (isNull) {
+              const segment = firstCliSegment(cliProp);
+              const exempt = segment && prefixes.includes(segment);
+              if (!exempt && !webFalse) {
+                report(
+                  httpProp,
+                  `action ${id} 声明了 http: null，但既不在豁免前缀（${prefixes.join(' / ')}）内，也没有显式 web: false——CLI 与 Web 必须成对`
+                );
+              }
+              return;
+            }
+
+            if (httpValue.type === 'ArrayExpression') {
+              if (
+                httpValue.elements.length !== 2 ||
+                !literalString(httpValue.elements[0]) ||
+                !literalString(httpValue.elements[1])
+              ) {
+                report(httpProp, `action ${id} 的 http 必须是 [method, path] 两个字面量`);
+              }
+              if (webFalse) {
+                report(webProp, `action ${id} 同时声明了 http 与 web: false，语义冲突`);
+              }
+            }
+          },
+        };
+      },
+    },
+  },
+};
+
+// 两个内联插件合并成一个，避免同一个文件被两个 plugins 块重复声明。
+const LOCAL_RULES = { rules: { ...FILE_SIZE.rules, ...ACTION_PARITY.rules } };
+
 const BASE_RULES = {
   'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
   'no-undef': 'off', // 浏览器/Node 全局混用，靠运行时暴露；装 globals 包不值得
@@ -96,7 +217,7 @@ export default defineConfig([
   // 下面那条 max-lines 豁免管的是「结构」，体积上限是产品约束，两者不是一回事。
   {
     files: ['**/*.{js,mjs,cjs,jsx}'],
-    plugins: { local: FILE_SIZE },
+    plugins: { local: LOCAL_RULES },
     rules: { 'local/max-file-chars': ['error', { max: 15000 }] },
   },
 
@@ -182,5 +303,16 @@ export default defineConfig([
   {
     files: ['scripts/**/*.{js,mjs}', 'tools/**/*.{js,mjs}'],
     rules: { 'max-lines': 'off' },
+  },
+
+  // 操作成对：每条 action 必须同时有 CLI 与 HTTP（纯 CLI 走豁免前缀或 web: false）。
+  // 放在分层规则之后：registry.test.mjs 用正则从本文件里抓「模块互依禁列」块，
+  // 这一块的 files 也含 src/modules/，排前面会被误抓。
+  {
+    files: ['src/modules/*/index.js'],
+    plugins: { local: LOCAL_RULES },
+    rules: {
+      'local/action-parity': ['error', { cliOnlyPrefixes: ['serve', 'server', 'skill'] }],
+    },
   },
 ]);

@@ -10,11 +10,11 @@ description: {{name}} 的开发者 skill（项目级，.claude/skills/dev-{{lett
 ## 路由（先看这里）
 
 主文档只做路由，场景细节一律放 `references/`。新增主题时：先建
-`references/<A|B|C>-<主题>.md`，再在下面表格加一行。
+`references/<A|B|C><两位序号>-<主题>.md`，再在下面表格加一行。
 
 | 代号 | 干什么时读 | 一句话 |
 | --- | --- | --- |
-| _（待补）_ | 首个开发主题出现时补第一行 | 命名示例：`A-本地开发.md` / `B-代码地图.md` / `C-验证发布.md` |
+| _（待补）_ | 首个开发主题出现时补第一行 | 命名示例：`A01-本地开发.md` / `B01-代码地图.md` / `C01-验证发布.md` |
 
 ## 序列约定
 
@@ -40,5 +40,6 @@ description: {{name}} 的开发者 skill（项目级，.claude/skills/dev-{{lett
 ## 约束
 
 - 新增能力照现有模块的分层放置，不要把业务逻辑塞进 `src/runtime/`
+- 新增 action 必须同时声明 `cli` 与 `http`；确属纯 CLI（`serve` / `server` / `skill` 前缀之外）要写 `http: null, web: false`——`local/action-parity` 与启动期注册表都会拦
 - 动 CLI/HTTP 契约时同步 `tests/`，并确认 `routes` 输出一致
 - 与主 skill `{{name}}` 分工：`{{name}}` 管运行面，`dev-{{letters}}` 管开发面

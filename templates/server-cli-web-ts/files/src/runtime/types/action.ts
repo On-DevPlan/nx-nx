@@ -97,6 +97,8 @@ export interface ActionShape {
   id: string;
   cli: readonly string[] | readonly (readonly string[])[];
   http?: readonly [string, string] | null;
+  /** 纯 CLI 的显式出口：http 必须同时为 null；表示「这个操作就是不给面板入口」 */
+  web?: boolean;
   summary?: string;
   args?: readonly ArgEntry[];
   flags?: Record<string, FlagSpec>;

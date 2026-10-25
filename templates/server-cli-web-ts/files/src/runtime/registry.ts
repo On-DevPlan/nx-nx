@@ -23,6 +23,7 @@ export interface BoundAction {
   module: string;
   cli: unknown;
   http?: unknown;
+  web?: boolean;
   run: (...a: unknown[]) => unknown;
   [k: string]: unknown;
 }
@@ -37,7 +38,16 @@ export const ACTIONS: BoundAction[] = MODULES.flatMap((m) =>
 //
 // 方向性约定（刻意的不对称）：
 //   - 每条 action 都必须有 cli —— 保证「Web 上能做的，CLI 都能做」
-//   - http 允许为 null（纯 CLI 命令），但**不允许**声明 http 却没有 cli
+//   - 有 http 才谈得上 Web 入口；http: null 只留给两类：
+//       a) 豁免前缀（serve / server / skill —— 天然是 CLI 侧能力）
+//       b) 显式 web: false（这个操作就是不给面板入口）
+//     其余 http: null 一律视为漏声明，启动即失败（与 eslint 的 local/action-parity 同规）
+//   - 不允许声明 http 却没有 cli，也不允许 http 与 web: false 同时出现
+//
+// 豁免前缀必须与 eslint.config.js 里 local/action-parity 的 cliOnlyPrefixes 一致，
+// tests/unit/registry.test.mjs 会对账。
+export const CLI_ONLY_PREFIXES = ['serve', 'server', 'skill'];
+
 const seenIds = new Set<string>();
 const seenCli = new Set<string>();
 const seenHttp = new Set<string>();
@@ -59,7 +69,17 @@ for (const a of ACTIONS) {
     const httpKey = method + ' ' + pattern;
     if (seenHttp.has(httpKey)) throw new Error(`HTTP 路由重复: ${httpKey}（action ${a.id}）`);
     seenHttp.add(httpKey);
-  } else if (http !== null) {
+    if (a.web === false) {
+      throw new Error(`action 同时声明了 http 与 web: false，语义冲突: ${a.id}`);
+    }
+  } else if (http === null) {
+    const segment = paths[0]?.[0];
+    if (a.web !== false && !(segment && CLI_ONLY_PREFIXES.includes(segment))) {
+      throw new Error(
+        `action 没有声明 HTTP 路由（CLI 与 Web 必须成对；纯 CLI 请显式 web: false 或使用豁免前缀）: ${a.id}`
+      );
+    }
+  } else {
     throw new Error(`action 的 http 必须是路由数组或显式 null: ${a.id}`);
   }
 
