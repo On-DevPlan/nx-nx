@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+## [0.8.5] - 2026-10-25
+
+### Added
+
+- **模板强制 CLI / Web 成对**：`server-cli-web` 与 TS 模板新增 eslint 规则
+  `local/action-parity` + 注册表装载期校验——每条 action 必须同时声明 `cli` 与
+  `http`；`http: null` 需显式 `web: false`（出口），或属豁免前缀
+  `serve / server / skill`。
+- 单测补三条：成对断言、lint 与 runtime 豁免前缀对账、非 GET 操作必须有面板入口。
+
+
 ## [0.8.4] - 2026-10-25
 
 ### Changed
