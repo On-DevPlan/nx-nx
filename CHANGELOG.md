@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-10-25
+
 ### Changed
 
 - **skill 文档与模板的 ref 统一为 ABC 序列**：`assets/nx-nx` 与 `assets/nx-dev` 的
