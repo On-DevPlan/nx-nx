@@ -1,6 +1,6 @@
 ---
 name: nx-nx
-description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「列出/预览/创建项目模板」「起一个本机脚手架项目」时使用。触发词：生成项目、脚手架、模板、create、template、server-cli-web、起项目、npx nx-nx、CLI 加面板。不适用：纯 Web 应用、纯一次性脚本、多用户远程部署。
+description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「列出/预览/创建项目模板」「起一个本机脚手架项目」「跑内置脚本（带内置全局函数的 .mjs）」时使用。触发词：生成项目、脚手架、模板、create、template、server-cli-web、起项目、npx nx-nx、CLI 加面板、内置脚本、script run、js 脚本。不适用：纯 Web 应用、多用户远程部署。
 ---
 
 # nx-nx
@@ -9,7 +9,8 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 > 只讲「解决什么问题、怎么用」；源码结构与如何新增模板属于开发 skill `nx-dev`。
 
 一句话：nx-nx 是项目生成器——从内置模板（JavaScript / TypeScript 两套 server-cli-web
-骨架）一键物化一个开箱可用的「CLI + Web 面板」项目。
+骨架）一键物化一个开箱可用的「CLI + Web 面板」项目；顺带提供**内置脚本**能力：
+写一段 .mjs，用内置全局函数直接跑。
 
 ## 解决什么问题
 
@@ -33,6 +34,9 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 | `nx-nx health` | 自检 |
 | `nx-nx skill install [name] [--group G] [--all] [--to D]` | 安装单个 / 一组 / 全部随包 skill（`--all` 与 name、`--group` 互斥） |
 | `nx-nx skill list` | 列出可装的 skill 与 group |
+| `nx-nx script list` | 列出随包分发的内置脚本与用法 |
+| `nx-nx script aliases` | 列出脚本里可直接调用的内置全局函数（别名模块） |
+| `nx-nx script run <脚本名\|路径> [--参数 值...]` | 跑内置脚本或任意 .mjs 脚本（内置全局函数已注入） |
 | 任何命令 + `--json` | 机器可读输出（agent 模式） |
 
 模板 id（共 4 套）：
@@ -54,6 +58,43 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 出错时读 `error` 字段：带「用法:」前缀 = 参数问题，改参数重试；`NOT_FOUND` =
 模板 / 路径不存在；目录非空被拒 = 换空目录或新路径。
 
+## 内置脚本（别名模块）
+
+为一个一次性小脚本单开一个项目不划算时用它：写一段 `.mjs`，跑在 nx-nx 自带的
+node 解释器里，**内置全局函数直接可用**——不用 import，也不用自己拼 fs / shell 样板。
+
+```bash
+nx-nx script list                     # 有哪些内置脚本
+nx-nx script aliases                  # 内置全局函数清单（文件 / 进程 / 系统 / 输出 四组）
+nx-nx script run <脚本名或路径> --参数 值...
+```
+
+脚本里可用的内置全局函数（裸名调用；完整清单见 `nx-nx script aliases`）：
+
+| 组 | 函数 |
+| --- | --- |
+| 文件 | `readText` `writeText` `readJson` `writeJson` `exists` `isDir` `isFile` `mkdirp` `removePath` `copyTree` `listDir` `listEntries` `walk` `findFiles` |
+| 进程 | `run(cmd, args)` `sh(cmdLine)` `which(bin)` |
+| 系统 | `homeDir` `tmpDir` `cwd` `absPath` `env` `setEnv` `sleep` `now` `parseArgs` |
+| 输出 | `log` `ok` `warn` `fail` `heading` `table` |
+
+`nx-nx script run <脚本> --k v` 里的 `--k v` 会原样转成脚本的 argv，脚本里用
+`parseArgs(process.argv.slice(2))` 取。
+
+内置脚本之一 `sync-nx-skills`：把一批 nx 项目的随包 skill 强制覆盖安装到本机 skill
+目录（模板固定 → skill 文档改完，一条命令全量刷新）：
+
+```bash
+nx-nx script run sync-nx-skills --root D:\code\a_js\proj         # 真装
+nx-nx script run sync-nx-skills --root D:\code\a_js\proj --dry   # 只看会发生什么
+```
+
+**自己装，不借各项目的 bin**：安装规则是确定的，所以直接按规则做——源
+`<项目>/assets/<skill>/` → 目标 `<安装目录>/<skill>/`，目标目录先删后拷（强制覆盖，
+旧文件不残留），`hooks.json` 与 `install/` 这类安装期资产不随安装走，文本里的
+`{{PROJECT_ROOT}}` / `{{NX_NX_ROOT}}` 渲染成项目根全路径。整个脚本是纯文件操作，
+不起额外子进程。
+
 ## 关键约束（避免踩坑）
 
 - 目标目录**非空即拒**，绝不覆盖——要重新生成就换新目录或清空目录
@@ -73,4 +114,6 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 
 ## references
 
-- `00-product.md` —— 解决什么问题 / 使用背景 / 两套模板对比 / 完整使用流程
+| 代号 | 内容 | 文件 |
+| --- | --- | --- |
+| A | 解决什么问题 / 使用背景 / 四套模板对比 / 完整使用流程 | `A-product.md` |

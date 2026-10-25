@@ -1,4 +1,4 @@
-# 52 · 通用 hook 总线契约（配置驱动 / match / 无限事件平面）
+# C · 通用 hook 总线契约（配置驱动 / match / 无限事件平面）
 
 > 本文是 nx-nx 内 hook 机制的标准契约，与 `src/core/hook-bus.ts`、
 > `src/core/hook-handlers.ts` 一一对应。新增任何 hook 能力都走本契约，

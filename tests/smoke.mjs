@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -124,4 +124,25 @@ test('未知模板报可用列表（帮助迷路的人）', async () => {
       return true;
     }
   );
+});
+
+test('script list + aliases：内置脚本与全局函数清单可读', async () => {
+  const { stdout } = await run('script list --json');
+  const r = JSON.parse(stdout);
+  assert.ok(r.scripts.some((s) => s.name === 'sync-nx-skills'), '缺 sync-nx-skills');
+
+  const { stdout: a } = await run('script aliases --json');
+  const al = JSON.parse(a);
+  for (const must of ['readText', 'walk', 'run', 'log']) {
+    assert.ok(al.aliases.some((x) => x.name === must), `缺内置全局函数 ${must}`);
+  }
+});
+
+test('script run：脚本里的内置全局函数开箱可用（不用 import）', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'nxnx-script-'));
+  const file = join(dir, 'demo.mjs');
+  // 故意不 import 别名模块：内置全局函数应当由解释器直接注入
+  writeFileSync(file, "log('ok-' + (1 + 1));\n");
+  const { stdout } = await run(`script run ${file}`);
+  assert.match(stdout, /ok-2/);
 });

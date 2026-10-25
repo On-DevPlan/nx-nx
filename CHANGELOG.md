@@ -2,6 +2,36 @@
 
 本文件记录对外可见的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [Unreleased]
+
+### Changed
+
+- **skill 文档与模板的 ref 统一为 ABC 序列**：`assets/nx-nx` 与 `assets/nx-dev` 的
+  `00-product` / `50-template-authoring` / `51-verification-loop` / `52-hook-bus`
+  改为 `A-product` / `A-template-authoring` / `B-verification-loop` / `C-hook-bus`；
+  `nx-dev` 主文档的 references 列表改为按 A/B/C 路由，模板生成的 dev skill 也按
+  `A-/B-/C-` 序列命名 ref（A 操作流程 / B 设计与代码 / C 验证与发布）。
+
+### Added
+
+- **内置脚本域（别名模块）**：新增 `nx-nx script list` / `script aliases` / `script run`
+  （别名 `js run`），可以在 nx-nx 里直接跑 `.mjs` 脚本——**内置全局函数直接可用**，
+  不用 import、不用自己拼 fs / shell 样板。内置全局函数分四组：文件（`readText`
+  `writeText` `readJson` `writeJson` `exists` `isDir` `isFile` `mkdirp` `removePath`
+  `copyTree` `listDir` `listEntries` `walk` `findFiles`）、进程（`run` `sh` `which`）、
+  系统（`homeDir` `tmpDir` `cwd` `absPath` `env` `setEnv` `sleep` `now` `parseArgs`）、
+  输出（`log` `ok` `warn` `fail` `heading` `table`）。
+- **第一个内置脚本 `sync-nx-skills`**：把一批 nx 项目的随包 skill **强制覆盖**安装到
+  本机 skill 目录（模板固定 → skill 文档改完，一条命令全量刷新）。**自己装，不借
+  各项目的 bin**：安装规则是确定的，所以直接按规则做——源 `<项目>/assets/<skill>/`
+  → 目标 `<安装目录>/<skill>/`，目标目录先删后拷（强制覆盖，旧文件不残留），
+  `hooks.json` 与 `install/` 这类安装期资产不随安装走，文本里的 `{{PROJECT_ROOT}}` /
+  `{{NX_NX_ROOT}}` 渲染成项目根全路径。整个脚本是纯文件操作，不起额外子进程。
+  `--dry` 可先看会发生什么。
+- **解耦是结构性的，不是口头约定**：别名模块只依赖 node: 内置，不 import 任何
+  nx-nx 源码；脚本只许用「内置全局函数 + node: 内置」；脚本跑在自己的子进程里，
+  全局副作用与崩溃都被关住。
+
 ## [0.8.3] - 2026-10-20
 
 ### Fixed

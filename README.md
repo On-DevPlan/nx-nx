@@ -29,8 +29,53 @@ cd ../nx-zz && pnpm install && pnpm start
 | `nx-nx template ports` | 探测本机空闲端口 |
 | `nx-nx template check-dir --dir <path>` | 检查目标目录是否可用 |
 | `nx-nx routes [--json]` | CLI ↔ HTTP 路由对照表 |
+| `nx-nx script list` | 列出随包分发的内置脚本与用法 |
+| `nx-nx script aliases` | 列出脚本里可直接调用的内置全局函数（别名模块） |
+| `nx-nx script run <脚本名\|路径> [--参数 值...]` | 跑内置脚本或任意 `.mjs` 脚本（内置全局函数已注入） |
 
 所有命令支持 `--json`（机器可读）与 `--store <path>`（覆盖存储路径）。
+
+## 内置脚本（别名模块）
+
+一次性小脚本不值得单开一个项目——写段 `.mjs` 就能跑，**内置全局函数直接可用**：
+
+```bash
+nx-nx script list                     # 内置脚本清单
+nx-nx script aliases                  # 内置全局函数清单
+nx-nx script run sync-nx-skills --root D:\code\a_js\proj
+```
+
+脚本里能直接用的内置全局函数（裸名调用，完整清单见 `nx-nx script aliases`）：
+
+| 组 | 函数 |
+| --- | --- |
+| 文件 | `readText` `writeText` `readJson` `writeJson` `exists` `isDir` `isFile` `mkdirp` `removePath` `copyTree` `listDir` `listEntries` `walk` `findFiles` |
+| 进程 | `run(cmd, args)` `sh(cmdLine)` `which(bin)` |
+| 系统 | `homeDir` `tmpDir` `cwd` `absPath` `env` `setEnv` `sleep` `now` `parseArgs` |
+| 输出 | `log` `ok` `warn` `fail` `heading` `table` |
+
+内置脚本 `sync-nx-skills`：把一批 nx 项目的随包 skill 强制覆盖安装到本机 skill 目录
+（模板固定 → skill 文档改完，一条命令全量刷新）。**自己装，不借各项目的 bin**——
+规则是确定的，直接按规则做：源 `<项目>/assets/<skill>/` → 目标 `<安装目录>/<skill>/`，
+目标目录先删后拷（强制覆盖），`hooks.json` 与 `install/` 这类安装期资产不随安装走，
+文本里的 `{{PROJECT_ROOT}}` / `{{NX_NX_ROOT}}` 渲染成项目根全路径。整个脚本是纯文件
+操作，不起额外子进程。
+
+### 解耦是怎么做到的
+
+```
+assets/scripts/
+├─ aliases.mjs        内置全局函数（别名模块）——只用 node: 内置，零项目依赖
+├─ lib/               文件 / 进程 / 系统 / 输出 四组原语
+├─ _runner.mjs        解释器入口：注入全局函数 → 导入脚本
+├─ manifest.json      脚本清单
+└─ <name>.mjs         具体脚本
+```
+
+- 别名模块**不 import 任何 nx-nx 源码** → 整个目录可整体搬到别的项目；
+- 脚本只许用「内置全局函数 + node: 内置」，不许再 import 内部模块 → 脚本与项目
+  之间只有这一份契约，改项目不会连带改脚本；
+- 脚本跑在**自己的子进程**里：全局副作用与崩溃都被关在那个进程里。
 
 ## 写一个新模板
 

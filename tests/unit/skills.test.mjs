@@ -172,10 +172,10 @@ test('getSkill: 默认 skill 返回全文与安装状态；ref 可解析', async
   assert.equal(r.install.status, 'ok');
 
   const refs = await listRefs('nx-dev');
-  assert.deepEqual(refs, ['50-template-authoring', '51-verification-loop', '52-hook-bus']);
+  assert.deepEqual(refs, ['A-template-authoring', 'B-verification-loop', 'C-hook-bus']);
 
-  const r2 = await getSkill('nx-dev', { ref: '50-template-authoring', to });
-  assert.equal(r2.ref, 'references/50-template-authoring.md');
+  const r2 = await getSkill('nx-dev', { ref: 'A-template-authoring', to });
+  assert.equal(r2.ref, 'references/A-template-authoring.md');
   assert.ok(r2.content.includes('template.json'));
 });
 

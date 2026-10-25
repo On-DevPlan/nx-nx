@@ -1,0 +1,10 @@
+{
+  "scripts": [
+    {
+      "name": "sync-nx-skills",
+      "description": "批量把各 nx 项目的随包 skill 强制覆盖安装到本机 skill 目录",
+      "usage": "nx-nx script run sync-nx-skills --root <扫描根目录> [--to <安装目录>] [--depth <层数>] [--filter <子串>] [--dry]",
+      "notes": "自己装：按固定规则直接拷贝并渲染 {{PROJECT_ROOT}} / {{NX_NX_ROOT}}，不调用各项目的 bin、不起额外子进程。"
+    }
+  ]
+}
