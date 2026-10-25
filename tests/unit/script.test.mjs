@@ -2,12 +2,21 @@
 // 经 tsx 跑 src；脚本一律写到临时目录，绝不碰真实目录。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { aliasesPath, listScripts, resolveScript } from '../../src/core/script/paths.js';
-import { aliases, flagTokens, runScript, scripts } from '../../src/core/script/service.js';
+import {
+  aliases,
+  createScript,
+  deleteScript,
+  flagTokens,
+  readScript,
+  runScript,
+  saveScript,
+  scripts,
+} from '../../src/core/script/service.js';
 
 function tmp() {
   return mkdtempSync(join(tmpdir(), 'nxnx-script-'));
@@ -92,4 +101,75 @@ test('flagTokens：布尔不带值，字符串用等号连写（值里的空格�
     '--root=D:\\a b',
     '--n=3',
   ]);
+});
+
+test('脚本编辑器：读/存/新建/删除 + manifest 同步（NX_NX_SCRIPTS 隔离）', () => {
+  const dir = tmp();
+  const prev = process.env.NX_NX_SCRIPTS;
+  process.env.NX_NX_SCRIPTS = dir;
+  try {
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({
+        scripts: [
+          { name: 'demo', description: '演示' },
+          { name: 'ghost', description: '磁盘上不存在' },
+        ],
+      }),
+    );
+    writeFileSync(join(dir, 'demo.mjs'), "log('old');\n");
+
+    assert.deepEqual(scripts().map((s) => s.name), ['demo'], '幽灵 manifest 条目不列出');
+    assert.equal(readScript('demo').content, "log('old');\n");
+
+    saveScript('demo', "log('new');\n");
+    assert.equal(readFileSync(join(dir, 'demo.mjs'), 'utf8'), "log('new');\n");
+
+    const created = createScript({ name: 'new-one', description: '新脚本' });
+    assert.equal(created.name, 'new-one');
+    assert.ok(existsSync(join(dir, 'new-one.mjs')));
+    assert.match(readScript('new-one').content, /hello from new-one/);
+    const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'));
+    assert.ok(manifest.scripts.some((s) => s.name === 'new-one' && s.description === '新脚本'));
+
+    assert.throws(() => createScript({ name: 'new-one' }), (err) => {
+      assert.equal(err.code, 'CONFLICT');
+      return true;
+    });
+
+    deleteScript('new-one');
+    assert.equal(existsSync(join(dir, 'new-one.mjs')), false);
+    const after = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'));
+    assert.ok(!after.scripts.some((s) => s.name === 'new-one'));
+  } finally {
+    if (prev === undefined) delete process.env.NX_NX_SCRIPTS;
+    else process.env.NX_NX_SCRIPTS = prev;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('脚本编辑器：拒绝路径穿越与内置文件', () => {
+  const dir = tmp();
+  const prev = process.env.NX_NX_SCRIPTS;
+  process.env.NX_NX_SCRIPTS = dir;
+  try {
+    for (const name of ['../evil', 'a/b', 'a\\b', '_runner', 'aliases', 'manifest']) {
+      assert.throws(
+        () => readScript(name),
+        (err) => {
+          assert.equal(err.code, 'INVALID_INPUT');
+          return true;
+        },
+        `应拒绝脚本名: ${name}`,
+      );
+    }
+    assert.throws(() => createScript({ name: '..' }), (err) => {
+      assert.equal(err.code, 'INVALID_INPUT');
+      return true;
+    });
+  } finally {
+    if (prev === undefined) delete process.env.NX_NX_SCRIPTS;
+    else process.env.NX_NX_SCRIPTS = prev;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

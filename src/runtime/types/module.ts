@@ -113,8 +113,8 @@ export type ActionPatterns<AA> = FilterNever<
   AA extends readonly unknown[]
     ? {
         [K in keyof AA]: AA[K] extends { http: infer H }
-          ? H extends readonly [string, infer P]
-            ? P
+          ? H extends readonly [infer M extends string, infer P extends string]
+            ? `${M}|${P}`
             : never
           : never;
       }

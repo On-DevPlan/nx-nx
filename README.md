@@ -31,6 +31,10 @@ cd ../nx-zz && pnpm install && pnpm start
 | `nx-nx routes [--json]` | CLI ↔ HTTP 路由对照表 |
 | `nx-nx script list` | 列出随包分发的内置脚本与用法 |
 | `nx-nx script aliases` | 列出脚本里可直接调用的内置全局函数（别名模块） |
+| `nx-nx script read <脚本名>` | 读取脚本源码 |
+| `nx-nx script save <脚本名> --content <全文>` | 保存脚本源码（先写临时文件再改名） |
+| `nx-nx script create --name <名> [--description ...]` | 新建脚本并登记到 manifest |
+| `nx-nx script delete <脚本名>` | 删除脚本并从 manifest 移除 |
 | `nx-nx script run <脚本名\|路径> [--参数 值...]` | 跑内置脚本或任意 `.mjs` 脚本（内置全局函数已注入） |
 
 所有命令支持 `--json`（机器可读）与 `--store <path>`（覆盖存储路径）。
@@ -44,6 +48,9 @@ nx-nx script list                     # 内置脚本清单
 nx-nx script aliases                  # 内置全局函数清单
 nx-nx script run sync-nx-skills --root D:\code\a_js\proj
 ```
+
+**Web 面板的「脚本」页**与这些命令同源：左侧选脚本，中间直接改源码（Ctrl/Cmd+S 保存），
+右侧看运行输出与内置函数；运行前自动保存当前编辑内容。`nx-nx serve` 后点顶部「脚本」。
 
 脚本里能直接用的内置全局函数（裸名调用，完整清单见 `nx-nx script aliases`）：
 

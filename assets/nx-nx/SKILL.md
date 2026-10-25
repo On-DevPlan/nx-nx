@@ -36,8 +36,11 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 | `nx-nx skill list` | 列出可装的 skill 与 group |
 | `nx-nx script list` | 列出随包分发的内置脚本与用法 |
 | `nx-nx script aliases` | 列出脚本里可直接调用的内置全局函数（别名模块） |
+| `nx-nx script read/save/create/delete ...` | 脚本源码的读取 / 保存 / 新建 / 删除（Web「脚本」页同源，完整 flag 见 `help script`） |
 | `nx-nx script run <脚本名\|路径> [--参数 值...]` | 跑内置脚本或任意 .mjs 脚本（内置全局函数已注入） |
 | 任何命令 + `--json` | 机器可读输出（agent 模式） |
+
+Web 面板顶部有「新建项目 / 模板 / 脚本」三个 tab；「脚本」页可直接编辑并运行内置脚本。
 
 模板 id（共 4 套）：
 
@@ -116,4 +119,4 @@ nx-nx script run sync-nx-skills --root D:\code\a_js\proj --dry   # 只看会发�
 
 | 代号 | 内容 | 文件 |
 | --- | --- | --- |
-| A | 解决什么问题 / 使用背景 / 四套模板对比 / 完整使用流程 | `A-product.md` |
+| A01 | 解决什么问题 / 使用背景 / 四套模板对比 / 完整使用流程 | `A01-product.md` |

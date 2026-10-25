@@ -58,6 +58,61 @@ export default defineModule({
     ),
 
     defineAction({
+      id: 'script.read',
+      cli: ['script', 'read'],
+      http: ['GET', '/api/scripts/:name/content'],
+      summary: '读取脚本源码',
+      args: ['name'],
+    })(
+      (ctx) => service.readScript(ctx.name),
+      (r) => r.content,
+    ),
+
+    defineAction({
+      id: 'script.save',
+      cli: ['script', 'save'],
+      http: ['PUT', '/api/scripts/:name/content'],
+      summary: '保存脚本源码（先写临时文件再改名）',
+      args: ['name'],
+      flags: {
+        content: { type: 'string', required: true, hint: '脚本全文' },
+      },
+    })(
+      (ctx) => service.saveScript(ctx.name, ctx.content),
+      (r) => `已保存: ${r.path}`,
+    ),
+
+    defineAction({
+      id: 'script.create',
+      cli: ['script', 'create'],
+      http: ['POST', '/api/scripts'],
+      summary: '新建脚本并登记到 manifest',
+      flags: {
+        name: { type: 'string', required: true, hint: '脚本名（不含 .mjs）' },
+        description: { type: 'string', hint: '一句话说明' },
+        usage: { type: 'string', hint: '用法示例' },
+        content: { type: 'string', hint: '初始源码（留空则生成模板）' },
+      },
+    })(
+      (ctx) => service.createScript(ctx),
+      (r) => `已创建: ${r.path}`,
+    ),
+
+    defineAction({
+      id: 'script.delete',
+      cli: [
+        ['script', 'delete'],
+        ['script', 'rm'],
+      ],
+      http: ['DELETE', '/api/scripts/:name'],
+      summary: '删除脚本并从 manifest 移除',
+      args: ['name'],
+    })(
+      (ctx) => service.deleteScript(ctx.name),
+      (r) => `已删除: ${r.path}`,
+    ),
+
+    defineAction({
       id: 'script.run',
       cli: [
         ['script', 'run'],
@@ -65,12 +120,12 @@ export default defineModule({
       ],
       http: ['POST', '/api/script-run'],
       summary: '运行内置脚本或任意 .mjs 脚本（内置全局函数已注入）',
-      args: ['name', { name: 'args', required: false, rest: true }],
+      args: [{ name: 'name' }, { name: 'args', required: false, rest: true }],
       // 脚本自己的参数由脚本定（--root / --to / --mode …），声明期枚举不了，
       // 所以走开放式：未知 flag 原样转成 argv 交给脚本。
       openFlags: true,
     })(
-      async (ctx) => {
+      async (ctx, meta) => {
         const flags: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(ctx)) {
           if (k === 'name' || k === 'args') continue;
@@ -79,8 +134,9 @@ export default defineModule({
         const result = await service.runScript(ctx.name, {
           args: [...(ctx.args ?? []), ...service.flagTokens(flags)],
         });
-        // 脚本的非零退出码就是这次调用的退出码——脚本失败了，调用方不该看见成功。
-        if (result.code !== 0) process.exitCode = result.code;
+        // CLI：脚本的非零退出码就是这次调用的退出码。
+        // HTTP：不能污染常驻 serve 进程的退出码——面板里跑失败只体现在返回值里。
+        if (result.code !== 0 && meta?.transport === 'cli') process.exitCode = result.code;
         return result;
       },
       (r) => {

@@ -24,6 +24,12 @@ export interface ScriptInfo {
 // 两种布局都要覆盖：源码跑（src/core/script/paths.ts）与构建产物（dist/core/script/paths.js）——
 // 两者到仓库根都是三层，所以同一个相对路径同时成立。
 export function scriptsDir(): string {
+  // NX_NX_SCRIPTS 是测试/自定义脚本目录的覆盖点：设了且存在就优先用它。
+  const envDir = process.env.NX_NX_SCRIPTS;
+  if (envDir) {
+    const abs = isAbsolute(envDir) ? envDir : resolve(process.cwd(), envDir);
+    if (existsSync(abs)) return abs;
+  }
   const candidates = [
     join(HERE, '..', '..', '..', 'assets', 'scripts'),
     join(process.cwd(), 'assets', 'scripts'),
@@ -66,7 +72,8 @@ function readManifest(): ManifestEntry[] {
 }
 
 // 清单里的脚本 + 目录里实际存在的 .mjs，两边取并集：
-// 清单管说明，目录管真相——加了脚本忘了登记清单，也照样能跑（只是没说明）。
+// 清单管说明，目录管真相——加了脚本忘了登记清单，也照样能跑（只是没说明）；
+// 反过来，清单里有但磁盘上已删除的条目不列出（否则 UI 会点到幽灵脚本）。
 export function listScripts(): ScriptInfo[] {
   const dir = scriptsDir();
   const manifest = new Map(readManifest().map((e) => [e.name, e]));
@@ -74,7 +81,9 @@ export function listScripts(): ScriptInfo[] {
     .filter((f) => f.endsWith('.mjs') && !f.startsWith('_'))
     .map((f) => f.replace(/\.mjs$/, ''))
     .filter((f) => f !== 'aliases');
-  const names = [...new Set([...manifest.keys(), ...onDisk])].sort();
+  const names = [...new Set([...manifest.keys(), ...onDisk])]
+    .filter((name) => existsSync(join(dir, name + '.mjs')))
+    .sort();
   return names.map((name) => {
     const e = manifest.get(name);
     return {

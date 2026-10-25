@@ -1,8 +1,20 @@
-# Changelog
-
-本文件记录对外可见的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
-
 ## [Unreleased]
+
+## [0.8.6] - 2026-10-25
+
+### Added
+
+- **Web 面板新增「脚本」工作台**：顶部「脚本」页可直接列出、编辑、保存、运行、新建、
+  删除内置脚本；运行前自动保存当前编辑内容，右侧回显 stdout / stderr / 退出码，并可
+  切到「内置函数」查看别名模块清单。对应新增 CLI 命令 `script read` / `script save` /
+  `script create` / `script delete`，与页面走同一套 action。
+
+### Fixed
+
+- **HTTP 运行脚本不再污染 serve 进程退出码**：`script.run` 只在 CLI 传输时设置
+  `process.exitCode`，面板里脚本失败只体现在返回结果里。
+- **路由歧义类型检查改为按 `METHOD + 路径` 比较**：`GET/PUT/DELETE` 共用同一路径
+  不再被误报为结构性歧义，与运行时「先按 method 过滤」的口径一致。
 
 ## [0.8.5] - 2026-10-25
 
@@ -14,16 +26,15 @@
   `serve / server / skill`。
 - 单测补三条：成对断言、lint 与 runtime 豁免前缀对账、非 GET 操作必须有面板入口。
 
-
 ## [0.8.4] - 2026-10-25
 
 ### Changed
 
 - **skill 文档与模板的 ref 统一为 ABC 序列**：`assets/nx-nx` 与 `assets/nx-dev` 的
   `00-product` / `50-template-authoring` / `51-verification-loop` / `52-hook-bus`
-  改为 `A-product` / `A-template-authoring` / `B-verification-loop` / `C-hook-bus`；
+  改为 `A01-product` / `A01-template-authoring` / `B01-verification-loop` / `C01-hook-bus`；
   `nx-dev` 主文档的 references 列表改为按 A/B/C 路由，模板生成的 dev skill 也按
-  `A-/B-/C-` 序列命名 ref（A 操作流程 / B 设计与代码 / C 验证与发布）。
+  `A01-/B01-/C01-` 序列命名 ref（A 操作流程 / B 设计与代码 / C 验证与发布）。
 
 ### Added
 

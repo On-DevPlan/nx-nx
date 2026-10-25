@@ -1,4 +1,4 @@
-# A · 模板作者契约
+# A01 · 模板作者契约
 
 > 本文是 `templates/<id>/` 的完整契约，内容与 nx-nx 的 `src/core` 实现一一对应。
 > 改契约前先核对源码：`core/templates.ts`（元数据与变量）、`core/generate.ts`
@@ -117,5 +117,5 @@ export default {
 - [ ] 需要二进制产物时走 afterGenerate，没往 core 里加栈特概念
 - [ ] 开发地址 CLI 验证：`template list` 无错误、`describe` 正常、
       `preview` 文件清单符合预期
-- [ ] 完成一次真实生成并跑通构建/测试（见 B 序列 `B-verification-loop.md`）
+- [ ] 完成一次真实生成并跑通构建/测试（见 B 序列 `B01-verification-loop.md`）
 - [ ] 新模板在 `templates/` 下独立成目录，未改动既有模板

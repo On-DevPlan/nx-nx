@@ -424,3 +424,87 @@ main { padding: 16px; }
 .ok-line { color: var(--ink); font-weight: 600; font-size: 12px; margin-bottom: 4px; }
 
 .readme-body { padding: 12px; max-height: 60vh; overflow: auto; }
+
+/* ============================================================
+   5. 面板专属 —— nx-nx 的脚本工作台
+   ============================================================ */
+
+.script-grid {
+  display: grid;
+  grid-template-columns: minmax(190px, 230px) minmax(420px, 1fr) minmax(280px, 380px);
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .script-grid { grid-template-columns: 1fr; }
+}
+
+.script-list { display: flex; flex-direction: column; }
+.script-list-body { max-height: 58vh; overflow: auto; }
+.script-list .cli-hint { margin-top: auto; }
+
+.script-editor { display: flex; flex-direction: column; min-height: 480px; }
+.script-args {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: var(--border);
+}
+.script-args input {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, Consolas, monospace;
+}
+.script-args label { font-size: 11px; white-space: nowrap; }
+
+.code-editor {
+  flex: 1;
+  width: 100%;
+  min-height: 360px;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: var(--border);
+  outline: none;
+  resize: vertical;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  tab-size: 2;
+}
+.code-editor:focus { box-shadow: var(--shadow-relief-inset); }
+
+.script-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--mid);
+}
+.script-meta .copyable { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.script-output, .script-aliases { max-height: 58vh; overflow: auto; }
+.script-run-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: var(--border);
+}
+.script-output pre {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.script-output .script-stderr {
+  border-top: var(--border);
+  background: var(--soft);
+  color: var(--bad);
+}

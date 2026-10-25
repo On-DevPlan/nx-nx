@@ -52,9 +52,9 @@ node bin/nx-nx.mjs <命令...>
 1. **调研**：摸清该技术栈的官方/事实标准项目布局——构建工具、入口、目录约定、
    run/test 命令、最小可运行文件集（见 B 序列的调研清单）
 2. **造模板**：按 `templates/<id>/` 契约写 template.json、hooks.mjs、files/
-   （契约全文见 `A-template-authoring.md`）
+   （契约全文见 `A01-template-authoring.md`）
 3. **案例验证**：用开发地址 CLI 把新模板物化成一个真实项目，装依赖并跑通该栈
-   的构建与测试（流程见 `B-verification-loop.md`）
+   的构建与测试（流程见 `B01-verification-loop.md`）
 4. **回归与交付**：跑 nx-nx 自身闸门确认没有碰坏共享代码；汇报模板路径、
    生成案例路径与验证结果
 
@@ -74,6 +74,6 @@ node bin/nx-nx.mjs <命令...>
 
 | 代号 | 干什么时读 | 文件 |
 | --- | --- | --- |
-| A | 写模板契约（template.json / hooks.mjs / files）时 | `A-template-authoring.md` |
-| B | 生成案例、装依赖、跑构建/测试与调研时 | `B-verification-loop.md` |
-| C | 加/改安装期或运行期 hook、调整事件平面时 | `C-hook-bus.md` |
+| A01 | 写模板契约（template.json / hooks.mjs / files）时 | `A01-template-authoring.md` |
+| B01 | 生成案例、装依赖、跑构建/测试与调研时 | `B01-verification-loop.md` |
+| C01 | 加/改安装期或运行期 hook、调整事件平面时 | `C01-hook-bus.md` |

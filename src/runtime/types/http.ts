@@ -63,7 +63,19 @@ export type Overlap<P extends string, Q extends string> = Segs<P>['length'] exte
   ? SameLenCompat<Segs<P>, Segs<Q>>
   : false;
 
-// 对模式元组做双重遍历，产出所有歧义对（无歧义则 never）。
+// 路由键 = "METHOD|/api/path"。同一路径不同方法（GET/PUT/DELETE）不是歧义——
+// 运行时先按 method 过滤再匹配，类型层也必须同口径，否则 REST 风格的
+// PUT /api/x/:id 与 DELETE /api/x/:id 会被误报。
+type MethodOfKey<K extends string> = K extends `${infer M}|${string}` ? M : never;
+type PatternOfKey<K extends string> = K extends `${string}|${infer P}` ? P : never;
+
+export type OverlapKey<A extends string, B extends string> = [MethodOfKey<A>] extends [MethodOfKey<B>]
+  ? [MethodOfKey<B>] extends [MethodOfKey<A>]
+    ? Overlap<PatternOfKey<A>, PatternOfKey<B>>
+    : false
+  : false;
+
+// 对路由键元组做双重遍历，产出所有歧义对（无歧义则 never）。
 export type AmbiguousPairs<Ps extends readonly string[], I extends unknown[] = []> = I['length'] extends Ps['length']
   ? never
   : Ps[I['length'] & number] extends infer P extends string
@@ -71,7 +83,7 @@ export type AmbiguousPairs<Ps extends readonly string[], I extends unknown[] = [
         | {
             [J in keyof Ps]: J extends `${I['length']}`
               ? never
-              : Overlap<P, Ps[J] extends string ? Ps[J] : never> extends true
+              : OverlapKey<P, Ps[J] extends string ? Ps[J] : never> extends true
                 ? `${P} ≈ ${Ps[J]}`
                 : never;
           }[number]
