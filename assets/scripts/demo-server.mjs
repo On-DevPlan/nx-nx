@@ -12,9 +12,40 @@ const argv = parseArgs(process.argv.slice(2));
 const port = Number(argv.flags.port ?? 18999);
 
 const server = http.createServer((req, res) => {
-  if ((req.url || '').startsWith('/health')) {
+  const url = req.url || '';
+  if (url.startsWith('/health')) {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ ok: true, pid: process.pid, t: Date.now() }));
+    return;
+  }
+  if (url.startsWith('/api/customers')) {
+    // 简单鉴权示范：要求 Bearer token
+    const auth = req.headers.authorization || '';
+    if (!auth.startsWith('Bearer tok_')) {
+      res.writeHead(401, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    const q = new URL(url, `http://127.0.0.1:${port}`).searchParams;
+    if (req.method === 'POST') {
+      let body = '';
+      req.on('data', (c) => (body += c));
+      req.on('end', () => {
+        res.writeHead(201, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ created: true, item: JSON.parse(body || '{}') }));
+      });
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({
+      data: [
+        { id: 1, name: 'customer-A', level: 'normal' },
+        { id: 2, name: 'customer-B', level: 'vip' },
+      ],
+      page: Number(q.get('page') ?? 1),
+      size: Number(q.get('size') ?? 20),
+      keyword: q.get('keyword') ?? '',
+    }));
     return;
   }
   res.writeHead(404);

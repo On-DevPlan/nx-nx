@@ -23,6 +23,11 @@ export function serviceLogsDir(): string {
   return join(SERVICES_DIR, 'logs');
 }
 
+// 每组的 HTTP 请求日志目录（client 脚本里 send() 的「一请求一日志」落这里）
+export function serviceHttpLogsDir(groupId: string): string {
+  return join(SERVICES_DIR, 'http-logs', groupId);
+}
+
 // 组 id：小写字母数字与连字符，作为文件名与 URL 片段使用。
 export function assertGroupId(id: unknown): string {
   const s = String(id ?? '').trim();

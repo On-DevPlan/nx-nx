@@ -99,7 +99,7 @@ export function deleteGroup(id: unknown): { id: string; stopped: string } {
   return { id: gid, stopped: stopResult.detail };
 }
 
-export function start(id: unknown): { started: boolean; pid?: number; logFile: string; detail: string } {
+export function start(id: unknown): Promise<{ started: boolean; pid?: number; logFile: string; detail: string }> {
   return startGroup(assertGroupId(id));
 }
 

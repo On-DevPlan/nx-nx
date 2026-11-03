@@ -4,6 +4,7 @@
 // 然后 clients 按数组顺序逐个同步执行（collect stdout/stderr 进报告）。
 import { runScript } from '../script/service.js';
 import { checkHealth } from './check.js';
+import { serviceHttpLogsDir } from './paths.js';
 import {
   getGroup,
   loadRuntime,
@@ -36,7 +37,7 @@ export async function runPipeline(groupId: string): Promise<PipelineReport> {
   // 1) 主脚本
   if (g.main) {
     try {
-      const r = startGroup(groupId);
+      const r = await startGroup(groupId);
       steps.push({ step: 'main.start', script: g.main.script, ok: true, detail: r.detail });
     } catch (err) {
       steps.push({ step: 'main.start', script: g.main.script, ok: false, detail: msg(err) });
@@ -70,7 +71,13 @@ export async function runPipeline(groupId: string): Promise<PipelineReport> {
   // 3) client 脚本依次执行
   for (const client of g.clients) {
     try {
-      const r = await runScript(client, { shared: g.shared });
+      const r = await runScript(client, {
+        shared: g.shared,
+        env: {
+          ...(process.env.NX_NX_SERVE_PORT ? { NX_NX_SERVE_PORT: process.env.NX_NX_SERVE_PORT } : {}),
+          NX_HTTP_LOG_DIR: serviceHttpLogsDir(g.id),
+        },
+      });
       steps.push({
         step: 'client',
         script: client,

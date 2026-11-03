@@ -22,7 +22,7 @@ import {
   patchRuntime,
   type ServiceGroupConfig,
 } from './store.js';
-import { serviceLogsDir } from './paths.js';
+import { serviceHttpLogsDir, serviceLogsDir } from './paths.js';
 import { runnerPath, scriptsDir } from '../script/paths.js';
 
 // 每组一个定时器（serve 进程内）
@@ -68,13 +68,34 @@ function pidAlive(pid: number): boolean {
 }
 
 // ---- 启动 ----
+//
+// 幂等语义（端口被占用 → 跳过启动）：
+//   1. pid 记录还活着 → skip
+//   2. 配了 health 且真实活性检测通过 → skip（pid 记录可能过期——进程被外部回收/
+//      换机迁移等，端口活的就是服务本体，不重复启动）
+//   3. 都不满足 → 真正启动
 
-export function startGroup(id: string): { started: boolean; pid?: number; logFile: string; detail: string } {
+export async function startGroup(id: string): Promise<{ started: boolean; pid?: number; logFile: string; detail: string }> {
   const g = getGroup(id);
   if (!g.main) throw new Error(`服务组 ${id} 未配置主脚本（main）`);
   const rt = loadRuntime(id);
   if (rt.status === 'running' && rt.pid && pidAlive(rt.pid)) {
     return { started: false, pid: rt.pid, logFile: rt.logFile ?? '', detail: '已在运行' };
+  }
+  if (g.health) {
+    const c = await checkHealth(g.health);
+    if (c.alive) {
+      patchRuntime(id, {
+        status: 'running',
+        alive: true,
+        detail: c.detail,
+        failStreak: 0,
+        pid: rt.pid,
+        logFile: rt.logFile,
+      });
+      startWatcher(id);
+      return { started: false, pid: rt.pid, logFile: rt.logFile ?? '', detail: `端口/服务已就绪，跳过启动（${c.detail}）` };
+    }
   }
 
   const logFile = newLogFile(id);
@@ -124,6 +145,8 @@ function sharedEnv(g: ServiceGroupConfig): NodeJS.ProcessEnv {
     if (existsSync(p)) env['NX_SHARED_PANEL'] = p;
   }
   if (process.env.NX_NX_SERVE_PORT) env['NX_NX_SERVE_PORT'] = process.env.NX_NX_SERVE_PORT;
+  // client 脚本的「一请求一日志」按组隔离
+  env['NX_HTTP_LOG_DIR'] = serviceHttpLogsDir(g.id);
   return env;
 }
 
@@ -233,12 +256,12 @@ async function tickWatch(id: string): Promise<void> {
   if (result.alive) return;
 
   appendEvent(id, `检测失败（连续 ${failStreak}/${g.health.failThreshold}）：${result.detail}`);
-  if (failStreak >= g.health.failThreshold && g.health.onDead === 'restart') {
+    if (failStreak >= g.health.failThreshold && g.health.onDead === 'restart') {
     appendEvent(id, `判定失活 → 自愈：重启主脚本`);
     if (rt.logFile) appendMainLog(rt.logFile, `失活自愈触发（连续 ${failStreak} 次检测失败）`);
     try {
       stopGroup(id, { silent: true });
-      startGroup(id);
+      await startGroup(id);
       appendEvent(id, `自愈完成（restarts +1）`);
       patchRuntime(id, { restarts: loadRuntime(id).restarts + 1 });
     } catch (err) {

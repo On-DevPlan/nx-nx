@@ -14,6 +14,7 @@ import * as shellLib from './lib/shell.mjs';
 import * as sysLib from './lib/sys.mjs';
 import * as outLib from './lib/out.mjs';
 import * as httpLib from './lib/http.mjs';
+import * as svcLib from './lib/service.mjs';
 
 // 别名清单 = 文档 = 契约。名字必须与实现一一对应（installAliases 会当场校验）。
 export const ALIASES = [
@@ -44,9 +45,22 @@ export const ALIASES = [
   { name: 'sleep', group: '系统', desc: '等待若干毫秒' },
   { name: 'now', group: '系统', desc: '当前时间（ISO 字符串）' },
   { name: 'parseArgs', group: '系统', desc: '解析命令行参数 → { _, flags }' },
+  { name: 'send', group: '网络', desc: 'HTTP 核心：{ method, url, qs, headers, body, timeoutMs, label } → { ok, status, headers, body, json, ms, logFile }；每请求自动写全量 req/resp 日志文件' },
+  { name: 'get', group: '网络', desc: 'get(url, opts) → 结构化响应' },
+  { name: 'post', group: '网络', desc: 'post(url, body, opts) → 结构化响应（对象 body 自动 JSON）' },
+  { name: 'put', group: '网络', desc: 'put(url, body, opts) → 结构化响应' },
+  { name: 'del', group: '网络', desc: 'del(url, opts) → 结构化响应' },
+  { name: 'getJson', group: '网络', desc: 'getJson(url, opts) → 直接返回 JSON（失败 undefined）' },
+  { name: 'postJson', group: '网络', desc: 'postJson(url, body, opts) → 直接返回 JSON' },
+  { name: 'bearer', group: '网络', desc: 'bearer(token) → { authorization: "Bearer …" } 头对象' },
+  { name: 'basic', group: '网络', desc: 'basic(user, pass) → Basic 认证头对象' },
+  { name: 'expectStatus', group: '网络', desc: 'expectStatus(res, code, label) → bool，不符合打 warn' },
+  { name: 'serviceAlive', group: '服务组', desc: 'serviceAlive(id) → bool：主脚本活性 check（执行 server 前先 check）' },
+  { name: 'serviceCheck', group: '服务组', desc: 'serviceCheck(id) → { alive, detail }（含探测详情）' },
+  { name: 'serviceStart', group: '服务组', desc: 'serviceStart(id)：启动主脚本（幂等，已在运行则跳过）' },
+  { name: 'serviceStop', group: '服务组', desc: 'serviceStop(id)：停止（关停脚本 → 杀端口 → 杀 pid）' },
+  { name: 'serviceStatus', group: '服务组', desc: 'serviceStatus(id) → 运行态（pid/活性/自愈计数）' },
   { name: 'send', group: '网络', desc: 'HTTP 请求（带时间戳日志）：{ method, url, headers, body, timeoutMs, label } → { ok, status, body, json, ms }' },
-  { name: 'httpGet', group: '网络', desc: 'GET 请求，返回结构化响应' },
-  { name: 'httpJson', group: '网络', desc: 'GET 请求并直接取 JSON（失败返回 undefined）' },
   { name: 'log', group: '输出', desc: '打印一行' },
   { name: 'ok', group: '输出', desc: '打印一行成功信息' },
   { name: 'warn', group: '输出', desc: '打印一行警告（stderr）' },
@@ -62,8 +76,20 @@ const IMPL = {
   ...sysLib,
   ...outLib,
   send: httpLib.send,
-  httpGet: httpLib.httpGet,
-  httpJson: httpLib.httpJson,
+  get: httpLib.get,
+  post: httpLib.post,
+  put: httpLib.put,
+  del: httpLib.del,
+  getJson: httpLib.getJson,
+  postJson: httpLib.postJson,
+  bearer: httpLib.bearer,
+  basic: httpLib.basic,
+  expectStatus: httpLib.expectStatus,
+  serviceAlive: svcLib.serviceAlive,
+  serviceCheck: svcLib.serviceCheck,
+  serviceStart: svcLib.serviceStart,
+  serviceStop: svcLib.serviceStop,
+  serviceStatus: svcLib.serviceStatus,
 };
 
 // 把别名挂到目标对象（默认 globalThis）。脚本在 ESM 里用裸名调用时，
