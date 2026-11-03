@@ -1,2 +1,10 @@
+# pnpm workspace 根配置。
+# nx-nx 是单包仓库：packages 只声明自身。
+# packages 字段是**必需的**——只要这个文件存在，pnpm 就按 workspace 根校验，
+# 缺了它会直接报 "packages field missing or empty"，连 pnpm install/build 都进不去。
+packages:
+  - '.'
+
+# pnpm 的构建脚本许可（esbuild 需要跑 postinstall）
 allowBuilds:
   esbuild: true
