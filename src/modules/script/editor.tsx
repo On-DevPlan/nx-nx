@@ -13,6 +13,7 @@ interface Props {
   onArgs: (v: string) => void;
   onSave: () => void;
   onRun: () => void;
+  canRun: boolean;
   onDelete: () => void;
 }
 
@@ -28,6 +29,7 @@ export function ScriptEditor({
   onArgs,
   onSave,
   onRun,
+  canRun,
   onDelete,
 }: Props) {
   const working = busy !== null;
@@ -40,7 +42,7 @@ export function ScriptEditor({
           <button className="btn small" onClick={onSave} disabled={!selected || !dirty || working}>
             保存
           </button>
-          <button className="btn small" onClick={onRun} disabled={!selected || working}>
+          <button className="btn small" onClick={onRun} disabled={!selected || working || !canRun} title={canRun ? "" : "共享面板不可直接运行（由服务组脚本自动装载）"}>
             {busy === 'run' ? '运行中…' : '运行'}
           </button>
           <button className="btn small danger" onClick={onDelete} disabled={!selected || working}>

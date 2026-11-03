@@ -18,6 +18,8 @@ export interface ScriptInfo {
   usage: string;
   notes: string;
   path: string;
+  /** 共享函数面板（.shared.mjs）：可编辑、不可直接运行（服务组自动装载） */
+  shared: boolean;
 }
 
 // 定位 assets/scripts/。
@@ -74,25 +76,27 @@ function readManifest(): ManifestEntry[] {
 // 清单里的脚本 + 目录里实际存在的 .mjs，两边取并集：
 // 清单管说明，目录管真相——加了脚本忘了登记清单，也照样能跑（只是没说明）；
 // 反过来，清单里有但磁盘上已删除的条目不列出（否则 UI 会点到幽灵脚本）。
-// `.shared.mjs` 是共享函数面板（只被装载、不作为入口执行），不列入。
+// `.shared.mjs`（共享函数面板）一并列出：可编辑，但运行入口被 resolveScript 拒绝。
 export function listScripts(): ScriptInfo[] {
   const dir = scriptsDir();
   const manifest = new Map(readManifest().map((e) => [e.name, e]));
   const onDisk = readdirSync(dir)
     .filter((f) => f.endsWith('.mjs') && !f.startsWith('_'))
     .map((f) => f.replace(/\.mjs$/, ''))
-    .filter((f) => f !== 'aliases' && !f.endsWith('.shared'));
+    .filter((f) => f !== 'aliases');
   const names = [...new Set([...manifest.keys(), ...onDisk])]
     .filter((name) => existsSync(join(dir, name + '.mjs')))
     .sort();
   return names.map((name) => {
     const e = manifest.get(name);
+    const shared = name.endsWith('.shared');
     return {
       name,
-      description: e?.description ?? '',
+      description: e?.description ?? (shared ? '共享函数面板（服务组自动装载，不可直接运行）' : ''),
       usage: e?.usage ?? '',
       notes: e?.notes ?? '',
       path: join(dir, name + '.mjs'),
+      shared,
     };
   });
 }

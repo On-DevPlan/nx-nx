@@ -3,6 +3,9 @@
 //
 // 可直接用的（demo.shared 注入）：API_TOKEN / BASE_URL / sendHeaders / api.getCustomers / makeUsers
 // 内置原语：get / post / send（网络，自动一请求一日志）、serviceAlive（服务 check）、log / ok（输出）
+// 显式 import 共享面板：单独执行本脚本时也能拿到 api/常量；
+// 经 sg 流水线执行时 runner 已装载过，这里命中 ESM 缓存不会重复执行。
+import './demo.shared.mjs';
 import { installAliases } from './aliases.mjs';
 
 installAliases(globalThis);

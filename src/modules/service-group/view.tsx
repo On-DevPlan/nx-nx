@@ -82,7 +82,7 @@ export default function ServiceView() {
     }
     setBusy('save');
     try {
-      await client['serviceGroup.set']({ id: selected, json: jsonText });
+      await client['serviceGroup.set']({ id: selected, config: jsonText });
       toast('已保存');
       await load();
     } catch (e: unknown) {
@@ -171,6 +171,34 @@ export default function ServiceView() {
             {current.runtime.logFile && (
               <div style={{ fontSize: 12, opacity: 0.6 }}>日志: {current.runtime.logFile}</div>
             )}
+
+            {/* 组内脚本：都可在「脚本」页编辑（shared 面板可编辑但不可直接运行） */}
+            <div style={{ margin: '12px 0 6px' }}>
+              <strong style={{ fontSize: 13 }}>组内脚本</strong>
+              <span style={{ fontSize: 12, opacity: 0.6, marginLeft: 8 }}>
+                均为 .mjs，在「脚本」页编辑（ctl+s 保存）；共享面板 ⛭ 不可直接运行
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {([
+                ...(current.config.main ? [{ name: current.config.main.script, role: '主脚本' }] : []),
+                ...(current.config.stop ? [{ name: current.config.stop.script, role: '停止' }] : []),
+                ...(current.config.shared ? [{ name: current.config.shared, role: '共享面板 ⛭' }] : []),
+                ...current.config.clients.map((c) => ({ name: c, role: 'client' })),
+              ]).map((s) => (
+                <span
+                  key={s.name + s.role}
+                  style={{
+                    fontSize: 12,
+                    padding: '3px 8px',
+                    borderRadius: 6,
+                    border: '1px solid var(--border, #333)',
+                  }}
+                >
+                  <span style={{ opacity: 0.6 }}>{s.role}:</span> <code>{s.name}</code>
+                </span>
+              ))}
+            </div>
             <div style={{ margin: '12px 0 6px', display: 'flex', justifyContent: 'space-between' }}>
               <strong>配置（JSON）</strong>
               <button disabled={busy !== null} onClick={() => void save()}>保存配置</button>

@@ -250,7 +250,7 @@ export default function ScriptView() {
               className={'tpl-item' + (s.name === selected ? ' active' : '')}
               onClick={() => selectScript(s.name)}
             >
-              <div className="tpl-name mono">{s.name}</div>
+              <div className="tpl-name mono">{s.name}{s.shared ? ' ⛭' : ''}</div>
               <div className="tpl-desc muted">{s.description || '—'}</div>
             </button>
           ))}
@@ -267,6 +267,7 @@ export default function ScriptView() {
         busy={busy}
         args={args}
         err={err}
+        canRun={!(current?.shared)}
         onContent={setContent}
         onArgs={setArgs}
         onSave={save}
