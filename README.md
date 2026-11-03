@@ -176,3 +176,31 @@ web/      React 壳
 - 不做 git init / gh repo create / npm 发布——生成器只落盘 + 给出下一步命令
 - 不迁移存量 nx-xx 仓库
 - 不做布局组件——共享 tokens 与原子类，布局随项目
+
+## 服务组（sg）：长驻服务 + 活性自愈 + 共享函数面板
+
+一个服务组 = 1 个主脚本（长驻服务，IO 重定向到日志）+ N 个 client 脚本（依次执行的请求方）+ 可选共享函数面板。
+
+```bash
+# 创建（配置整组 JSON：main / stop / killPort / health / shared / clients）
+nx-nx sg set demo-group --config '{
+  "name": "演示服务",
+  "main":  { "script": "demo-server", "args": ["--port", "18999"] },
+  "stop":  { "script": "demo-stop" },
+  "health": { "kind": "http", "port": 18999, "host": "127.0.0.1", "path": "/health",
+              "intervalMs": 3000, "failThreshold": 2, "onDead": "restart" },
+  "shared": "demo.shared",
+  "clients": ["demo-client"]
+}'
+
+nx-nx sg run demo-group    # 流水线：启动 main → 等活性就绪 → clients 依次执行
+nx-nx sg status demo-group # 运行态（pid / 活性 / 自愈计数）
+nx-nx sg check demo-group  # 立即活性检测 → { alive, detail }
+nx-nx sg stop demo-group   # 关停脚本 → 杀端口 → 杀 pid（依次兜底）
+nx-nx sg list / show / delete
+```
+
+- **活性自愈**：`nx-nx serve` 运行时内置 watcher 按间隔检测（端口/HTTP），连续失败达阈值自动重启主脚本并记入事件日志（`~/.nx-nx/services/logs/events-<id>.log`）；serve 不在跑时可随时手动 `sg stop/start`。
+- **共享函数面板**：`<name>.shared.mjs`（如 `demo.shared`）——「常量 = 函数 = {}」整体优先执行，不可作为入口直接运行；组内脚本执行前自动装载并输出**堆快照**（只显示可 JSON 表示的数据确认，函数报签名，Map/循环引用等只报类型，不泄露内部表示）。面板里可以定义 API token、随机数据工厂、以及 `serviceAlive(id)` 这类活性 check 函数。
+- **client-base 思想**：基础设施（send 封装、token、常量）放共享面板，业务请求单独一个 client 脚本文件。
+- 随包演示：`demo-server` / `demo-client` / `demo-stop` / `demo.shared`（`nx-nx sg run demo-group` 一键体验）。

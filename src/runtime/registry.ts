@@ -15,10 +15,11 @@ import system from '../modules/system/index.js';
 import template from '../modules/template/index.js';
 import skill from '../modules/skill/index.js';
 import script from '../modules/script/index.js';
+import serviceGroup from '../modules/service-group/index.js';
 
 // 编译期：defineModules 对模块/action id、CLI/HTTP 键查重 + 路由歧义检测；
 // 运行时：按 order 排序。
-export const MODULES = defineModules([system, template, skill, script]);
+export const MODULES = defineModules([system, template, skill, script, serviceGroup]);
 
 export interface BoundAction {
   id: string;

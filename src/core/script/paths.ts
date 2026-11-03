@@ -8,7 +8,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { notFound, specError } from '../errors/index.js';
+import { conflict, notFound, specError } from '../errors/index.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -74,13 +74,14 @@ function readManifest(): ManifestEntry[] {
 // 清单里的脚本 + 目录里实际存在的 .mjs，两边取并集：
 // 清单管说明，目录管真相——加了脚本忘了登记清单，也照样能跑（只是没说明）；
 // 反过来，清单里有但磁盘上已删除的条目不列出（否则 UI 会点到幽灵脚本）。
+// `.shared.mjs` 是共享函数面板（只被装载、不作为入口执行），不列入。
 export function listScripts(): ScriptInfo[] {
   const dir = scriptsDir();
   const manifest = new Map(readManifest().map((e) => [e.name, e]));
   const onDisk = readdirSync(dir)
     .filter((f) => f.endsWith('.mjs') && !f.startsWith('_'))
     .map((f) => f.replace(/\.mjs$/, ''))
-    .filter((f) => f !== 'aliases');
+    .filter((f) => f !== 'aliases' && !f.endsWith('.shared'));
   const names = [...new Set([...manifest.keys(), ...onDisk])]
     .filter((name) => existsSync(join(dir, name + '.mjs')))
     .sort();
@@ -100,6 +101,9 @@ export function listScripts(): ScriptInfo[] {
 export function resolveScript(name: string): { name: string; path: string } {
   const raw = String(name || '').trim();
   if (!raw) throw notFound('缺少脚本名');
+  if (raw.endsWith('.shared') || raw.endsWith('.shared.mjs')) {
+    throw conflict('共享函数面板不能作为入口直接执行——它由组内脚本自动装载（每次执行前注入并输出变量快照）');
+  }
   if (raw.endsWith('.mjs') || raw.includes('/') || raw.includes('\\')) {
     const abs = isAbsolute(raw) ? raw : resolve(process.cwd(), raw);
     if (!existsSync(abs)) throw notFound(`脚本不存在: ${abs}`);
@@ -107,6 +111,9 @@ export function resolveScript(name: string): { name: string; path: string } {
   }
   const p = join(scriptsDir(), raw + '.mjs');
   if (!existsSync(p)) {
+    if (existsSync(join(scriptsDir(), raw + '.shared.mjs'))) {
+      throw conflict(`「${raw}」是共享函数面板，不能作为入口直接执行（去掉 .shared 后缀的脚本才是入口）`);
+    }
     const available = listScripts()
       .map((s) => s.name)
       .join(', ');

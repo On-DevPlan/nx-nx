@@ -5,6 +5,24 @@
       "description": "批量把各 nx 项目的随包 skill 强制覆盖安装到本机 skill 目录",
       "usage": "nx-nx script run sync-nx-skills --root <扫描根目录> [--to <安装目录>] [--depth <层数>] [--filter <子串>] [--dry]",
       "notes": "自己装：按固定规则直接拷贝并渲染 {{PROJECT_ROOT}} / {{NX_NX_ROOT}}，不调用各项目的 bin、不起额外子进程。"
+    },
+    {
+      "name": "demo-server",
+      "description": "演示：长驻 HTTP 服务（服务组主脚本），/health 健康检查 + 周期心跳日志",
+      "usage": "nx-nx script run demo-server -- --port 18999",
+      "notes": "pid 写入 ~/.nx-nx/demo-server.pid 供 demo-stop 关停。"
+    },
+    {
+      "name": "demo-client",
+      "description": "演示：client 脚本（业务请求单独一个文件，基础设施来自 demo.shared 共享面板）",
+      "usage": "nx-nx sg run demo-group（经流水线执行）或 script run demo-client",
+      "notes": "示范 serviceAlive check、send 带日志请求、共享常量与函数的使用。"
+    },
+    {
+      "name": "demo-stop",
+      "description": "演示：优雅关停脚本（服务组 stop 步骤），按 pid 文件结束 demo-server",
+      "usage": "nx-nx sg stop demo-group（自动调用）",
+      "notes": ""
     }
   ]
 }

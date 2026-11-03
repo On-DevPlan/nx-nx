@@ -43,6 +43,7 @@ app/server/                 # 唯一的 HTTP 应用（mono 可以有多个 app�
   main.go
 manifest/config/            # GoFrame 配置（config.yaml 本机开发 / config.docker.yaml 容器）
 hack/config.yaml            # `make dao` 的生成配置
+scripts/skills.py           # `make skills`：装 GoFrame 官方 AI skill（可选）
 db/schema.sql               # 建表 + 种子（容器首次启动自动执行）
 web/                        # React 面板 + nginx 配置 + 前端 Dockerfile
 docker-compose.yml
@@ -111,6 +112,26 @@ Go 的 internal 规则：`app/server/internal/...` 只能被 `app/server/...` �
 | `make run` | 本机起 API |
 | `make build-web` | 构建前端到 `web/dist` |
 | `make dao` | 按库表结构生成 dao/do/entity |
+| `make skills` | 安装/更新 GoFrame 官方 AI skill（可选） |
 | `make check` | 提交前的廉价闸门（gofmt + go build + 前端类型检查） |
 | `make up` / `make down` | 整栈起停 |
 | `make psql` | 进数据库 |
+
+---
+
+## AI 辅助开发（可选）
+
+`make skills` 一键把 [GoFrame 官方 AI skill](https://github.com/gogf/skills) 装进
+本项目的 `.claude/skills/`（内容约 6MB，按需下载，模板不内置——每个生成的项目
+都带一份拷贝只会让仓库膨胀且各自过期）。装完后 Claude Code / Copilot 等 agent
+在本项目里会遵循 GoFrame 的分层与 ORM 约定（DO 对象操作数据库、时间字段自动
+维护、dao/do/entity 不手改等）。
+
+```bash
+make skills                      # 首次安装（等价于 scripts/skills.py add）
+python scripts/skills.py check   # 检查是否有更新
+python scripts/skills.py update  # 安装更新
+```
+
+前置：Node.js 18+（`npx` 随附）。skill 是本机开发工具，不进 git 也行——
+谁要用谁装，互不影响。

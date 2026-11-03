@@ -168,11 +168,11 @@ interface ExecResult {
   stderr: string;
 }
 
-function execNode(argv: string[], cwd?: string): Promise<ExecResult> {
+function execNode(argv: string[], cwd?: string, extraEnv?: NodeJS.ProcessEnv): Promise<ExecResult> {
   return new Promise((resolvePromise) => {
     const child = spawn(process.execPath, argv, {
       cwd: cwd || process.cwd(),
-      env: process.env,
+      env: extraEnv ? { ...process.env, ...extraEnv } : process.env,
     });
     let stdout = '';
     let stderr = '';
@@ -196,13 +196,20 @@ function execNode(argv: string[], cwd?: string): Promise<ExecResult> {
 
 // 跑一个脚本：内置脚本名，或任意 .mjs 路径。
 // 脚本在自己的子进程里跑：全局副作用与崩溃都被关在那个进程里。
+// opts.shared：共享函数面板名（如 demo.shared）——runner 会先装载它，再执行目标脚本。
 export async function runScript(
   name: string,
-  opts: { args?: string[]; cwd?: string } = {},
+  opts: { args?: string[]; cwd?: string; shared?: string } = {},
 ): Promise<ScriptRunResult> {
   const target = resolveScript(name);
   const runner = runnerPath();
   const argv = [runner, target.path, ...(opts.args ?? [])];
-  const r = await execNode(argv, opts.cwd);
+  const extraEnv: NodeJS.ProcessEnv = {};
+  if (opts.shared) {
+    const p = join(scriptsDir(), opts.shared.endsWith('.mjs') ? opts.shared : opts.shared + '.mjs');
+    if (!existsSync(p)) throw notFound(`共享面板不存在: ${opts.shared}`);
+    extraEnv['NX_SHARED_PANEL'] = p;
+  }
+  const r = await execNode(argv, opts.cwd, extraEnv);
   return { script: target.name, path: target.path, code: r.code, stdout: r.stdout, stderr: r.stderr };
 }

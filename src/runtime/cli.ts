@@ -280,6 +280,12 @@ async function cmdServe(ctx: { port?: number; 'no-open'?: boolean }): Promise<vo
   const actualPort = typeof bound === 'object' && bound ? bound.port : desiredPort;
   const addr = `http://${host}:${actualPort}`;
 
+  // 服务组：暴露 serve 端口给脚本（共享面板的 check 函数要调 API），
+  // 并把「运行中」的组的活性 watcher 重新挂上（serve 重启后恢复监控）。
+  process.env.NX_NX_SERVE_PORT = String(actualPort);
+  const { resumeWatchers } = await import('../core/service/runtime.js');
+  resumeWatchers();
+
   console.log(APP_NAME + ' · ' + APP_TITLE + ' v' + VERSION);
   console.log(`面板:   ${addr}`);
   console.log(`存储:   ${storePathFromEnv()}`);

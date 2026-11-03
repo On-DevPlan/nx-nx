@@ -13,6 +13,7 @@ import * as fsLib from './lib/fs.mjs';
 import * as shellLib from './lib/shell.mjs';
 import * as sysLib from './lib/sys.mjs';
 import * as outLib from './lib/out.mjs';
+import * as httpLib from './lib/http.mjs';
 
 // 别名清单 = 文档 = 契约。名字必须与实现一一对应（installAliases 会当场校验）。
 export const ALIASES = [
@@ -43,6 +44,9 @@ export const ALIASES = [
   { name: 'sleep', group: '系统', desc: '等待若干毫秒' },
   { name: 'now', group: '系统', desc: '当前时间（ISO 字符串）' },
   { name: 'parseArgs', group: '系统', desc: '解析命令行参数 → { _, flags }' },
+  { name: 'send', group: '网络', desc: 'HTTP 请求（带时间戳日志）：{ method, url, headers, body, timeoutMs, label } → { ok, status, body, json, ms }' },
+  { name: 'httpGet', group: '网络', desc: 'GET 请求，返回结构化响应' },
+  { name: 'httpJson', group: '网络', desc: 'GET 请求并直接取 JSON（失败返回 undefined）' },
   { name: 'log', group: '输出', desc: '打印一行' },
   { name: 'ok', group: '输出', desc: '打印一行成功信息' },
   { name: 'warn', group: '输出', desc: '打印一行警告（stderr）' },
@@ -57,6 +61,9 @@ const IMPL = {
   ...shellLib,
   ...sysLib,
   ...outLib,
+  send: httpLib.send,
+  httpGet: httpLib.httpGet,
+  httpJson: httpLib.httpJson,
 };
 
 // 把别名挂到目标对象（默认 globalThis）。脚本在 ESM 里用裸名调用时，

@@ -1,11 +1,14 @@
 # 开发入口都收在这里：make 的名字比记一长串命令可靠。
 # .PHONY 是必需的——否则目录同名时 make 会认为「已经是最新」而不执行。
-.PHONY: help tidy run build build-web dao fmt check up down logs psql clean
+.PHONY: help tidy run build build-web dao skills fmt check up down logs psql clean
 
 APP       := {{name}}
 MODULE    := {{goModule}}
 ENTRY     := ./app/server
 BIN       := bin/{{name}}
+# Windows 一般只有 python，Linux/CI 一般只有 python3：取第一个存在的。
+# ?= 而不是 := —— 允许 make PYTHON=xxx 一次性覆盖。
+PYTHON    ?= $(shell command -v python3 || command -v python)
 
 help: ## 显示可用命令
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -24,6 +27,9 @@ build-web: ## 构建前端产物到 web/dist
 
 dao: ## 按现有库表结构生成 dao/do/entity（读 hack/config.yaml）
 	gf gen dao -c hack/config.yaml
+
+skills: ## 安装/更新 GoFrame 官方 AI skill → .claude/skills/（可选，需 Node.js 18+）
+	$(PYTHON) scripts/skills.py
 
 fmt: ## 格式化（写回）
 	gofmt -w app

@@ -8,7 +8,8 @@
     "make run                                  # 起 Go API（:{{apiPort}}）",
     "cd web && npm install && npm run dev      # 起面板（:5173，已代理到 {{apiPort}}）",
     "docker compose up -d                      # 或者整栈容器化：pg + api + nginx(:{{webPort}})",
-    "make tidy                                 # 改动 Go 依赖后才需要"
+    "make tidy                                 # 改动 Go 依赖后才需要",
+    "make skills                               # 可选：装 GoFrame 官方 AI skill（需 Node.js）"
   ],
   "options": [
     {

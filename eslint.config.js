@@ -90,6 +90,7 @@ export default tseslint.config(
       'src/modules/scaffold/**/*.{ts,tsx}',
       'src/modules/skill/**/*.{ts,tsx}',
       'src/modules/script/**/*.{ts,tsx}',
+      'src/modules/service-group/**/*.{ts,tsx}',
     ],
     plugins: { '@typescript-eslint': tseslint.plugin },
     rules: {

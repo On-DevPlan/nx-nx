@@ -15,4 +15,5 @@ export const VIEWS: readonly ViewDef[] = [
   { id: 'create', title: '新建项目', component: lazy(() => import('../../modules/scaffold/view')) },
   { id: 'templates', title: '模板', component: lazy(() => import('../../modules/scaffold/templates-view')) },
   { id: 'scripts', title: '脚本', component: lazy(() => import('../../modules/script/view')) },
+  { id: 'services', title: '服务', component: lazy(() => import('../../modules/service-group/view')) },
 ];
