@@ -104,6 +104,7 @@ export default tseslint.config(
                 '../scaffold/*', '../scaffold/**',
                 '../skill/*', '../skill/**',
                 '../script/*', '../script/**',
+                '../service-group/*', '../service-group/**',
                 '../system/*', '../system/**',
               ],
               allowTypeImports: true,

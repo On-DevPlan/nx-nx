@@ -1,11 +1,17 @@
 name: CI
 
 # 与 npm-publish.yml 分开：那条只在 main 上跑发布，这条对每次 push / PR 做校验。
-# 改造前只有发布流水线，PR 阶段没有任何护栏——冒烟测试是在发版那一刻才跑的。
+# 步骤顺序与本地 `pnpm test` 严格一致（lint → typecheck → build → smoke → unit）——
+# CI 与本地顺序不同是「本地绿 CI 红」的常见来源，这里刻意钉住同一顺序。
 on:
   push:
     branches: [main]
   pull_request:
+
+# 同一分支连续 push 时取消旧的 run：省 runner、结果只留最新一次
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   verify:
@@ -26,14 +32,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Lint（含分层约束）
+      - name: Lint（含分层约束 + 单文件行数闸门）
         run: pnpm run lint
 
-      - name: 单元测试与一致性断言
-        run: pnpm run test:unit
+      - name: Typecheck（node + web 两套 tsconfig）
+        # build 只跑 node 侧 tsc + vite（vite 不做类型检查），web 侧类型闸门在这里
+        run: pnpm run typecheck
 
       - name: 构建前端
         run: pnpm run build
 
       - name: 端到端冒烟
         run: pnpm run test:smoke
+
+      - name: 单元测试与一致性断言
+        run: pnpm run test:unit
