@@ -18,6 +18,10 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: pnpm/action-setup@v4
+        with:
+          # 与 package.json 的 packageManager 严格一致（pnpm 11+ 会把它锁进
+          # lockfile 的 packageManagerDependencies，版本漂移会让 frozen 安装失败）
+          version: '12.11.2'
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
