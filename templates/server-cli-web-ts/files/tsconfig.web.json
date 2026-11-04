@@ -6,7 +6,9 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
-    "types": ["node"],
+    // vite/client 提供 import.meta.glob 的类型 —— 页面自动发现靠它，缺了就报
+    // 「Property 'glob' does not exist on type 'ImportMeta'」。
+    "types": ["node", "vite/client"],
     "noEmit": true,
     "composite": true,
     "tsBuildInfoFile": "node_modules/.tmp/tsc/web.tsbuildinfo"

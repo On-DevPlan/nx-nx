@@ -29,16 +29,25 @@ export type PatternParams<P extends string> = P extends `${string}:${infer K}/${
     ? K
     : never;
 
-// 单个 flag 在客户端侧允许传入的值类型
+// 单个 flag 在客户端侧允许传入的值类型。
+//
+// kv / json 两种必须能收对象：它们的语义就是「一组键值」与「一个 JSON 值」。
+// 早先这里只到 string，于是 `setting.set` 的 `set` 字段在面板侧传不进去——
+// 示例被迫退回裸 api() 调用，类型安全当场破一个洞。类型必须与 spec.ts 的
+// coerceOne 对齐：那边认对象，这边就得允许对象。
 type FlagInputValue<F extends FlagSpec> = F['type'] extends 'boolean'
   ? boolean
   : F['type'] extends 'number'
     ? number
     : F['type'] extends 'array'
       ? string[] | string
-      : F['enum'] extends readonly (infer E)[]
-        ? E
-        : string;
+      : F['type'] extends 'kv'
+        ? Record<string, unknown> | string | string[]
+        : F['type'] extends 'json'
+          ? unknown
+          : F['enum'] extends readonly (infer E)[]
+            ? E
+            : string;
 
 // 无额外必填键时的空形状（刻意：调用方无需提供任何参数）。
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type

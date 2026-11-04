@@ -1,5 +1,37 @@
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-04
+
+### Changed
+
+- **TS 模板前端改为真实路由树，页面登记点从 6 处归零**：新增
+  `src/web/frontend/app/`（`route.ts` 契约、`pages.ts` 用 `import.meta.glob` 扫
+  `views/*/route.ts`、`router.tsx`、`nav.ts`、`layouts.ts`、`shells/`），页面迁到
+  `src/web/frontend/views/<名>/`（`route.ts` + `page.tsx` + `api.ts` + 私有 `components/`）。
+  加一个页面 = 新建一个目录，不再改任何全局文件；`nav` 字段省略即不进导航（详情页约定），
+  `path: '/board/:id'` 支持路由参数。
+- **布局变成可插拔的壳**：出厂带顶栏壳与左侧栏壳，`route.ts` 写 `layout` 即可选择；
+  特殊版式（如左侧栏应用）新增一个壳文件，既有页面一行不改。
+- **后端做减法**：删除 `core/views.ts`、`web/frontend/registry.ts`、`App.tsx` 与三方
+  对账测试；`GET /api/settings` 不再返回页面清单，`setting` 只保存「怎么摆」（分组 /
+  隐藏 / 顺序），删除一个页面不会让整份导航配置失效。
+- **eslint 分层规则改为目录级**：`src/web/**` 禁 `node:*` 与 Node 侧值导入，新增页面零
+  配置；模块互不依赖改由 `tests/unit/layering.test.mjs` 解析真实路径判定，不再逐模块枚举。
+
+### Added
+
+- TS 模板新增依赖 `react-router-dom`（HashRouter，静态部署无 SPA fallback 也可用）。
+- 页面级 `Suspense` + `ErrorBoundary`：一页崩溃不影响导航与其它页面。
+- `tests/unit/views.test.mjs`：钉住「页面目录自包含」「路由树与目录一一对应」等约定。
+- 模板自带 dev skill 补齐 `references/A01-加一个页面.md`（加页面的分步清单与验证方式）。
+
+### Fixed
+
+- `runtime/types/client.ts`：`kv` / `json` 类型 flag 的入参不再只收字符串，typed client
+  可完整覆盖 `setting.set`（此前示例因此退回裸 `api()` 调用，类型安全破洞）。
+- 当前视图不再存进 store / localStorage，改由 URL 决定——原来那套是手写了个功能不全的
+  router（刷新丢状态、不能分享链接、无嵌套与参数）。
+
 ## [0.8.6] - 2026-10-25
 
 ### Added

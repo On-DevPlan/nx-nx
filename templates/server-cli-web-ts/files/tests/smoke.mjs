@@ -127,15 +127,14 @@ test('skill install --all：一次装全部 skill；与 name/--group 互斥', as
   );
 });
 
-test('setting：导航分组经 CLI 往返（同一个 store），坏 id 明确报错', async () => {
+test('setting：导航摆法经 CLI 往返（同一个 store），后端不校验页面是否存在', async () => {
   const dir = mkdtempSync(join(tmpdir(), '{{name}}-nav-'));
   const env = { ...process.env, {{envPrefix}}_STORE: join(dir, 'store.json') };
   const cli = (args) => exec(process.execPath, [BIN, ...args], { cwd: tmpdir(), env });
 
   const get0 = JSON.parse((await cli(['setting', 'get', '--json'])).stdout);
   assert.ok(Array.isArray(get0.settings.navGroups) && get0.settings.navGroups.length === 0, '默认无分组');
-  assert.ok(get0.views.some((v) => v.id === 'home'), '要带上页面清单（头部据此渲染）');
-  assert.ok(!get0.views.some((v) => v.id === 'settings'), '出厂不再有独立 settings 页');
+  assert.equal(get0.views, undefined, '后端不再返回页面清单——页面由前端路由树决定');
 
   await cli(['setting', 'set', '--set', 'navGroups=[{"title":"求职","views":["home"]}]', '--json']);
   await cli(['setting', 'set', '--set', 'navOrder=["home"]', '--json']);
@@ -143,12 +142,13 @@ test('setting：导航分组经 CLI 往返（同一个 store），坏 id 明确�
   assert.deepEqual(get1.settings.navGroups, [{ title: '求职', views: ['home'] }], '分组原样保存');
   assert.deepEqual(get1.settings.navOrder, ['home']);
 
-  // 被隐藏的页面：入口不显示，但清单里还在（`#/id` 直达仍可用）——先撤分组
   await cli(['setting', 'set', '--set', 'navGroups=[]', '--set', 'navHidden=home', '--json']);
   const get2 = JSON.parse((await cli(['setting', 'get', '--json'])).stdout);
   assert.deepEqual(get2.settings.navHidden, ['home']);
-  assert.ok(get2.views.some((v) => v.id === 'home'));
 
-  const bad = await cli(['setting', 'set', '--set', 'navHidden=no_such_page', '--json']).catch((e) => e);
-  assert.match(String(bad.stdout || bad.message), /不存在/, '坏页面 id 必须报错而不是静默写入');
+  // 后端只存「摆法」：它不知道有哪些页面，所以任意 id 都接受。
+  // 前端渲染时对不存在的页面直接忽略——删掉一个页面不会让整份导航配置失效。
+  await cli(['setting', 'set', '--set', 'navHidden=no_such_page', '--json']);
+  const get3 = JSON.parse((await cli(['setting', 'get', '--json'])).stdout);
+  assert.ok(get3.settings.navHidden.includes('no_such_page'), '未知页面 id 应原样保存（前端负责忽略）');
 });

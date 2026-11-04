@@ -1,8 +1,11 @@
 // 头部导航配置的**纯模型**：分组 + 隐藏 + 平铺顺序。零 React、零 IO，可单测。
 //
 // 为什么单独一层：这块的逻辑（增删改、排序、可用性、校验）比渲染多得多，
-// 混在 JSX 里既说不清也测不了。表现层只管画，动手改数据一律走这里——
-// 于是「管理逻辑」只有一份，前端拦一道、后端（modules/home）再拦一道，两边同口径。
+// 混在 JSX 里既说不清也测不了。表现层只管画，动手改数据一律走这里。
+//
+// **这里保存的是「摆法」，不是「有哪些页面」**：配置里出现的页面 id 由前端路由树
+// 提供（见 app/pages.ts），后端只把它当一个不透明的字符串数组存着。
+// 因此加了页面不需要动后端，删了页面也只是渲染时被忽略——不会让整份配置失效。
 //
 // 配置形状（与 settings.navGroups / navHidden / navOrder 一一对应）：
 //   { groups: [{ title, views: [页面id…] }], hidden: [页面id…], order: [页面id…] }
@@ -212,6 +215,67 @@ export function availableFor(cfg: NavConfig, gi: number, allIds: string[]): stri
   if (!target) return [];
   const others = new Set(cfg.groups.flatMap((g, i) => (i === gi ? [] : g.views)));
   return allIds.filter((id) => !target.views.includes(id) && !others.has(id));
+}
+
+// —— 渲染用派生：配置 × 路由树 → 头部导航 ——
+//
+// 这一块以前散在 App.tsx 的 useMemo 里（约 20 行），既测不到也和「壳」绑死。
+// 抽成纯函数后：顶栏壳、左侧栏壳、将来任何壳都调同一个，摆法只有一份解释。
+
+export interface NavPage {
+  id: string;
+  /** 路由路径，渲染成链接用 */
+  path: string;
+  title: string;
+  /** 页面自己声明的顺序（配置里没显式排过时的兜底） */
+  order: number;
+}
+
+export interface NavItem {
+  id: string;
+  path: string;
+  title: string;
+}
+
+export interface NavSection {
+  title: string;
+  items: NavItem[];
+}
+
+/**
+ * 把「用户的摆法」套到「真实页面清单」上。
+ *   - 配置里的页面 id 若在路由树里不存在 → 直接跳过（不报错、不崩）
+ *   - 隐藏的页面只从**入口**消失，路由仍可直达
+ *   - 平铺顺序：order 里显式排过的优先，其余按页面自己的 order 跟在后面
+ */
+export function buildNav(cfg: NavConfig, pages: NavPage[]): { flat: NavItem[]; groups: NavSection[] } {
+  const byId = new Map(pages.map((p) => [p.id, p]));
+  const hidden = new Set(cfg.hidden);
+  const toItem = (id: string): NavItem | null => {
+    const p = byId.get(id);
+    return p ? { id: p.id, path: p.path, title: p.title } : null;
+  };
+
+  const groups: NavSection[] = cfg.groups
+    .map((g) => ({
+      title: g.title,
+      items: g.views
+        .map(toItem)
+        .filter((x): x is NavItem => !!x)
+        .filter((x) => !hidden.has(x.id)),
+    }))
+    .filter((g) => g.items.length);
+
+  const grouped = new Set(groups.flatMap((g) => g.items.map((x) => x.id)));
+  const rank = new Map(cfg.order.map((id, i) => [id, i]));
+  const rankOf = (p: NavPage) => (rank.has(p.id) ? rank.get(p.id)! : Number.MAX_SAFE_INTEGER);
+
+  const flat: NavItem[] = pages
+    .filter((p) => !hidden.has(p.id) && !grouped.has(p.id))
+    .sort((a, b) => rankOf(a) - rankOf(b) || a.order - b.order)
+    .map((p) => ({ id: p.id, path: p.path, title: p.title }));
+
+  return { flat, groups };
 }
 
 /**

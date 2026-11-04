@@ -1,27 +1,29 @@
-// 首页视图：面板落地页，把「演示动作 + 运行信息 + 本机设置」放在同一页。
+// 首页视图：面板落地页（演示动作 + 运行信息 + 本机设置）。
 //
-// 所有请求走类型安全 client：action id、参数名、flag 值类型、返回数据
-// 全部由注册表类型推出，写错在编译期就红。
-//
-// 页面分两部分：上半是演示动作（问候）与运行信息，
-// 下半是本机设置（外观主题、栏目管理）。主题点击即保存；栏目管理一页一保存。
+// 数据来源分两处，边界很清楚：
+//   - 「有哪些页面」 ← 前端路由树（useNavPages），后端不知道、也不该知道
+//   - 「怎么摆」     ← settings（用户摆法，可能存在后端以便跨浏览器保留）
+// 两者相乘得到导航，见 app/nav.ts。
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '../../web/frontend/api/client.js';
-import { CliHints } from '../../web/frontend/components/CliHints.js';
-import { Copyable, useGuard, useToast } from '../../web/frontend/components/ui.jsx';
-import { ThemePicker } from '../../web/frontend/components/theme.jsx';
-import { useStore } from '../../web/frontend/store.js';
-import * as nav from '../../web/frontend/components/navModel.js';
-import type { NavConfig } from '../../web/frontend/components/navModel.js';
-import NavManager from './navManager.js';
-import type { GreetingResult } from './service.js';
+import { useStore } from '../../store.js';
+import { useNavPages } from '../../app/nav.js';
+import { useHomeApi } from './api.js';
+import { CliHints } from '../../components/CliHints.js';
+import { Copyable, useGuard, useToast } from '../../components/ui.jsx';
+import { ThemePicker } from '../../components/theme.jsx';
+import * as nav from '../../components/navModel.js';
+import type { NavConfig } from '../../components/navModel.js';
+import NavManager from './components/NavManager.js';
+import type { GreetingResult } from '../../../../modules/home/service.js';
 
 // 面板里也把 CLI 等价写法亮出来（agent 与人都能照着敲）
 const NAV_CLI_HINT = `{{name}} setting set --set 'navGroups=[{"title":"求职","views":["home"]}]'`
   + ` / --set navHidden=home / --set navOrder=["home"]`;
 
-export default function HomeView() {
-  const { boot, client, settings, refreshSettings } = useStore();
+export default function HomePage() {
+  const { boot, settings } = useStore();
+  const api = useHomeApi();
+  const pages = useNavPages();
   const toast = useToast();
   const guard = useGuard();
 
@@ -35,10 +37,8 @@ export default function HomeView() {
   const [cfg, setCfg] = useState<NavConfig>(nav.emptyConfig());
   const [baseline, setBaseline] = useState<NavConfig>(nav.emptyConfig());
 
-  const sections = useMemo(
-    () => (settings?.views || []).map((v) => ({ id: v.id, title: v.title })),
-    [settings],
-  );
+  // 候选页面来自路由树；被隐藏的也在里面，才能把它拖回来
+  const sections = useMemo(() => pages.map((p) => ({ id: p.id, title: p.title })), [pages]);
   const allIds = useMemo(() => sections.map((s) => s.id), [sections]);
 
   // 后端配置 → 工作副本
@@ -59,7 +59,7 @@ export default function HomeView() {
     }
     setBusy(true);
     try {
-      const r = await client['home.greet']({ name: name.trim(), loud });
+      const r = await api.greet(name.trim(), loud);
       setResult(r);
     } catch (err) {
       toast(String((err as { message?: string })?.message || err));
@@ -71,8 +71,7 @@ export default function HomeView() {
   // useGuard 是「跑一次并兜错」（不是包装器）：直接调用它，失败的 toast 由它统一发
   const save = () => guard(async () => {
     if (problems.length) { toast(`保存失败：${problems[0]!.message}`); return; }
-    await api('/api/settings', { method: 'PATCH', body: { set: nav.configToPayload(cfg) } });
-    await refreshSettings();
+    await api.saveSettings(nav.configToPayload(cfg));
     toast('设置已保存');
   });
 
@@ -129,6 +128,13 @@ export default function HomeView() {
             <dt>环境变量</dt>
             <dd>{boot?.storeEnv}</dd>
           </div>
+          <div className="kv-row">
+            <dt>页面</dt>
+            <dd>
+              {pages.length} 个可导航页面 · 壳与页面由
+              <code className="mono">src/web/frontend/views/</code> 自动发现
+            </dd>
+          </div>
         </dl>
       </div>
 
@@ -162,7 +168,7 @@ export default function HomeView() {
           <div className="toolbar">
             <span className="muted">
               拖动就是把结构摆成你要的样子：页面可以拖进分组、组内换位、拖回平铺区即移出；拖分组把手换分组顺序。
-              被隐藏的页面只是头部不显示入口，用 <code>#/页面id</code> 直达仍然可用。
+              这里存的只是摆法；页面清单来自前端路由树，所以加页面不必改后端。
             </span>
             <span className="right rowgap">
               {dirty ? (

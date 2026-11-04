@@ -590,3 +590,71 @@ main { padding: 16px; }
 /* 「隐藏」与分组同构，只是语气更弱：它是"不显示"的容器 */
 .nav-hidden .colhead { color: var(--mid); }
 .nav-hidden .row .name { color: var(--mid); }
+
+/* ============================================================
+   4. shell —— 布局壳
+   ============================================================
+   壳只负责「页面摆在哪」，不参与页面本身。这里放的是两种壳：
+   - 顶栏壳：复用上面 header / nav / .tab，无需额外样式
+   - 侧栏壳：下面这组
+   要加第三种壳（分栏 / 全屏画布），在 app/shells/ 加文件、
+   在 app/layouts.ts 加一行即可，不用碰这一段。
+*/
+.shell { display: flex; min-height: 100vh; }
+.side {
+  flex: 0 0 208px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 10px;
+  background: var(--soft);
+  border-right: var(--border);
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+}
+.side-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px 10px;
+  font-weight: 600;
+  border-bottom: var(--border);
+}
+.side-brand img { width: 22px; height: 22px; border-radius: 6px; flex: 0 0 auto; }
+.side-nav { display: flex; flex-direction: column; gap: 2px; overflow: auto; }
+.side-group { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
+.side-group-title {
+  font-size: 11px;
+  color: var(--mid);
+  padding: 2px 8px;
+  letter-spacing: 0.04em;
+}
+.side-item {
+  display: block;
+  padding: 6px 8px;
+  border-radius: var(--radius-btn);
+  color: inherit;
+  text-decoration: none;
+  font-size: var(--fs-core);
+  line-height: 1.4;
+}
+.side-item:hover { background: var(--soft-2); }
+.side-item.active { background: var(--ink); color: var(--paper); }
+.side-item.nested { padding-left: 18px; }
+.side-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: var(--border);
+  font-size: 11px;
+}
+.side-main { flex: 1 1 auto; min-width: 0; }
+.side-main > .empty { padding: 24px; }
+@media (max-width: 720px) {
+  .shell { flex-direction: column; }
+  .side { flex-basis: auto; position: static; max-height: none; }
+}

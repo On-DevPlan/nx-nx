@@ -9,11 +9,15 @@
 // 若拖动中就把列表按落点重排，DOM 会在指针下移动，浏览器随即对新出现的行再触发
 // dragover，落点又被重算，跨容器来回拖时尤其会反复重排「一直闪」（反馈回路）。
 //
-// **受控组件**：数据（cfg）与保存都在本页（首页）；这里只管画与调 onChange。
+// **受控组件**：数据（cfg）与保存都在本页；这里只管画与调 onChange。
 // 所有数据操作走 navModel 的纯函数（可单测），组件里不做状态体操。
+//
+// 它放在 views/home/components/ 下，因为**只有首页用**。页面私有的东西不进
+// 全局 components/ —— 那是「多个页面共用」才该去的地方。这条边界就是
+// 「页面自包含」的实质：一个页面的增删改查不该在别的目录留下痕迹。
 import { Fragment, useState } from 'react';
-import * as nav from '../../web/frontend/components/navModel.js';
-import type { NavConfig, Target } from '../../web/frontend/components/navModel.js';
+import * as nav from '../../../components/navModel.js';
+import type { NavConfig, Target } from '../../../components/navModel.js';
 
 interface Section {
   id: string;

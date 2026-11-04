@@ -264,38 +264,22 @@ export default tseslint.config(
     },
   },
 
-  {
-    // 业务模块：模块之间禁止互相值依赖。新增模块时把它的路径补进 files 与
-    // group 枚举（逐模块枚举，漏补会静默失效）。
-    files: ['src/modules/home/**/*.{ts,tsx}', 'src/modules/skill/**/*.{ts,tsx}'],
-    plugins: { '@typescript-eslint': tseslint.plugin },
-    rules: {
-      '@typescript-eslint/no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: ['../home/*', '../home/**', '../skill/*', '../skill/**'],
-              allowTypeImports: true,
-              message:
-                '模块之间不得做值依赖；共享逻辑请下沉到 core/（类型引用允许 import type）。',
-            },
-          ],
-        },
-      ],
-    },
-  },
+  // 业务模块之间禁止互相值依赖 —— 这条**故意不写在这里**。
+  //
+  // 用 no-restricted-imports 表达它必须逐模块枚举路径，而漏补一条就静默失效；
+  // 更糟的是新增模块时得同步改这份配置，等于「加一个模块要改全局文件」。
+  // 判定这件事需要**解析真实路径**（`../home/x` 与 `../../core/x` 在字符串层面
+  // 长得太像），那是 lint 规则不擅长、而测试很擅长的活：
+  // 见 tests/unit/layering.test.mjs —— 它扫 src/modules 下所有 import 并解析落点，
+  // 新模块零配置，也不会随枚举过期。
 
   {
-    // 前端（含 modules/home 下的视图 tsx）：这条规则价值最高——
-    // 把 Node 侧代码值导入视图，Vite 会把 node: 内置模块一起打进浏览器包。
+    // 浏览器侧的边界：src/web/ 以下**只准跑在浏览器里**。
     //
-    // 关键：Node 侧的**类型**导入是允许的（typed client 的类型由注册表推出），
-    // 因此用 allowTypeImports 放行；node:* 内置连类型一起禁。
-    files: [
-      'src/web/frontend/**/*.{ts,tsx}',
-      'src/modules/home/**/*.tsx',
-    ],
+    // 这条规则是**目录级**的，不枚举具体页面/模块——新建 views/<页>/ 自动被覆盖，
+    // 不需要动这份配置。旧版按 src/modules/{home,skill}/** 逐个枚举，
+    // 漏补一处那条约束就形同虚设（当时还专门写了一条测试盯「你补了枚举没」）。
+    files: ['src/web/**/*.{ts,tsx}'],
     plugins: { '@typescript-eslint': tseslint.plugin },
     rules: {
       '@typescript-eslint/no-restricted-imports': [
@@ -307,15 +291,10 @@ export default tseslint.config(
               message: '前端不能引用 Node 内置模块。',
             },
             {
-              group: [
-                '**/modules/*/index.ts',
-                '**/modules/*/service.ts',
-                '**/runtime/**/*.ts',
-                '**/core/**/*.ts',
-              ],
+              group: ['**/modules/**', '**/runtime/**', '**/core/**'],
               allowTypeImports: true,
               message:
-                '前端只能以 import type 引用 Node 侧（index/service/runtime/core）；' +
+                '前端只能以 import type 引用 Node 侧（modules / runtime / core）；' +
                 '值导入会把 node: 内置模块一起打进浏览器包。',
             },
           ],

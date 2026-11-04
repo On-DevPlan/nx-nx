@@ -14,7 +14,7 @@ description: {{name}} 的开发者 skill（项目级，.claude/skills/dev-{{lett
 
 | 代号 | 干什么时读 | 一句话 |
 | --- | --- | --- |
-| _（待补）_ | 首个开发主题出现时补第一行 | 命名示例：`A01-本地开发.md` / `B01-代码地图.md` / `C01-验证发布.md` |
+| `A01` | 加页面 / 改导航 / 加一种版式 / 改面板路由 | 新建 `views/<名>/` 目录即完成登记，零全局改动 |
 
 ## 序列约定
 
@@ -30,18 +30,32 @@ description: {{name}} 的开发者 skill（项目级，.claude/skills/dev-{{lett
   - `pnpm typecheck` —— 只跑类型检查
   - `pnpm test` —— lint（含行数/字符数限制）+ typecheck + build + smoke + unit
   - `pnpm start` —— 构建并启动面板
-- 代码地图：
+- 代码地图（**前后端是两条目录线，不是同一个模块目录里的两半**）：
   - `src/runtime/` —— CLI / HTTP / 路由注册与参数校验；`types/` 是 action 与模块的类型契约
-  - `src/core/` —— 存储、路径、端口、skill 等通用能力
-  - `src/modules/` —— 业务模块（action + service + view）
-  - `src/web/frontend/` —— React 面板
+  - `src/core/` —— 存储、路径、端口等通用能力（Node 侧）
+  - `src/modules/` —— **后端**业务模块：`index.ts` 声明 actions，`service.ts` 写业务。**不包含任何 tsx**
+  - `src/web/frontend/app/` —— 路由树（`router.tsx` / `pages.ts`）、导航计算（`nav.ts`）、布局壳（`shells/`）
+  - `src/web/frontend/views/` —— **前端**页面：一页一个目录（`route.ts` + `page.tsx` + 私有 `components/`）
+  - `src/web/frontend/components/` —— 跨页面复用的组件（只有多个页面都用才放这里）
   - `assets/{{name}}/` —— 随包分发的使用 skill（面向“用本项目”，不是“改本项目”）
   - `tests/` —— smoke 与 unit
 
 ## 约束
 
-- 新增能力照现有模块的分层放置，不要把业务逻辑塞进 `src/runtime/`
+- **加一个页面 = 新建一个目录**，不需要改任何全局文件：
+  `src/web/frontend/views/<名>/{route.ts,page.tsx}`。路由由 `import.meta.glob` 自动发现，
+  页面 id 就是目录名。详见 `references/A01-加一个页面.md`。
+- **只改后端不需要动前端、只改前端不需要动后端**：两者唯一的连接点是 action 契约
+  （`src/modules/*/index.ts` 声明、`runtime/types/` 定型）。页面通过 typed client 调 action，
+  类型引用用 `import type`，禁止值导入 Node 侧。
+- **前端不存“当前在哪一页”**：路由与 `searchParams` 就是状态。别往 store / localStorage
+  里加“当前视图”这类字段——那是手写一个功能不全的 router。
+- **特殊版式 = 加一个壳文件**，不是重写壳：`app/shells/<X>Shell.tsx` + `app/layouts.ts` 加一行，
+  页面 `route.ts` 写 `layout: '<x>'`。既有页面零改动。
 - 新增 action 必须同时声明 `cli` 与 `http`；确属纯 CLI（`serve` / `server` / `skill` 前缀之外）要写 `http: null, web: false`——`local/action-parity` 与启动期注册表都会拦
+- **不要给“只是给面板拉个列表”的读接口硬凑 CLI 命令**：先想清楚它是不是该做成 action。
+  纯展示数据（静态文案、前端路由推导出的清单）不需要 action。
 - 类型契约优先改 `src/runtime/types/`，再改实现；不要让实现反推类型
 - 动 CLI/HTTP 契约时同步 `tests/`，并确认 `routes` 输出一致
+- 后端**不存页面清单**：`setting` 只保存“怎么摆”（分组 / 隐藏 / 顺序），不校验页面 id 存在性
 - 与主 skill `{{name}}` 分工：`{{name}}` 管运行面，`dev-{{letters}}` 管开发面

@@ -1,15 +1,14 @@
-// home 域业务逻辑：演示业务动作（greet）+ 本机设置读写与**严格校验**。
+// home 域业务逻辑：演示业务动作（greet）+ 本机设置读写。
 //
-// 本模块同时承担两件事：
-//   ① 一个演示业务动作（greet）——演示「面板操作 → 状态落盘」闭环；
-//   ② 本机设置的读写与**严格校验**（主题、头部导航：分组 / 隐藏 / 平铺顺序）。
+// 关于设置的一个**关键边界**：后端不校验「页面是否存在」。
+// 有哪些页面是前端路由树的事实（src/web/frontend/views/），后端既不知道也不需要知道。
+// 所以这里只校验**形状**——navGroups 得是 [{title, views:[]}]、navHidden 得是字符串数组——
+// 至于 views 里的 id 有没有对应页面，交给前端渲染时忽略即可：配置不会因此失效。
 //
-// 为什么「首页」和「设置」合成一个模块：这两块都是「关于这个应用本身」的内容，
-// 拆成两个模块，初始就凭空多出一个只有 meta 信息的空壳页。合成一个模块，
-// 每一个出厂模块都有真实内容。
+// 早先后端 import 了 core/views.ts 拿页面清单做存在性校验，后果是每加一个页面都要
+// 改后端，删一个页面还会让整份导航配置报错。那是拿后端的规矩管前端。
 import { loadStore, mutateStore } from '../../core/store.js';
 import type { NavGroup, Settings } from '../../core/store.js';
-import { VIEWS_META, viewMetaOf } from '../../core/views.js';
 import { badInput, notFound } from '../../core/errors/index.js';
 
 // ---- ① 演示业务动作 ----
@@ -42,14 +41,12 @@ export async function greet(name: string, loud = false): Promise<GreetingResult>
 
 export interface SettingsView {
   settings: Settings;
-  /** 全部页面（含 order 与出厂默认 hidden）——面板的头部导航与本页都用它 */
-  views: { id: string; title: string; order: number; hidden?: boolean }[];
   schema: { key: string; hint: string }[];
 }
 
 /** 已知设置项 → 校验器 + 说明（面板据此提示）。 */
 const SCHEMA: Record<string, { hint: string; coerce: (v: unknown) => unknown }> = {
-  navGroups: { hint: '头部导航分组：[{title, views:[页面id…]}]，数组顺序 = 显示顺序', coerce: coerceNavGroups },
+  navGroups: { hint: '导航分组：[{title, views:[页面id…]}]，数组顺序 = 显示顺序', coerce: coerceNavGroups },
   navHidden: { hint: '隐藏的页面 id（入口不显示，直达仍可用）', coerce: coerceNavHidden },
   navOrder: { hint: '平铺区的显示顺序（页面 id 数组；没列进去的按页面自身顺序跟在后面）', coerce: coerceNavOrder },
   theme: { hint: '色彩主题：light（浅色）/ dark（深色）/ auto（跟随系统）', coerce: coerceTheme },
@@ -65,8 +62,7 @@ function coerceTheme(value: unknown): string {
 }
 
 /**
- * 「页面 id 清单」校验（隐藏清单 / 平铺顺序共用）：每一项都必须是真实存在的页面；
- * 去重保序，并归一成真实 id。label 只影响报错措辞。
+ * 「页面 id 清单」校验（隐藏清单 / 平铺顺序共用）：只做形状归一（去空白、去重保序）。
  * 三种写法都吃：数组（面板）、`a,b`（CLI 省事写法）、`["a","b"]`（CLI 的 JSON 写法）。
  */
 function coerceIdList(value: unknown, label: string): string[] {
@@ -85,9 +81,7 @@ function coerceIdList(value: unknown, label: string): string[] {
   const out: string[] = [];
   for (const item of list) {
     const id = String(item ?? '').trim();
-    if (!id) continue;
-    if (!viewMetaOf(id)) throw badInput(`${label}里的页面不存在: ${id}`);
-    if (!out.includes(id)) out.push(id);
+    if (id && !out.includes(id)) out.push(id);
   }
   return out;
 }
@@ -101,7 +95,13 @@ function coerceNavOrder(value: unknown): string[] {
   return coerceIdList(value, '平铺顺序');
 }
 
-/** 分组校验 + 归一：组名非空、页面必须存在、组内去重、跨组重复拒绝、空组拒绝。 */
+/**
+ * 分组校验 + 归一：组名非空、组内去重、跨组重复拒绝。
+ *
+ * 跨组重复仍然拒绝——那是**摆法本身的矛盾**（一个页面不能同时出现在两处入口），
+ * 与「页面存不存在」无关。而「空分组」不再拒绝：后端不知道一共有哪些页面，
+ * 就没资格判断这个分组是不是空的；前端 navModel.validate 会提示。
+ */
 function coerceNavGroups(value: unknown): NavGroup[] {
   let arr: unknown = value;
   if (typeof arr === 'string') {
@@ -124,13 +124,11 @@ function coerceNavGroups(value: unknown): NavGroup[] {
     for (const item of Array.isArray(g.views) ? g.views : []) {
       const id = String(item ?? '').trim();
       if (!id || views.includes(id)) continue; // 组内重复（或空串）直接去重
-      if (!viewMetaOf(id)) throw badInput(`分组「${title}」里的页面不存在: ${id}`);
       const ownerTitle = owner.get(id);
       if (ownerTitle) throw badInput(`页面 ${id} 同时在分组「${ownerTitle}」与「${title}」里——一个页面只能属于一个分组`);
       owner.set(id, title);
       views.push(id);
     }
-    if (!views.length) throw badInput(`分组「${title}」没有任何页面——要么加一个，要么删掉这个分组`);
     return { title, views };
   });
 }
@@ -139,14 +137,13 @@ export async function getSettings(): Promise<SettingsView> {
   const store = await loadStore();
   return {
     settings: store.settings,
-    views: VIEWS_META.map((v) => ({ ...v })),
     schema: Object.entries(SCHEMA).map(([key, s]) => ({ key, hint: s.hint })),
   };
 }
 
 /**
  * PATCH 语义：只改传入的项。
- * 返回 `{ settings }` 的**最新全量**（面板保存后直接拿来刷新头部）。
+ * 返回 `{ settings }` 的**最新全量**（面板保存后直接拿来刷新导航）。
  */
 export async function setSettings(input: {
   key?: string;
@@ -182,27 +179,21 @@ export async function setSettings(input: {
 }
 
 export function renderSettings(d: SettingsView): string {
-  const hidden = new Set(d.settings.navHidden || []);
   const lines = [`当前设置（改：{{name}} setting set --set k=v）· 主题: ${d.settings.theme || 'light'}`];
   for (const s of d.schema) lines.push(`  ${s.key.padEnd(12)} ${s.hint}`);
 
-  lines.push('', `页面（${d.views.length}）· 隐藏 ${hidden.size} 个`);
-  for (const v of d.views) {
-    lines.push(`  ${v.id.padEnd(12)} ${v.title.padEnd(10)} ${hidden.has(v.id) ? '隐藏' : '显示'}`);
-  }
-
   const order = d.settings.navOrder || [];
-  const ranked = order.filter((id) => d.views.some((v) => v.id === id));
-  if (ranked.length) lines.push(`平铺顺序（前 ${ranked.length} 个已显式排序）: ${ranked.join(' → ')}`);
-
   const groups = d.settings.navGroups || [];
-  if (!groups.length) {
-    lines.push('', '分组：无（全部页面平铺在头部）');
-  } else {
-    lines.push('', `分组（${groups.length}）· 组顺序 = 头部顺序，组内顺序 = 展开列表顺序`);
-    for (const g of groups) lines.push(`  ${g.title}: ${g.views.join(' → ')}`);
-  }
-  lines.push('', '例：{{name}} setting set --set \'navGroups=[{"title":"求职","views":["home"]}]\' --dry-run');
+  const hidden = d.settings.navHidden || [];
+
+  lines.push('', `隐藏 ${hidden.length} 个 · 分组 ${groups.length} 个`);
+  if (hidden.length) lines.push(`  隐藏: ${hidden.join(', ')}`);
+  if (order.length) lines.push(`  平铺顺序: ${order.join(' → ')}`);
+  for (const g of groups) lines.push(`  ${g.title}: ${g.views.join(' → ') || '(空)'}`);
+
+  // 页面清单不在后端：它由前端 views/*/route.ts 决定，后端只存「摆法」。
+  lines.push('', '页面清单由前端路由树决定（src/web/frontend/views/*/route.ts），可用 panel 查看。');
+  lines.push('例：{{name}} setting set --set \'navGroups=[{"title":"求职","views":["home"]}]\' --dry-run');
   return lines.join('\n');
 }
 
@@ -216,7 +207,7 @@ export function renderSettingSet(d: {
   const groups = d.settings?.navGroups || [];
   const hidden = d.settings?.navHidden || [];
   const lines = [`已更新设置：${groups.length} 个导航分组，隐藏 ${hidden.length} 个页面`];
-  for (const g of groups) lines.push(`  ${g.title}: ${g.views.join(' → ')}`);
+  for (const g of groups) lines.push(`  ${g.title}: ${g.views.join(' → ') || '(空)'}`);
   if (hidden.length) lines.push(`  隐藏: ${hidden.join(', ')}`);
   return lines.join('\n');
 }
