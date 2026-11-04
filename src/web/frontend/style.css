@@ -508,3 +508,69 @@ main { padding: 16px; }
   background: var(--soft);
   color: var(--bad);
 }
+
+/* ---- 服务工作台（表单版） ---- */
+.sg-grid { display: grid; grid-template-columns: 240px 1fr; gap: 12px; height: 100%; min-height: 0; }
+.sg-list { display: flex; flex-direction: column; min-height: 0; }
+.sg-list-body { overflow: auto; flex: 1; min-height: 0; }
+.sg-detail { overflow: auto; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+
+.sg-status .colhead { padding: 8px 12px; border-bottom: var(--border); }
+.sg-status-body { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px 4px; }
+.sg-pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--soft); }
+.sg-pill.ok { background: #2f9e4422; color: #2f9e44; }
+.sg-pill.bad { background: #e5484d22; color: #e5484d; }
+.small-line { padding: 0 12px 6px; font-size: 11px; }
+.muted { opacity: 0.65; }
+
+.sg-form .colhead { padding: 8px 12px; border-bottom: var(--border); }
+.sg-form-body { padding: 10px 12px; }
+.sg-section { font-size: 12px; font-weight: 600; opacity: 0.75; margin: 14px 0 6px; padding-top: 8px; border-top: 1px dashed var(--border-color, #444); }
+.sg-row { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; }
+.sg-row > span { opacity: 0.75; }
+.sg-row input[type='text'], .sg-row input:not([type]), .sg-row select {
+  height: 24px; padding: 0 8px; font-size: 12px; border: var(--border); border-radius: 4px;
+  background: var(--bg, transparent); color: var(--ink, inherit);
+}
+.sg-row input[type='checkbox'] { width: 14px; height: 14px; }
+.sg-clients { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.sg-client { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 2px 6px; border: var(--border); border-radius: 4px; }
+.sg-json { padding: 8px 12px 12px; border-top: var(--border); }
+.sg-json pre { font-size: 11px; line-height: 1.5; max-height: 260px; overflow: auto; padding: 8px; background: var(--soft); border-radius: 4px; }
+
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--mid); }
+.dot-ok { background: #2f9e44; }
+.dot-bad { background: #e5484d; }
+
+/* ---- 服务工作台（表单版） ---- */
+.sg-grid { display: grid; grid-template-columns: 240px 1fr; gap: 12px; height: 100%; min-height: 0; }
+.sg-list { display: flex; flex-direction: column; min-height: 0; }
+.sg-list-body { overflow: auto; flex: 1; min-height: 0; }
+.sg-detail { overflow: auto; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+
+.sg-status .colhead { padding: 8px 12px; border-bottom: var(--border); }
+.sg-status-body { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px 4px; }
+.sg-pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--soft); }
+.sg-pill.ok { background: #2f9e4422; color: #2f9e44; }
+.sg-pill.bad { background: #e5484d22; color: #e5484d; }
+.small-line { padding: 0 12px 6px; font-size: 11px; }
+.muted { opacity: 0.65; }
+
+.sg-form .colhead { padding: 8px 12px; border-bottom: var(--border); }
+.sg-form-body { padding: 10px 12px; }
+.sg-section { font-size: 12px; font-weight: 600; opacity: 0.75; margin: 14px 0 6px; padding-top: 8px; border-top: 1px dashed var(--border-color, #444); }
+.sg-row { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; }
+.sg-row > span { opacity: 0.75; }
+.sg-row input[type='text'], .sg-row input:not([type]), .sg-row select {
+  height: 24px; padding: 0 8px; font-size: 12px; border: var(--border); border-radius: 4px;
+  background: var(--bg, transparent); color: var(--ink, inherit);
+}
+.sg-row input[type='checkbox'] { width: 14px; height: 14px; }
+.sg-clients { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.sg-client { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 2px 6px; border: var(--border); border-radius: 4px; }
+.sg-json { padding: 8px 12px 12px; border-top: var(--border); }
+.sg-json pre { font-size: 11px; line-height: 1.5; max-height: 260px; overflow: auto; padding: 8px; background: var(--soft); border-radius: 4px; }
+
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--mid); }
+.dot-ok { background: #2f9e44; }
+.dot-bad { background: #e5484d; }
