@@ -8,6 +8,7 @@ import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { badInput, conflict, notFound } from '../errors/index.js';
+import { parseParams, type ScriptParam } from './params.js';
 import {
   aliasesPath,
   listScripts,
@@ -108,6 +109,13 @@ export function saveScript(name: unknown, content: unknown): ScriptContent {
   const text = String(content ?? '');
   atomicWrite(target.path, text);
   return { ...target, content: text };
+}
+
+// 脚本声明的参数表（`@param` 注释）——供面板渲染输入框、CLI 对照 flag 名
+export function readParams(name: unknown): ScriptParam[] {
+  const target = editableScript(name);
+  if (!existsSync(target.path)) throw notFound(`脚本不存在: ${target.name}`);
+  return parseParams(readFileSync(target.path, 'utf8'));
 }
 
 export interface CreateScriptInput {

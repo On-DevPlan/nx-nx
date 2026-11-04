@@ -10,6 +10,8 @@ import { useDialog, useToast } from '../../web/frontend/components/ui.jsx';
 import { useStore } from '../../web/frontend/store.jsx';
 import { ScriptEditor } from './editor.js';
 import { ScriptSide } from './side-panel.js';
+import type { ScriptParam } from '../../core/script/params.js';
+import { defaultValues, paramTokens } from './helpers.js';
 import { LS_KEY, defaultTemplate, loadUi, tokenize } from './helpers.js';
 import type { AliasInfo, RunResult, ScriptInfo } from './helpers.js';
 
@@ -27,6 +29,8 @@ export default function ScriptView() {
   const [args, setArgs] = useState('');
   const [tab, setTab] = useState<'output' | 'aliases'>(savedUi.tab ?? 'output');
   const [runResult, setRunResult] = useState<RunResult | null>(null);
+  const [params, setParams] = useState<ScriptParam[]>([]);
+  const [paramValues, setParamValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState('');
 
@@ -66,6 +70,30 @@ export default function ScriptView() {
       .then((r) => setAliases(r.aliases))
       .catch((e: unknown) => setErr(String((e as { message?: string })?.message || e)));
   }, [client]);
+
+  // 选中脚本 → 拉参数声明（表单控件据此渲染）；切换时用默认值重置
+  useEffect(() => {
+    if (!selected) {
+      setParams([]);
+      setParamValues({});
+      return;
+    }
+    let alive = true;
+    client['script.params']({ name: selected })
+      .then((r) => {
+        if (!alive) return;
+        setParams(r.params);
+        setParamValues(defaultValues(r.params));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setParams([]);
+        setParamValues({});
+      });
+    return () => {
+      alive = false;
+    };
+  }, [selected, client]);
 
   // 选中脚本 → 读源码；切走后丢弃迟到的响应
   useEffect(() => {
@@ -144,7 +172,9 @@ export default function ScriptView() {
     }
     setBusy('run');
     try {
-      setRunResult(await client['script.run']({ name: selected, args: tokenize(args) }));
+      // 表单参数 → --k=v token，自定义参数追加在后
+      const argv = [...paramTokens(params, paramValues), ...tokenize(args)];
+      setRunResult(await client['script.run']({ name: selected, args: argv }));
     } catch (e) {
       setRunResult({
         script: selected,
@@ -156,7 +186,7 @@ export default function ScriptView() {
     } finally {
       setBusy(null);
     }
-  }, [selected, working, dirty, client, content, args, toast]);
+  }, [selected, working, dirty, client, content, args, params, paramValues, toast]);
 
   const create = async () => {
     const raw = await dialog({
@@ -267,6 +297,9 @@ export default function ScriptView() {
         busy={busy}
         args={args}
         err={err}
+        params={params}
+        paramValues={paramValues}
+        onParamValue={(name, value) => setParamValues((prev) => ({ ...prev, [name]: value }))}
         canRun={!(current?.shared)}
         onContent={setContent}
         onArgs={setArgs}

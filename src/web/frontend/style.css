@@ -574,3 +574,27 @@ main { padding: 16px; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--mid); }
 .dot-ok { background: #2f9e44; }
 .dot-bad { background: #e5484d; }
+
+/* ---- 脚本参数表单（@param 声明 → 控件） ---- */
+.script-params { border-bottom: var(--border); }
+.param-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px; padding: 8px 12px 4px; }
+.param-row { display: flex; align-items: center; gap: 6px; font-size: 12px; min-width: 0; }
+.param-name { flex: 0 0 auto; min-width: 96px; opacity: 0.8; display: inline-flex; align-items: center; gap: 4px; }
+.param-check { width: 14px; height: 14px; margin: 0; }
+.param-row input[type='text'], .param-row input[type='number'], .param-row select {
+  flex: 1 1 auto; min-width: 0; height: 24px; padding: 0 8px; font-size: 12px;
+  border: var(--border); border-radius: 4px; background: var(--bg, transparent); color: var(--ink, inherit);
+}
+.param-desc { flex: 0 0 auto; font-size: 11px; opacity: 0.55; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
+
+/* ---- 脚本参数表单（@param 声明 → 控件） ---- */
+.script-params { border-bottom: var(--border); }
+.param-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px; padding: 8px 12px 4px; }
+.param-row { display: flex; align-items: center; gap: 6px; font-size: 12px; min-width: 0; }
+.param-name { flex: 0 0 auto; min-width: 96px; opacity: 0.8; display: inline-flex; align-items: center; gap: 4px; }
+.param-check { width: 14px; height: 14px; margin: 0; }
+.param-row input[type='text'], .param-row input[type='number'], .param-row select {
+  flex: 1 1 auto; min-width: 0; height: 24px; padding: 0 8px; font-size: 12px;
+  border: var(--border); border-radius: 4px; background: var(--bg, transparent); color: var(--ink, inherit);
+}
+.param-desc { flex: 0 0 auto; font-size: 11px; opacity: 0.55; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }

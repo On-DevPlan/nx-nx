@@ -8,6 +8,12 @@
 //   node assets/scripts/sync-nx-skills.mjs --root D:\code\a_js\proj
 //   nx-nx script run sync-nx-skills --root D:\code\a_js\proj --to ~/.claude/skills
 //
+// @param root string - 扫描根目录（必填，面板里是文本框）
+// @param to string - 安装目录（默认 ~/.claude/skills）
+// @param depth number 1 向下扫描层数
+// @param filter string - 只处理名字含该子串的项目
+// @param dry boolean false 只看会发生什么，不写盘
+//
 // 自己装，不借各项目的 bin：
 //   安装规则是确定的（就三步），所以直接按规则做，不去调每个项目的安装器，
 //   也就不会为 9 个项目起 9 个子进程——整个脚本是纯文件操作。

@@ -1,5 +1,7 @@
-// 脚本编辑器卡片：头部操作 + 参数 + 代码 textarea + 文件信息。
+// 脚本编辑器卡片：头部操作 + 参数表单 + 代码 textarea + 文件信息。
 import { Copyable } from '../../web/frontend/components/ui.jsx';
+import type { ScriptParam } from '../../core/script/params.js';
+import { ParamsForm } from './params-form.js';
 
 interface Props {
   selected: string | null;
@@ -9,6 +11,9 @@ interface Props {
   busy: string | null;
   args: string;
   err: string;
+  params: ScriptParam[];
+  paramValues: Record<string, string>;
+  onParamValue: (name: string, value: string) => void;
   onContent: (v: string) => void;
   onArgs: (v: string) => void;
   onSave: () => void;
@@ -25,6 +30,9 @@ export function ScriptEditor({
   busy,
   args,
   err,
+  params,
+  paramValues,
+  onParamValue,
   onContent,
   onArgs,
   onSave,
@@ -56,18 +64,13 @@ export function ScriptEditor({
 
       {selected && (
         <>
-          <div className="script-args">
-            <label className="muted" htmlFor="script-args">
-              参数
-            </label>
-            <input
-              id="script-args"
-              value={args}
-              onChange={(e) => onArgs(e.target.value)}
-              placeholder="--root D:\code\a_js\proj --dry"
-              spellCheck={false}
-            />
-          </div>
+          <ParamsForm
+            params={params}
+            values={paramValues}
+            onValue={onParamValue}
+            custom={args}
+            onCustom={onArgs}
+          />
           <textarea
             className="code-editor"
             value={content}

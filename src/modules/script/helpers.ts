@@ -56,3 +56,34 @@ export function defaultTemplate(name: string): string {
     '',
   ].join('\n');
 }
+
+// ---- 参数表单的工具（前端专用副本）----
+//
+// 为什么不在前端 import core/script/params.ts：
+// 分层测试「视图 tsx 不做 node 侧的值导入」——Vite 会把 node 侧代码打进浏览器包，
+// 只允许 import type。这两个函数是纯逻辑，语义必须与 core/script/params.ts 保持一致：
+//   defaultValues: 声明默认值 → 表单初值
+//   paramTokens:   表单值 → --k=v（boolean true → --k；空值跳过）
+export function defaultValues(params: { name: string; default: string }[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const p of params) out[p.name] = p.default;
+  return out;
+}
+
+export function paramTokens(
+  params: { name: string; type: string }[],
+  values: Record<string, string>,
+): string[] {
+  const out: string[] = [];
+  for (const p of params) {
+    const v = values[p.name];
+    if (v === undefined) continue;
+    if (p.type === 'boolean') {
+      if (v === 'true') out.push(`--${p.name}`);
+      continue;
+    }
+    if (v === '') continue;
+    out.push(`--${p.name}=${v}`);
+  }
+  return out;
+}
