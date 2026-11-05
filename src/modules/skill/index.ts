@@ -95,7 +95,7 @@ export default defineModule({
       id: 'skill.install',
       cli: ['skill', 'install'],
       http: ['POST', '/api/skill-install'],
-      summary: '安装 skill、整组 skill 或全部 skill',
+      summary: '安装 skill、整组 skill 或全部 skill（--all 直接覆盖，不需要 --force）',
       args: [{ name: 'name', required: false }],
       flags: {
         all: { type: 'boolean' },

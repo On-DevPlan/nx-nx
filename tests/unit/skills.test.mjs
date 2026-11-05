@@ -132,17 +132,19 @@ test('installAll: 事实源是目录扫描——groups.json 漏登记的 skill �
   assert.ok(existsSync(join(to, 'c', 'SKILL.md')));
 });
 
-test('installAll: 任一冲突 → 整体 conflict、不落任何新文件', async () => {
+test('installAll: 本地有差异 → 直接覆盖（--all 的语义，不需要 --force）', async () => {
   const root = tmp();
   seedAssets(root, ['a', 'b']);
   process.env.NX_NX_ASSETS = root;
   const to = tmp();
   await installOne('a', { to });
+  // 包内 a 改版、目标目录 b 还没装：--all 应当把 a 覆盖掉并补上 b
   writeFileSync(join(root, 'a', 'SKILL.md'), '# a\n变\n');
   const r = await installAll({ to });
-  assert.equal(r.status, 'conflict');
-  assert.equal(r.skills.length, 1);
-  assert.ok(!existsSync(join(to, 'b')), '冲突时未预检的 skill 也不应被装入');
+  assert.equal(r.status, 'ok');
+  assert.equal(r.skills.length, 2, '两个 skill 都应就位');
+  assert.ok(existsSync(join(to, 'b')), '--all 会补齐缺失的 skill');
+  assert.match(readFileSync(join(to, 'a', 'SKILL.md'), 'utf8'), /变/, '包内版本覆盖了旧文件');
 });
 
 test('installGroup: 组内有冲突且未 force → 整体 conflict、不落新文件', async () => {

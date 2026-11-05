@@ -249,7 +249,9 @@ export async function installAll(
 ): Promise<GroupInstallResult> {
   const names = await bundledSkillNames();
   if (!names.length) throw specError('assets/ 内没有可安装的 skill（找不到任何 SKILL.md）');
-  return installNames(names, '*', opts);
+  // --all 的语义是「装全 + 对齐到包内版本」：force 恒开，跳过冲突预检。
+  // 想保留目标目录里的本地改动就别用 --all；--group 的预检语义不变。
+  return installNames(names, '*', { ...opts, force: true });
 }
 
 // 批量安装共用实现：无副作用预检 → 任一冲突整体不落文件 → 逐项安装。
