@@ -122,6 +122,27 @@ test('空间方法不存在时如实报错（不静默返回 undefined）', asyn
   }
 });
 
+test('空间方法抛错：如实报错并带上调用栈（排错要看得见从哪调进去的）', async () => {
+  const dir = tmp();
+  const panel = join(dir, 'boom.shared.mjs');
+  writeFileSync(
+    panel,
+    [
+      'globalThis.explode = function explode() { throw new Error("业务炸了"); };',
+    ].join('\n'),
+    { encoding: 'utf8' },
+  );
+  try {
+    const r = await callSpaceMethod(panel, 'explode', []);
+    assert.equal(r.ok, false);
+    assert.match(r.error ?? '', /业务炸了/);
+    assert.ok(Array.isArray(r.stack), '失败时应当带调用栈');
+    assert.ok(r.stack.length > 0, '调用栈不该是空的');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('空间 check：bool 方法给出 alive 判定，非 true 一律判不通过', async () => {
   const { dir, panel } = panelCase();
   try {

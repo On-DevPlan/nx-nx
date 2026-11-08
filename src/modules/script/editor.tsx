@@ -13,13 +13,15 @@ interface Props {
   content: string;
   dirty: boolean;
   busy: string | null;
-  args: string;
+  customName: string;
+  customValue: string;
   err: string;
   params: ScriptParam[];
   paramValues: Record<string, string>;
   onParamValue: (name: string, value: string) => void;
   onContent: (v: string) => void;
-  onArgs: (v: string) => void;
+  onCustomName: (v: string) => void;
+  onCustomValue: (v: string) => void;
   onSave: () => void;
   onRun: () => void;
   canRun: boolean;
@@ -32,13 +34,15 @@ export function ScriptEditor({
   content,
   dirty,
   busy,
-  args,
+  customName,
+  customValue,
   err,
   params,
   paramValues,
   onParamValue,
   onContent,
-  onArgs,
+  onCustomName,
+  onCustomValue,
   onSave,
   onRun,
   canRun,
@@ -89,8 +93,10 @@ export function ScriptEditor({
             params={params}
             values={paramValues}
             onValue={onParamValue}
-            custom={args}
-            onCustom={onArgs}
+            customName={customName}
+            onCustomName={onCustomName}
+            customValue={customValue}
+            onCustomValue={onCustomValue}
           />
           <textarea
             className="code-editor"

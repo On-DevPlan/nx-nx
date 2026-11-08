@@ -5,13 +5,14 @@
 - **共享面板升格为「管理空间」（namespace）**：新增 `assets/scripts/_ns.mjs`，把面板从
   「一段跑完就散的脚本」变成可装载、可列举、可调用的空间实体——有名字、有状态（堆）、
   有方法（可列举 / 可调用）、有调用栈。面板既可沿用 `globalThis` 风格，也可
-  `defineSpace({ name, state, methods, hooks })` 显式声明（两种风格可混用）。
+  `defineSpace({ name, state, methods })` 显式声明（两种风格可混用）。
 - **执行 server 前先 check**：服务组新增 `space: { panel, check }` 配置，`check` 指向空间里
-  那个**返回 bool** 的方法。流水线在启动主脚本**之前**先调它，返回 false 就短路、不启动
+  那个**返回 bool** 的方法。**启动主脚本之前**先调它，返回 false 就短路、不启动
   （依赖没就绪就别起，起早了只会白占端口）。`sg run` 的步骤报告新增 `space.check` 一行。
 - **空间管理命令**：`sg hub <id>`（一组看清 server / client / 空间方法 / 当前状态）、
-  `sg space <id>`（方法清单 + 状态堆快照）、`sg space-call <id> --method <名> [--args <JSON>]`。
-  对应 HTTP 路由 `GET /api/service-groups/:id/hub`、`GET .../space`、`POST .../space-call`。
+  `sg space <id>`（方法清单 + 状态堆快照）、`sg space-call <id> --method <名> [--args <JSON>]`、
+  `sg spaces`（本机所有空间，索引落盘）。对应 HTTP 路由
+  `GET /api/service-groups/:id/hub`、`GET .../space`、`POST .../space-call`、`GET /api/service-spaces`。
 - **Web 面板改用 Ant Design 6 组件库**（`antd` + `@ant-design/icons`）：新增
   `src/web/frontend/components/theme.tsx`，把 antd 的 token 对齐到本项目既有的灰阶视觉规范
   （黑主色 / 12px 字号 / 28px 行高 / 1px 底线分隔 / 卡片不堆阴影），避免「两套面板」的割裂感。
@@ -30,6 +31,9 @@
   活性检测与日志降级为「命令式入口」（`sg check` / `sg logs` 文字链接），
   空间方法不铺逐个调用按钮——每个动作都有等价命令，自动化时照抄即可，
   按钮越少越好自动化。
+- **Web 脚本参数改为「填值」而非「敲 flag」**：参数标签不再显示 `--port`，
+  自定义参数框拆成「参数名 / 参数值」两段（名字留空 = 位置参数）。
+  脚本头部的 `@param` 声明照旧自动渲染成对应控件，用户不必知道脚本内部的 flag 语法。
 - **共享面板堆快照覆盖模块具名导出**：除 `globalThis` 新增键外，也打印面板 `export` 出来的
   常量与函数；对象展开列出其函数成员（`api: { getCustomers: [function getCustomers] }`），
   Map / Set / Buffer 等只报类型与条数，不再被 `JSON.stringify` 抹成误导性的 `{}`。
@@ -38,6 +42,16 @@
 
 ### Fixed
 
+- **空间闸门管住两扇门**：此前「执行 server 前先 check」只挂在流水线上，
+  `sg start` 与面板「启动」按钮直连 `startGroup` —— 同一个组点「跑流水线」不启动、
+  点「启动」却照样拉起进程。现已把闸门下沉到 `startGroup`，两扇门共用同一把锁；
+  自愈重启走 `skipGate`（恢复动作不被业务闸门拦死，避免「永不重启」）。
+- **空间子进程现在继承 `NX_NX_SERVE_PORT`**：面板里的 `serviceCheck` / `serviceAlive`
+  靠它回连本机 API，缺了它会打到默认端口 7880，表现为「check 莫名其妙不通过」。
+- **空间方法抛错时带调用栈**：`sg space-call` 失败时除了错误信息还会打印调用栈，
+  排错时能看见「从哪儿调进去的」。
+- **`@param` 解析与注释对齐**：此前只在前 80 行内扫描，正文里随便一句
+  `// @param foo ...` 也会变成一个输入框；现在声明区遇到空行即结束。
 - 内置全局函数清单里 `send` 重复登记了两条（描述较弱的重复项已删除）。
 - 「服务」页状态卡拆到 `status-card.tsx`，视图文件回到 300 行上限内。
 - `style.css` 里重复了两遍的「服务工作台」「脚本参数表单」样式块已合并去重。

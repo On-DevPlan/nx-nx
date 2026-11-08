@@ -108,6 +108,8 @@ export interface SpaceActionResult {
   alive?: boolean;
   detail?: string;
   error?: string;
+  /** 空间方法抛错时的调用栈（排错用） */
+  stack?: string[];
   space?: unknown;
   methods?: SpaceMethodInfo[];
   heap?: { key: string; describe: string; type: string }[];
@@ -130,6 +132,9 @@ export function runSpaceAction(
     NX_SHARED_PANEL: panelPath,
     NX_NS_ACTION: action,
   };
+  // serve 端口：面板里的 serviceCheck / serviceAlive 要靠它回连本机 API。
+  // 少了这一行，面板打的是默认端口 7880，check 就会「莫名其妙地不通过」。
+  if (process.env.NX_NX_SERVE_PORT) env['NX_NX_SERVE_PORT'] = process.env.NX_NX_SERVE_PORT;
   if (opts.method) env['NX_NS_METHOD'] = opts.method;
   if (opts.args) env['NX_NS_ARGS_JSON'] = JSON.stringify(opts.args);
 
@@ -203,4 +208,14 @@ export async function checkSpace(
   const r = await runSpaceAction(panelPath, 'check', { method });
   if (!r.ok) return { alive: false, detail: r.error ?? '空间 check 失败' };
   return { alive: r.alive === true, detail: r.detail ?? '' };
+}
+
+/**
+ * 空间方法的执行环境说明：面板里的 serviceCheck / serviceAlive 要靠
+ * NX_NX_SERVE_PORT 回连本机 API。CLI 直跑（不经 serve）时这个变量不存在，
+ * 面板里凡是走 serve API 的判断都会失败——这是环境事实，不是 bug。
+ * 把它显式告诉调用方，好过让人对着「莫名其妙不通过」猜。
+ */
+export function servePortAvailable(): boolean {
+  return Boolean(process.env.NX_NX_SERVE_PORT);
 }

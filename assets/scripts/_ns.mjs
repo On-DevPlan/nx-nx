@@ -2,11 +2,11 @@
 //
 // 为什么不是「一段脚本」：
 //   脚本是一次性执行完就散的代码；空间是一段被「装载 + 管理」的世界——
-//   它有名字、有状态（堆）、有方法（可列举 / 可调用 / 可重定义）、有生命周期钩子、
-//   有调用栈记录。启动按钮对应一个空间：服务组启动与流水线会先问这个空间「活没活」。
+//   它有名字、有状态（堆）、有方法（可列举 / 可调用 / 可重定义）、有调用栈记录。
+//   启动按钮对应一个空间：服务组启动与流水线会先问这个空间「活没活」。
 //
 // 空间有两种来源：
-//   1) 显式：面板导出 defineSpace({ name, state, methods, hooks }) —— 推荐
+//   1) 显式：面板导出 defineSpace({ name, description, state, methods }) —— 推荐
 //   2) 隐式：面板只往 globalThis 挂东西 —— 自动合成为空间
 //      （非函数键算状态，函数键算方法），老面板零改造即可被管理
 //
@@ -22,7 +22,7 @@ const SPACE_MARK = '__isNamespace';
 
 /**
  * 定义一个管理空间。
- * @param {{name:string, description?:string, state?:object, methods?:object, hooks?:object}} spec
+ * @param {{name:string, description?:string, state?:object, methods?:object}} spec
  */
 export function defineSpace(spec) {
   const src = spec && typeof spec === 'object' ? spec : {};
@@ -36,7 +36,6 @@ export function defineSpace(spec) {
     description: String(src.description ?? ''),
     state: { ...(src.state ?? {}) },
     methods: new Map(),
-    hooks: { ...(src.hooks ?? {}) },
     stack: [], // 方法调用栈记录（每次调用一帧）
   };
 
@@ -99,25 +98,24 @@ export async function callMethod(space, methodName, args = []) {
     return value;
   } catch (err) {
     frame.error = err instanceof Error ? err.message : String(err);
+    // 把调用栈挂到错误上：排错时最缺的就是「从哪儿调进去的」。
+    // 不覆盖原错误对象（可能是非 Error），用附加字段的方式。
+    if (err && typeof err === 'object' && !Array.isArray(err)) {
+      try {
+        Object.defineProperty(err, '__spaceStack', {
+          value: frame.stack,
+          enumerable: false,
+          configurable: true,
+        });
+      } catch {
+        // 冻结的对象加不了字段——不影响主流程
+      }
+    }
     throw err;
   } finally {
     // 栈只留最近若干帧：空间是长驻的，无界增长会把内存吃光
     if (space.stack.length > 50) space.stack.shift();
   }
-}
-
-/** 运行时新增/覆盖一个方法（方法管理：热插拔） */
-export function defineMethod(space, name, fn) {
-  if (!space) throw new Error('空间不存在');
-  if (typeof fn !== 'function') throw new Error(`方法 ${name} 不是函数`);
-  space.methods.set(String(name), fn);
-  return space;
-}
-
-/** 移除一个方法 */
-export function removeMethod(space, name) {
-  if (!space) return false;
-  return space.methods.delete(String(name));
 }
 
 /** 空间的堆快照：状态里每个值的可读描述 */

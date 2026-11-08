@@ -43,7 +43,7 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 | `nx-nx sg hub <id>` | **hub 概览**：一组看清 server / client / 空间方法 / 当前状态 |
 | `nx-nx sg set <id> --config <JSON>` | 创建或整组更新服务组配置（Web「服务」页是表单，手写 JSON 只在脚本/CI 里用） |
 | `nx-nx sg run <id>` | **流水线**：空间 check → 启动主脚本 → 等活性就绪 → client 脚本依次执行 |
-| `nx-nx sg start <id>` / `sg stop <id>` | 只启 / 只停主脚本（stop = 关停脚本 → 杀端口 → 杀 pid 三重兜底） |
+| `nx-nx sg start <id>` / `sg stop <id>` | 只启 / 只停主脚本（stop = 关停脚本 → 杀端口 → 杀 pid 三重兜底）；start 同样要过空间闸门 |
 | `nx-nx sg status [id]` / `sg check <id>` | 运行态快照 / 立即活性检测（返回 `{ alive, detail }`） |
 | `nx-nx sg logs <id>` | 查看日志：事件（启动/停止/检测失败/自愈）/ 主脚本 IO 尾部 / HTTP 请求日志清单 |
 | `nx-nx sg space <id>` | 管理空间的方法清单 + 状态堆快照 |
@@ -104,6 +104,28 @@ nx-nx script run <脚本名或路径> --参数 值...
 `nx-nx script run <脚本> --k v` 里的 `--k v` 会原样转成脚本的 argv，脚本里用
 `parseArgs(process.argv.slice(2))` 取。
 
+### 脚本参数：声明一次，Web 上自动变成输入框
+
+在脚本头部写 `@param` 注释，Web「脚本」页就自动渲染成对应控件（文本 / 数字 / 开关 / 下拉）——
+**不用手打 `--k v`**：
+
+```js
+// @param port number 18999 监听端口
+// @param host string 127.0.0.1 绑定地址
+// @param mode select(dev|prod) dev 运行模式
+// @param verbose boolean false 输出详细信息
+```
+
+规则：
+
+- 声明在**头部连续区**（遇到空行即结束，正文里的 `@param` 不算）
+- 类型：`string` / `number` / `boolean` / `select(a|b|c)`
+- 默认值写字面量；不需要默认值写 `-`（留空即可）；行尾是说明
+- Web 上填的是**值**，不是命令行 token；界面负责拼成脚本认的 `--k=v`
+- 没声明参数时，界面给一个「参数名 / 参数值」两段输入：名字留空 = 位置参数
+
+CLI 侧写法不变：`nx-nx script run demo-server --port 18999`。
+
 内置脚本之一 `sync-nx-skills`：把一批 nx 项目的随包 skill 强制覆盖安装到本机 skill
 目录（模板固定 → skill 文档改完，一条命令全量刷新）：
 
@@ -144,31 +166,40 @@ nx-nx script run sync-nx-skills --root D:\code\a_js\proj --dry   # 只看会发�
 "space": { "panel": "myapi.shared", "check": "checkUp" }
 ```
 
-`space.check` 指向空间里那个**返回 bool** 的方法。流水线在**启动 server 之前**先调它：
+`space.check` 指向空间里那个**返回 bool** 的方法。**启动主脚本之前**先调它：
 
 ```
 space.check → false  ⇒  不启动主脚本（依赖没就绪，起早了只会白占端口）
 space.check → true   ⇒  启动 server → 等活性就绪 → client 依次执行
 ```
 
-面板里怎么写都行——挂到 `globalThis` 或用 `defineSpace` 显式声明：
+**闸门管住两扇门**：`sg run`（流水线）与 `sg start` / 面板「启动」按钮**都**必须过闸门。
+自愈重启走 `skipGate` —— 恢复动作不能被业务闸门拦死，否则上游抖动会造成「永不重启」。
+
+**写 check 的正确姿势：判依赖，不要判自己。**
+问「我能不能起」却先去问「我活着吗」是循环依赖；应该问「我依赖的东西就绪了吗」。
 
 ```js
 // myapi.shared.mjs
 import { defineSpace } from './_ns.mjs';
 
 globalThis.checkUp = async function checkUp() {
-  return (await serviceCheck('my-svc')).alive;   // 返回 bool 即可
+  return (await upstreamReady());   // 判依赖：上游可达 / 凭据就绪 / 端口没被占
 };
 
 export const SPACE = defineSpace({
   name: 'myapi',
-  state: { BASE_URL: 'http://127.0.0.1:18080' },
+  description: '用户服务的管理空间：token / API 封装 / 起飞闸门',
+  state: { API_TOKEN, BASE_URL },
   methods: {
     getCustomers: async () => send({ method: 'GET', url: `${BASE_URL}/api/customers` }),
   },
 });
 ```
+
+> 面板里凡是走 serve API 的判断（`serviceCheck` / `serviceAlive`），都靠 `NX_NX_SERVE_PORT`
+> 回连本机面板。CLI 直跑（不经 `nx-nx serve`）时该变量不存在 —— 那种场景下 check
+> 应当自包含（判依赖可达性），不要绕回 serve。
 
 ### 命令覆盖全部能力（界面不堆按钮，自动化照抄即可）
 
@@ -176,6 +207,7 @@ export const SPACE = defineSpace({
 nx-nx sg hub my-svc        # 一组看清：server / client / 空间方法 / 当前状态
 nx-nx sg space my-svc      # 空间的方法清单 + 状态堆快照
 nx-nx sg space-call my-svc --method getCustomers --args '[]'   # 调空间方法
+nx-nx sg spaces            # 本机所有空间（索引落盘，不用每次装载）
 ```
 
 ### 三条命令覆盖大部分场景

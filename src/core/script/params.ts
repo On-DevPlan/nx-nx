@@ -31,8 +31,13 @@ export function parseParams(content: string): ScriptParam[] {
   const out: ScriptParam[] = [];
   const seen = new Set<string>();
   for (const line of content.split(/\r?\n/)) {
-    // 只扫前 80 行：参数声明属于头部契约，正文里的 @param 不算
-    if (out.length > 0 && out.length >= 40) break;
+    // 参数声明是**头部契约**：空行之后就是正文，不再采信后面的 @param
+    // （否则脚本正文里随便一句「// @param foo ...」也会变成一个输入框）。
+    if (line.trim() === '') {
+      if (out.length > 0) break;
+      continue;
+    }
+    if (out.length >= 40) break;
     const m = PARAM_RE.exec(line);
     if (!m) continue;
     const [, name, rawType, rawDefault, desc] = m;

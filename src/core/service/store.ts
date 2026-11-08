@@ -49,6 +49,9 @@ export interface SpaceConfig {
   check?: string;
 }
 
+// 空间 check 的默认方法名（配置没写 space.check 时用这个）
+export const DEFAULT_CHECK_METHOD = 'checkUp';
+
 export interface GroupRuntime {
   status: 'stopped' | 'running';
   pid?: number;

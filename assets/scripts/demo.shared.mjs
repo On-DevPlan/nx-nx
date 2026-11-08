@@ -29,13 +29,26 @@ globalThis.sendHeaders = function sendHeaders() {
 
 // ---- 空间的 bool check 方法（执行 server 前先 check）----
 //
-// 返回 bool 的方法就是空间的「活性闸门」：流水线在启动主脚本之前调它，
+// 返回 bool 的方法就是空间的「起飞闸门」：流水线在启动主脚本之前调它，
 // 返回 false 就不启动（依赖没就绪，起早了只会白占端口）。
 // 名字由服务组配置指定（space.check），默认 checkUp。
+//
+// 写 check 的正确姿势：**判依赖，不要判自己**。
+//   ✗ 判自己活没活 → 循环依赖（问「我能不能起」时先去问「我活着吗」）
+//   ✓ 判依赖就绪   → 上游可达 / 凭据就绪 / 端口没被占
+//
+// demo 的依赖就是「18999 端口」：起服务前得先确认这个端口没人占。
+// 若端口上正跑着自己（服务已起），那也允许——幂等语义，流水线会跳过启动。
 globalThis.checkUp = async function checkUp() {
-  // 这里的判断逻辑属于业务：例如「上游依赖是否可达」「token 是否已生成」
   const r = await serviceCheck('demo-group');
-  return r.alive;
+  if (r.alive) return true; // 已经在跑了 → 允许（幂等）
+  // 失活：看看是不是「端口被占」——那说明有别的进程占着，不能起
+  return !/EADDRINUSE|占用/.test(r.detail);
+};
+
+// 恒假：用来验证「闸门不过就不启动主脚本」这条不变量
+globalThis.alwaysDown = async function alwaysDown() {
+  return false;
 };
 
 // ---- 业务 API 封装（扩展 API 时只需记住这些函数签名）----

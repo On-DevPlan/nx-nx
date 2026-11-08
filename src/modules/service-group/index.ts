@@ -278,7 +278,14 @@ export default defineModule({
         return service.spaceCall(ctx.id, ctx.method, parsed);
       },
       (r) => {
-        if (!r.ok) return `✘ 调用失败：${r.error}`;
+        if (!r.ok) {
+          const lines = [`✘ 调用失败：${r.error}`];
+          if (r.stack?.length) {
+            lines.push('  调用栈:');
+            for (const f of r.stack.slice(0, 8)) lines.push(`    ${f}`);
+          }
+          return lines.join('\n');
+        }
         return `✔ ${r.method}() = ${JSON.stringify(r.value)}`;
       },
     ),

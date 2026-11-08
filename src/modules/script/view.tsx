@@ -14,7 +14,7 @@ import { ScriptEditor } from './editor.js';
 import { ScriptSide } from './side-panel.js';
 import type { ScriptParam } from '../../core/script/params.js';
 import { defaultValues, paramTokens } from './helpers.js';
-import { LS_KEY, defaultTemplate, loadUi, tokenize } from './helpers.js';
+import { LS_KEY, defaultTemplate, loadUi, customArgTokens } from './helpers.js';
 import type { AliasInfo, RunResult, ScriptInfo } from './helpers.js';
 
 export default function ScriptView() {
@@ -28,7 +28,8 @@ export default function ScriptView() {
   const [selected, setSelected] = useState<string | null>(savedUi.name ?? null);
   const [content, setContent] = useState('');
   const [savedContent, setSavedContent] = useState('');
-  const [args, setArgs] = useState('');
+  const [customName, setCustomName] = useState('');
+  const [customValue, setCustomValue] = useState('');
   const [tab, setTab] = useState<'output' | 'aliases'>(savedUi.tab ?? 'output');
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [params, setParams] = useState<ScriptParam[]>([]);
@@ -174,8 +175,8 @@ export default function ScriptView() {
     }
     setBusy('run');
     try {
-      // 表单参数 → --k=v token，自定义参数追加在后
-      const argv = [...paramTokens(params, paramValues), ...tokenize(args)];
+      // 表单参数 → token；自定义参数（名字 + 值）→ token
+      const argv = [...paramTokens(params, paramValues), ...customArgTokens(customName, customValue)];
       setRunResult(await client['script.run']({ name: selected, args: argv }));
     } catch (e) {
       setRunResult({
@@ -188,7 +189,7 @@ export default function ScriptView() {
     } finally {
       setBusy(null);
     }
-  }, [selected, working, dirty, client, content, args, params, paramValues, toast]);
+  }, [selected, working, dirty, client, content, customName, customValue, params, paramValues, toast]);
 
   const create = async () => {
     const raw = await dialog({
@@ -299,14 +300,16 @@ export default function ScriptView() {
         content={content}
         dirty={dirty}
         busy={busy}
-        args={args}
+        customName={customName}
+        customValue={customValue}
         err={err}
         params={params}
         paramValues={paramValues}
         onParamValue={(name, value) => setParamValues((prev) => ({ ...prev, [name]: value }))}
         canRun={!(current?.shared)}
         onContent={setContent}
-        onArgs={setArgs}
+        onCustomName={setCustomName}
+        onCustomValue={setCustomValue}
         onSave={save}
         onRun={run}
         onDelete={remove}

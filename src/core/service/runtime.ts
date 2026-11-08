@@ -20,9 +20,11 @@ import {
   loadRuntime,
   loadRuntimeAll,
   patchRuntime,
+  DEFAULT_CHECK_METHOD,
   type ServiceGroupConfig,
 } from './store.js';
 import { serviceHttpLogsDir, serviceLogsDir } from './paths.js';
+import { checkSpace, resolvePanelPath } from './namespace.js';
 import { runnerPath, scriptsDir } from '../script/paths.js';
 
 // 每组一个定时器（serve 进程内）
@@ -74,11 +76,59 @@ function pidAlive(pid: number): boolean {
 //   2. 配了 health 且真实活性检测通过 → skip（pid 记录可能过期——进程被外部回收/
 //      换机迁移等，端口活的就是服务本体，不重复启动）
 //   3. 都不满足 → 真正启动
+//
+// 空间闸门（「执行 server 前先 check」）在真正启动之前：
+//   配置了 space.check 的组，必须由空间里那个返回 bool 的方法点头才启动。
+//   闸门在 startGroup 里而不是流水线里——因为「启动」有两扇门
+//   （sg run 流水线 与 sg start / 面板启动按钮），闸门必须管住两扇。
+//   自愈重启（tickWatch）走 skipGate：恢复动作不该被业务闸门拦死，
+//   否则依赖抖动会造成「永不重启」。
 
-export async function startGroup(id: string): Promise<{ started: boolean; pid?: number; logFile: string; detail: string }> {
+export interface SpaceGateResult {
+  method: string;
+  alive: boolean;
+  detail: string;
+}
+
+/**
+ * 空间闸门：问空间一个 bool 方法「现在能起吗」。
+ * 没配空间或没配 check 方法 → null（不做前置 check）。
+ */
+export async function spaceGate(g: ServiceGroupConfig): Promise<SpaceGateResult | null> {
+  const cfg = g.space;
+  if (!cfg) return null;
+  const panel = cfg.panel || g.shared;
+  if (!panel) return null;
+  const method = cfg.check || DEFAULT_CHECK_METHOD;
+  let panelPath: string;
+  try {
+    panelPath = resolvePanelPath(panel);
+  } catch (err) {
+    return { method, alive: false, detail: err instanceof Error ? err.message : String(err) };
+  }
+  const r = await checkSpace(panelPath, method);
+  return { method, alive: r.alive, detail: r.detail };
+}
+
+export async function startGroup(
+  id: string,
+  opts: { skipGate?: boolean } = {},
+): Promise<{ started: boolean; pid?: number; logFile: string; detail: string }> {
   const g = getGroup(id);
   if (!g.main) throw new Error(`服务组 ${id} 未配置主脚本（main）`);
   const rt = loadRuntime(id);
+
+  // 空间闸门：不过就不启动（保守：宁可不起，也不假装活）
+  if (!opts.skipGate) {
+    const gate = await spaceGate(g);
+    if (gate && !gate.alive) {
+      const detail = `空间 check 未通过（${gate.method}）：${gate.detail}`;
+      appendEvent(id, detail);
+      patchRuntime(id, { alive: false, detail });
+      return { started: false, pid: rt.pid, logFile: rt.logFile ?? '', detail };
+    }
+  }
+
   if (rt.status === 'running' && rt.pid && pidAlive(rt.pid)) {
     return { started: false, pid: rt.pid, logFile: rt.logFile ?? '', detail: '已在运行' };
   }
@@ -261,7 +311,9 @@ async function tickWatch(id: string): Promise<void> {
     if (rt.logFile) appendMainLog(rt.logFile, `失活自愈触发（连续 ${failStreak} 次检测失败）`);
     try {
       stopGroup(id, { silent: true });
-      await startGroup(id);
+      // skipGate：自愈是恢复动作，不能被「起飞闸门」拦死——
+      // 否则上游依赖抖动会造成「永不重启」。
+      await startGroup(id, { skipGate: true });
       appendEvent(id, `自愈完成（restarts +1）`);
       patchRuntime(id, { restarts: loadRuntime(id).restarts + 1 });
     } catch (err) {

@@ -8,7 +8,11 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { badInput } from '../errors/index.js';
 
-const APP_DIR = join(homedir(), '.nx-nx');
+// NX_NX_HOME 是服务组数据的隔离点（测试用；与 NX_NX_SCRIPTS 同一思路）：
+// 设了就整个服务组目录搬走，绝不碰用户真实的 ~/.nx-nx。
+const APP_DIR = process.env.NX_NX_HOME
+  ? join(process.env.NX_NX_HOME, '.nx-nx')
+  : join(homedir(), '.nx-nx');
 const SERVICES_DIR = join(APP_DIR, 'services');
 
 export function serviceGroupsPath(): string {

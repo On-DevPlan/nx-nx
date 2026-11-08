@@ -173,6 +173,8 @@ async function runSpaceAction(space) {
       action: nsAction,
       method: nsMethod,
       error: err instanceof Error ? err.message : String(err),
+      // 调用栈：空间方法抛错时最需要的信息（callMethod 挂在错误上）
+      stack: err && typeof err === 'object' ? err.__spaceStack : undefined,
     });
     return;
   }

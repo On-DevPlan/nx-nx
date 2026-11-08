@@ -23,28 +23,22 @@ export function loadUi(): SavedUi {
   }
 }
 
-// 参数输入框的解析：按空白拆分，支持单/双引号；反斜杠不做转义（Windows 路径要能用）。
-export function tokenize(input: string): string[] {
-  const out: string[] = [];
-  let cur = '';
-  let quote: '"' | "'" | null = null;
-  for (const ch of input) {
-    if (quote) {
-      if (ch === quote) quote = null;
-      else cur += ch;
-    } else if (ch === '"' || ch === "'") {
-      quote = ch;
-    } else if (/\s/.test(ch)) {
-      if (cur) {
-        out.push(cur);
-        cur = '';
-      }
-    } else {
-      cur += ch;
-    }
-  }
-  if (cur) out.push(cur);
-  return out;
+// 自定义参数：用户填「名字 值」或只填「值」→ 拼成脚本能认的 argv。
+//
+// 为什么 Web 上要这一层：
+//   脚本侧用 parseArgs 读 `--port 18999`（这是脚本的既有契约）。
+//   但 Web 界面让用户手打 `--` 开头的东西很别扭——它不是 shell，
+//   用户也不该知道脚本内部用什么 flag 语法。
+//   所以界面只让用户填「名字」和「值」两段，token 拼装在这里做。
+//
+//   名字留空 → 该值作为位置参数（argv._）。
+//   名字非空 → `--名字=值`（等号连写：值里的空格不会散成两个 token）。
+export function customArgTokens(name: string, value: string): string[] {
+  const v = value.trim();
+  if (!v) return [];
+  const key = name.trim().replace(/^-+/, ''); // 容忍用户手写了横线
+  if (!key) return [v];
+  return [`--${key}=${v}`];
 }
 
 export function defaultTemplate(name: string): string {
