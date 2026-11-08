@@ -5,6 +5,8 @@
 //   - 运行前自动保存：用户看到的是编辑器内容，运行的也必须是它，不能悄悄跑磁盘旧版本。
 //   - 所有操作都走 action（/api），因此每个按钮都有等价的 CLI 命令（CliHints 会列出来）。
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Badge, Button, Card, Empty, Space, Tooltip } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 import { CliHints } from '../../web/frontend/components/CliHints.js';
 import { useDialog, useToast } from '../../web/frontend/components/ui.jsx';
 import { useStore } from '../../web/frontend/store.jsx';
@@ -263,31 +265,33 @@ export default function ScriptView() {
 
   return (
     <div className="script-grid">
-      <div className="card script-list">
-        <div className="colhead">
-          <span>脚本</span>
-          <span className="acts">
-            <span className="tag">{scripts.length}</span>
-            <button className="btn small" onClick={create} disabled={working}>
-              新建
-            </button>
-          </span>
-        </div>
-        <div className="script-list-body">
-          {scripts.map((s) => (
-            <button
-              key={s.name}
-              className={'tpl-item' + (s.name === selected ? ' active' : '')}
-              onClick={() => selectScript(s.name)}
-            >
-              <div className="tpl-name mono">{s.name}{s.shared ? ' ⛭' : ''}</div>
-              <div className="tpl-desc muted">{s.description || '—'}</div>
-            </button>
-          ))}
-          {!scripts.length && <div className="empty">暂无脚本，点「新建」开始。</div>}
-        </div>
+      <Card
+        className="script-list"
+        size="small"
+        title="脚本"
+        extra={
+          <Space size={4}>
+            <Badge count={scripts.length} showZero color="#8b9096" />
+            <Tooltip title="新建脚本">
+              <Button size="small" icon={<PlusOutlined />} onClick={create} disabled={working} />
+            </Tooltip>
+          </Space>
+        }
+        styles={{ body: { padding: 0, overflow: 'auto', flex: 1, minHeight: 0 } }}
+      >
+        {scripts.map((s) => (
+          <button
+            key={s.name}
+            className={'tpl-item' + (s.name === selected ? ' active' : '')}
+            onClick={() => selectScript(s.name)}
+          >
+            <div className="tpl-name mono">{s.name}{s.shared ? ' ⛭' : ''}</div>
+            <div className="tpl-desc muted">{s.description || '—'}</div>
+          </button>
+        ))}
+        {!scripts.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无脚本，点「新建」开始" style={{ margin: '24px 0' }} />}
         <CliHints module="script" />
-      </div>
+      </Card>
 
       <ScriptEditor
         selected={selected}

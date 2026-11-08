@@ -1,4 +1,8 @@
 // 脚本编辑器卡片：头部操作 + 参数表单 + 代码 textarea + 文件信息。
+//
+// 组件库：antd（token 见 components/theme.tsx）。
+import { Badge, Button, Tooltip } from 'antd';
+import { DeleteOutlined, PlayCircleOutlined, SaveOutlined } from '@ant-design/icons';
 import { Copyable } from '../../web/frontend/components/ui.jsx';
 import type { ScriptParam } from '../../core/script/params.js';
 import { ParamsForm } from './params-form.js';
@@ -46,16 +50,33 @@ export function ScriptEditor({
       <div className="colhead">
         <span className="mono">{selected ? `${selected}.mjs` : '脚本编辑器'}</span>
         <span className="acts">
-          {dirty && <span className="tag bad">未保存</span>}
-          <button className="btn small" onClick={onSave} disabled={!selected || !dirty || working}>
-            保存
-          </button>
-          <button className="btn small" onClick={onRun} disabled={!selected || working || !canRun} title={canRun ? "" : "共享面板不可直接运行（由服务组脚本自动装载）"}>
-            {busy === 'run' ? '运行中…' : '运行'}
-          </button>
-          <button className="btn small danger" onClick={onDelete} disabled={!selected || working}>
-            删除
-          </button>
+          {dirty && <Badge status="error" text="未保存" />}
+          <Tooltip title="保存（Ctrl/Cmd+S）">
+            <Button
+              size="small"
+              icon={<SaveOutlined />}
+              onClick={onSave}
+              disabled={!selected || !dirty || working}
+            >
+              保存
+            </Button>
+          </Tooltip>
+          <Tooltip
+            title={canRun ? '运行（Ctrl/Cmd+Enter）' : '共享面板不可直接运行（由服务组脚本自动装载）'}
+          >
+            <Button
+              size="small"
+              type="primary"
+              icon={<PlayCircleOutlined />}
+              onClick={onRun}
+              disabled={!selected || working || !canRun}
+            >
+              {busy === 'run' ? '运行中…' : '运行'}
+            </Button>
+          </Tooltip>
+          <Tooltip title="删除脚本">
+            <Button size="small" danger icon={<DeleteOutlined />} onClick={onDelete} disabled={!selected || working} />
+          </Tooltip>
         </span>
       </div>
 

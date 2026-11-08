@@ -1,5 +1,30 @@
 ## [Unreleased]
 
+### Added
+
+- **Web 面板改用 Ant Design 6 组件库**（`antd` + `@ant-design/icons`）：新增
+  `src/web/frontend/components/theme.tsx`，把 antd 的 token 对齐到本项目既有的灰阶视觉规范
+  （黑主色 / 12px 字号 / 28px 行高 / 1px 底线分隔 / 卡片不堆阴影），避免「两套面板」的割裂感。
+  「服务」页改用 `Card` / `Statistic` / `Badge` / `Form` / `Select` / `Tooltip`，
+  「脚本」页改用 `Tabs` / `Input` / `InputNumber` / `Switch`。
+- **服务组「流水线步骤」可排序**：client 脚本列表支持上下移动，**列表顺序即执行顺序**
+  （此前只能多选，表达不了顺序）。
+- **共享面板隐藏测试案例（`__tests`）真的会跑**：装载面板后自动执行一遍，通过的用例不出声，
+  失败的写 stderr 告警（不阻断业务脚本）——此前文档承诺了自动执行，runner 却从未实现。
+
+### Changed
+
+- **共享面板堆快照覆盖模块具名导出**：除 `globalThis` 新增键外，也打印面板 `export` 出来的
+  常量与函数；对象展开列出其函数成员（`api: { getCustomers: [function getCustomers] }`），
+  Map / Set / Buffer 等只报类型与条数，不再被 `JSON.stringify` 抹成误导性的 `{}`。
+- 「服务」页不再用浏览器原生 `prompt` / `confirm`（项目规范要求一律页内实现），
+  改用既有的 `useDialog` 弹窗组件。
+
+### Fixed
+
+- 「服务」页状态卡拆到 `status-card.tsx`，视图文件回到 300 行上限内。
+- `style.css` 里重复了两遍的「服务工作台」「脚本参数表单」样式块已合并去重。
+
 ## [0.9.2] - 2026-11-05
 
 ### Changed

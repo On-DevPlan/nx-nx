@@ -440,7 +440,7 @@ main { padding: 16px; }
 }
 
 .script-list { display: flex; flex-direction: column; }
-.script-list-body { max-height: 58vh; overflow: auto; }
+.script-list .ant-card-body { display: flex; flex-direction: column; padding: 0; overflow: auto; flex: 1; min-height: 0; }
 .script-list .cli-hint { margin-top: auto; }
 
 .script-editor { display: flex; flex-direction: column; min-height: 480px; }
@@ -451,11 +451,7 @@ main { padding: 16px; }
   padding: 8px 12px;
   border-bottom: var(--border);
 }
-.script-args input {
-  flex: 1;
-  min-width: 0;
-  font-family: ui-monospace, Consolas, monospace;
-}
+.script-args .ant-input { flex: 1; min-width: 0; font-family: ui-monospace, Consolas, monospace; }
 .script-args label { font-size: 11px; white-space: nowrap; }
 
 .code-editor {
@@ -509,67 +505,44 @@ main { padding: 16px; }
   color: var(--bad);
 }
 
-/* ---- 服务工作台（表单版） ---- */
+/* ---- 服务工作台（antd 版）----
+   antd 组件自带边框与底色，这里只补「它管不到」的部分：
+   列表项（沿用模板页的 .tpl-item 语汇）、状态统计条、流水线步骤行。 */
 .sg-grid { display: grid; grid-template-columns: 240px 1fr; gap: 12px; height: 100%; min-height: 0; }
 .sg-list { display: flex; flex-direction: column; min-height: 0; }
-.sg-list-body { overflow: auto; flex: 1; min-height: 0; }
+.sg-list .ant-card-body { display: flex; flex-direction: column; padding: 0; }
+.sg-list .cli-hint { margin-top: auto; }
 .sg-detail { overflow: auto; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
 
-.sg-status .colhead { padding: 8px 12px; border-bottom: var(--border); }
-.sg-status-body { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px 4px; }
-.sg-pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--soft); }
-.sg-pill.ok { background: #2f9e4422; color: #2f9e44; }
-.sg-pill.bad { background: #e5484d22; color: #e5484d; }
-.small-line { padding: 0 12px 6px; font-size: 11px; }
-.muted { opacity: 0.65; }
+.sg-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 8px 10px; }
+.sg-stats .ant-statistic-title { font-size: 11px; color: var(--mid); }
+.sg-stats .ant-statistic-content { font-family: inherit; }
 
-.sg-form .colhead { padding: 8px 12px; border-bottom: var(--border); }
-.sg-form-body { padding: 10px 12px; }
-.sg-section { font-size: 12px; font-weight: 600; opacity: 0.75; margin: 14px 0 6px; padding-top: 8px; border-top: 1px dashed var(--border-color, #444); }
-.sg-row { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; }
-.sg-row > span { opacity: 0.75; }
-.sg-row input[type='text'], .sg-row input:not([type]), .sg-row select {
-  height: 24px; padding: 0 8px; font-size: 12px; border: var(--border); border-radius: 4px;
-  background: var(--bg, transparent); color: var(--ink, inherit);
+.sg-form-body .ant-form-item { margin-bottom: 12px; }
+.sg-form-body .ant-form-item-label > label { font-size: 12px; }
+.sg-form-body .ant-form-item-extra { font-size: 11px; color: var(--mid); margin-top: 2px; }
+.sg-steps { display: flex; flex-direction: column; gap: 4px; }
+.sg-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--row-h);
+  padding: 0 6px 0 0;
+  border: var(--border);
+  border-radius: 4px;
+  font-size: 12px;
 }
-.sg-row input[type='checkbox'] { width: 14px; height: 14px; }
-.sg-clients { display: flex; flex-wrap: wrap; gap: 4px 12px; }
-.sg-client { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 2px 6px; border: var(--border); border-radius: 4px; }
-.sg-json { padding: 8px 12px 12px; border-top: var(--border); }
-.sg-json pre { font-size: 11px; line-height: 1.5; max-height: 260px; overflow: auto; padding: 8px; background: var(--soft); border-radius: 4px; }
-
-.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--mid); }
-.dot-ok { background: #2f9e44; }
-.dot-bad { background: #e5484d; }
-
-/* ---- 服务工作台（表单版） ---- */
-.sg-grid { display: grid; grid-template-columns: 240px 1fr; gap: 12px; height: 100%; min-height: 0; }
-.sg-list { display: flex; flex-direction: column; min-height: 0; }
-.sg-list-body { overflow: auto; flex: 1; min-height: 0; }
-.sg-detail { overflow: auto; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
-
-.sg-status .colhead { padding: 8px 12px; border-bottom: var(--border); }
-.sg-status-body { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px 4px; }
-.sg-pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--soft); }
-.sg-pill.ok { background: #2f9e4422; color: #2f9e44; }
-.sg-pill.bad { background: #e5484d22; color: #e5484d; }
-.small-line { padding: 0 12px 6px; font-size: 11px; }
-.muted { opacity: 0.65; }
-
-.sg-form .colhead { padding: 8px 12px; border-bottom: var(--border); }
-.sg-form-body { padding: 10px 12px; }
-.sg-section { font-size: 12px; font-weight: 600; opacity: 0.75; margin: 14px 0 6px; padding-top: 8px; border-top: 1px dashed var(--border-color, #444); }
-.sg-row { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; }
-.sg-row > span { opacity: 0.75; }
-.sg-row input[type='text'], .sg-row input:not([type]), .sg-row select {
-  height: 24px; padding: 0 8px; font-size: 12px; border: var(--border); border-radius: 4px;
-  background: var(--bg, transparent); color: var(--ink, inherit);
+.sg-step-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sg-json-pre {
+  font-size: 11px;
+  line-height: 1.5;
+  max-height: 260px;
+  overflow: auto;
+  padding: 8px;
+  background: var(--soft);
+  border-radius: 4px;
+  margin: 4px 0 0;
 }
-.sg-row input[type='checkbox'] { width: 14px; height: 14px; }
-.sg-clients { display: flex; flex-wrap: wrap; gap: 4px 12px; }
-.sg-client { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 2px 6px; border: var(--border); border-radius: 4px; }
-.sg-json { padding: 8px 12px 12px; border-top: var(--border); }
-.sg-json pre { font-size: 11px; line-height: 1.5; max-height: 260px; overflow: auto; padding: 8px; background: var(--soft); border-radius: 4px; }
 
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--mid); }
 .dot-ok { background: #2f9e44; }
@@ -580,21 +553,11 @@ main { padding: 16px; }
 .param-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px; padding: 8px 12px 4px; }
 .param-row { display: flex; align-items: center; gap: 6px; font-size: 12px; min-width: 0; }
 .param-name { flex: 0 0 auto; min-width: 96px; opacity: 0.8; display: inline-flex; align-items: center; gap: 4px; }
-.param-check { width: 14px; height: 14px; margin: 0; }
-.param-row input[type='text'], .param-row input[type='number'], .param-row select {
-  flex: 1 1 auto; min-width: 0; height: 24px; padding: 0 8px; font-size: 12px;
-  border: var(--border); border-radius: 4px; background: var(--bg, transparent); color: var(--ink, inherit);
-}
 .param-desc { flex: 0 0 auto; font-size: 11px; opacity: 0.55; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
 
-/* ---- 脚本参数表单（@param 声明 → 控件） ---- */
-.script-params { border-bottom: var(--border); }
-.param-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px; padding: 8px 12px 4px; }
-.param-row { display: flex; align-items: center; gap: 6px; font-size: 12px; min-width: 0; }
-.param-name { flex: 0 0 auto; min-width: 96px; opacity: 0.8; display: inline-flex; align-items: center; gap: 4px; }
-.param-check { width: 14px; height: 14px; margin: 0; }
-.param-row input[type='text'], .param-row input[type='number'], .param-row select {
-  flex: 1 1 auto; min-width: 0; height: 24px; padding: 0 8px; font-size: 12px;
-  border: var(--border); border-radius: 4px; background: var(--bg, transparent); color: var(--ink, inherit);
-}
-.param-desc { flex: 0 0 auto; font-size: 11px; opacity: 0.55; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
+/* ---- 脚本工作台右侧（antd Tabs） ---- */
+.script-side { display: flex; flex-direction: column; }
+.script-side .ant-tabs { padding: 0 12px 12px; }
+.script-side .ant-tabs-nav { margin: 0 0 8px; }
+.script-side .ant-tabs-content-holder { overflow: auto; }
+.script-side .script-output, .script-side .script-aliases { max-height: 52vh; overflow: auto; }

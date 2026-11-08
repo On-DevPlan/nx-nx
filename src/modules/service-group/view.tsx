@@ -3,16 +3,24 @@
 // 设计原则：用户不碰 JSON。所有配置项都是表单字段（下拉/输入/多选），
 // 保存时由前端拼成配置对象提交 sg set；JSON 仅作为只读查看的折叠面板。
 // 表单体在 form.tsx（单文件行数约束），本文件只管列表、状态与动作。
+//
+// 组件库：antd（见 components/theme.tsx 的 token 对齐）——
+// 状态卡用 Badge/Statistic/Tooltip，配置区用 Form 家族，
+// 流水线步骤用可排序列表（顺序 = 执行顺序）。
 import { useCallback, useEffect, useState } from 'react';
+import { Alert, Badge, Button, Card, Empty, Space, Tooltip } from 'antd';
+import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { CliHints } from '../../web/frontend/components/CliHints.js';
-import { useToast } from '../../web/frontend/components/ui.jsx';
+import { useDialog, useToast } from '../../web/frontend/components/ui.jsx';
 import { useStore } from '../../web/frontend/store.jsx';
 import { SgForm, configFromForm, emptyForm, formFromConfig, type FormState } from './form.js';
+import { StatusCard, type SgAction } from './status-card.js';
 import type { GroupView } from './types.js';
 
 export default function ServiceView() {
   const { client } = useStore();
   const toast = useToast();
+  const { dialog, node: dialogNode } = useDialog();
   const [groups, setGroups] = useState<GroupView[]>([]);
   const [scripts, setScripts] = useState<{ name: string; shared: boolean }[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -59,7 +67,14 @@ export default function ServiceView() {
   );
 
   const createGroup = async () => {
-    const id = prompt('新服务组 id（小写字母/数字/连字符，如 my-svc）：');
+    const raw = await dialog({
+      title: '新建服务组',
+      message: '服务组 id（小写字母/数字/连字符，如 my-svc）。创建后可在右侧配置主脚本与活性检测。',
+      input: true,
+      placeholder: 'my-svc',
+    });
+    if (typeof raw !== 'string') return;
+    const id = raw.trim();
     if (!id) return;
     setBusy('create');
     try {
@@ -88,7 +103,7 @@ export default function ServiceView() {
     }
   };
 
-  const act = async (action: 'serviceGroup.start' | 'serviceGroup.stop' | 'serviceGroup.check' | 'serviceGroup.run', id: string) => {
+  const act = async (action: SgAction, id: string) => {
     setBusy(action + id);
     try {
       const r = await client[action]({ id });
@@ -103,7 +118,13 @@ export default function ServiceView() {
 
   const removeGroup = async () => {
     if (!selected) return;
-    if (!confirm(`删除服务组 ${selected}（会先停止其服务）？`)) return;
+    const ok = await dialog({
+      title: '删除服务组',
+      message: `删除服务组 ${selected}（会先停止其服务）？此操作不可撤销。`,
+      okText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
     setBusy('delete');
     try {
       await client['serviceGroup.delete']({ id: selected });
@@ -127,100 +148,88 @@ export default function ServiceView() {
 
   const entryScripts = scripts.filter((s) => !s.shared);
   const panelScripts = scripts.filter((s) => s.shared);
+  const working = busy !== null;
 
   return (
     <div className="sg-grid">
       {/* 左栏：服务组列表 */}
-      <div className="card sg-list">
-        <div className="colhead">
-          <span>服务组</span>
-          <span className="acts">
-            <span className="tag">{groups.length}</span>
-            <button className="btn small" onClick={createGroup} disabled={busy !== null}>
-              新建
-            </button>
-          </span>
-        </div>
-        <div className="sg-list-body">
-          {groups.map((g) => (
-            <button
-              key={g.config.id}
-              className={'tpl-item' + (g.config.id === selected ? ' active' : '')}
-              onClick={() => void select(g.config.id)}
-            >
-              <div className="tpl-name mono">
-                {g.runtime.status === 'running' ? (
-                  <span className={g.runtime.alive === false ? 'dot dot-bad' : 'dot dot-ok'} />
-                ) : (
-                  <span className="dot" />
-                )}{' '}
-                {g.config.id}
-              </div>
-              <div className="tpl-desc muted">
-                {g.config.name}
-                {g.runtime.restarts > 0 ? ` · 自愈 ${g.runtime.restarts} 次` : ''}
-              </div>
-            </button>
-          ))}
-          {!groups.length && <div className="empty">暂无服务组，点「新建」开始。</div>}
-          {err && <div className="empty bad-text">{err}</div>}
-        </div>
+      <Card
+        className="sg-list"
+        size="small"
+        title="服务组"
+        extra={
+          <Space size={4}>
+            <Badge count={groups.length} showZero color="#8b9096" />
+            <Tooltip title="新建服务组">
+              <Button size="small" icon={<PlusOutlined />} onClick={createGroup} disabled={working} />
+            </Tooltip>
+          </Space>
+        }
+        styles={{ body: { padding: 0, overflow: 'auto', flex: 1, minHeight: 0 } }}
+      >
+        {groups.map((g) => (
+          <button
+            key={g.config.id}
+            className={'tpl-item' + (g.config.id === selected ? ' active' : '')}
+            onClick={() => void select(g.config.id)}
+          >
+            <div className="tpl-name mono">
+              {g.runtime.status === 'running' ? (
+                <span className={g.runtime.alive === false ? 'dot dot-bad' : 'dot dot-ok'} />
+              ) : (
+                <span className="dot" />
+              )}{' '}
+              {g.config.id}
+            </div>
+            <div className="tpl-desc muted">
+              {g.config.name}
+              {g.runtime.restarts > 0 ? ` · 自愈 ${g.runtime.restarts} 次` : ''}
+            </div>
+          </button>
+        ))}
+        {!groups.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无服务组" style={{ margin: '24px 0' }} />}
+        {err && <Alert type="error" message={err} showIcon style={{ margin: 12 }} />}
         <CliHints module="service-group" />
-      </div>
+      </Card>
 
       {/* 右栏：状态 + 表单 */}
       <div className="sg-detail">
         {!current ? (
-          <div className="empty">左侧选择或新建一个服务组。</div>
+          <Card>
+            <Empty description="左侧选择或新建一个服务组。" />
+          </Card>
         ) : (
           <>
-            {/* 状态卡 */}
-            <div className="card sg-status">
-              <div className="colhead">
-                <span className="mono">{current.config.id}</span>
-                <span className="acts">
-                  <button className="btn small" disabled={busy !== null} onClick={() => void act('serviceGroup.start', current.config.id)}>启动</button>
-                  <button className="btn small" disabled={busy !== null} onClick={() => void act('serviceGroup.stop', current.config.id)}>停止</button>
-                  <button className="btn small" disabled={busy !== null} onClick={() => void act('serviceGroup.check', current.config.id)}>活性检测</button>
-                  <button className="btn small" disabled={busy !== null} onClick={() => void act('serviceGroup.run', current.config.id)}>跑流水线</button>
-                </span>
-              </div>
-              <div className="sg-status-body">
-                <span className="sg-pill">{current.runtime.status}{current.runtime.pid ? ` · pid ${current.runtime.pid}` : ''}</span>
-                {current.runtime.alive !== undefined && (
-                  <span className={current.runtime.alive ? 'sg-pill ok' : 'sg-pill bad'}>
-                    {current.runtime.alive ? '活性 OK' : '活性 FAIL'}
-                  </span>
-                )}
-                {current.runtime.restarts > 0 && <span className="sg-pill">自愈 {current.runtime.restarts} 次</span>}
-                {current.runtime.detail && <span className="muted">{current.runtime.detail}</span>}
-              </div>
-              {current.runtime.lastEvent && <div className="muted small-line">最近事件: {current.runtime.lastEvent}</div>}
-              {current.runtime.logFile && <div className="muted small-line mono">日志: {current.runtime.logFile}</div>}
-            </div>
+            {/* 状态卡：活性 / 自愈次数 / 事件 */}
+            <StatusCard group={current} working={working} onAction={act} />
 
             {/* 配置表单 */}
-            <div className="card sg-form">
-              <div className="colhead">
-                <span>配置</span>
-                <span className="acts">
-                  <button className="btn small danger" disabled={busy !== null} onClick={removeGroup}>删除组</button>
-                  <button className="btn small" disabled={busy !== null} onClick={save}>保存配置</button>
-                </span>
-              </div>
+            <Card
+              size="small"
+              title="配置"
+              extra={
+                <Space size={4}>
+                  <Tooltip title="删除服务组（会先停止其服务）">
+                    <Button size="small" danger icon={<DeleteOutlined />} disabled={working} onClick={removeGroup} />
+                  </Tooltip>
+                  <Button size="small" type="primary" icon={<EditOutlined />} disabled={working} onClick={save}>
+                    保存配置
+                  </Button>
+                </Space>
+              }
+            >
               <SgForm form={form} set={set} toggleClient={toggleClient} entryScripts={entryScripts} panelScripts={panelScripts} />
-              <div className="sg-json">
-                <button className="btn small" onClick={() => setShowJson((v) => !v)}>
-                  {showJson ? '收起 JSON' : '查看 JSON'}
-                </button>
-                {showJson && (
-                  <pre className="mono">{JSON.stringify(configFromForm(current.config.id, form), null, 2)}</pre>
-                )}
-              </div>
-            </div>
+              <Button size="small" type="link" style={{ paddingLeft: 0 }} onClick={() => setShowJson((v) => !v)}>
+                {showJson ? '收起 JSON' : '查看 JSON'}
+              </Button>
+              {showJson && (
+                <pre className="mono sg-json-pre">{JSON.stringify(configFromForm(current.config.id, form), null, 2)}</pre>
+              )}
+            </Card>
           </>
         )}
       </div>
+      {dialogNode}
     </div>
   );
 }

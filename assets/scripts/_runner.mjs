@@ -32,8 +32,9 @@ installAliases(globalThis);
 // 共享函数面板：整体优先执行（服务组绑定，env 注入面板路径）。
 const sharedPanel = process.env.NX_SHARED_PANEL;
 if (sharedPanel) {
-  await import(pathToFileURL(resolve(sharedPanel)).href);
-  dumpSharedPanelSnapshot(aliasNames, beforeKeys);
+  const panel = await import(pathToFileURL(resolve(sharedPanel)).href);
+  dumpSharedPanelSnapshot(aliasNames, beforeKeys, panel);
+  await runPanelTests();
 }
 
 // 让脚本看到的 argv 只有自己：argv[0]=node，argv[1]=脚本路径，之后是脚本参数。
@@ -44,32 +45,110 @@ await import(pathToFileURL(resolve(target)).href);
 // ---- 共享面板堆快照 ----
 //
 // 用户约定：共享面板里「常量 = 函数 = {}」，执行完成即产出数据（token、随机数组…）。
-// 这里扫描 globalThis 的新增键，逐个给出「能被 JSON 表示」的确认输出：
+// 这里扫描 globalThis 的新增键 + 面板模块的导出，逐个给出「能被 JSON 表示」的确认输出：
 //   - 可 JSON  → 打印预览（截断 240 字符）
 //   - 函数     → 打印 [function name]
 //   - 其余     → 只打印类型名（Map/Set/Buffer/循环引用对象…），不显示内部结构
-function dumpSharedPanelSnapshot(aliasNames, beforeKeys) {
+//
+// 「清理」的含义：Map / Buffer / 循环引用 / 原生句柄这类对象**不打印内部表示**——
+// 里面混着地址与系统句柄，泄露出去既没用又脏；只报类型名就够了。
+// __tests 是控制用的（见 runPanelTests），不进快照。
+function dumpSharedPanelSnapshot(aliasNames, beforeKeys, panel) {
   const added = Object.keys(globalThis).filter(
-    (k) => !beforeKeys.has(k) && !aliasNames.has(k),
+    (k) => !beforeKeys.has(k) && !aliasNames.has(k) && k !== '__tests',
   );
-  console.log(`[shared] 共享面板已装载（${added.length} 个导出）：`);
-  if (!added.length) {
-    console.log('[shared] （面板没有挂任何全局导出——数据请挂到 globalThis 或用 export 声明）');
-    return;
+  // 面板模块的具名导出（export const TOKEN = …）也是「面板产出了什么」的一部分，
+  // 它不一定挂在 globalThis 上——两处都收，导出优先（模块作用域才是源头）。
+  const exported = panel && typeof panel === 'object' ? Object.keys(panel) : [];
+  const seen = new Set();
+  const entries = [];
+  for (const k of exported) {
+    if (k === 'default' || seen.has(k)) continue;
+    seen.add(k);
+    entries.push([k, panel[k]]);
   }
   for (const k of added) {
-    const v = globalThis[k];
-    if (typeof v === 'function') {
-      console.log(`  ${k}: [function ${v.name || 'anonymous'}]`);
-      continue;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    entries.push([k, globalThis[k]]);
+  }
+
+  console.log(`[shared] 共享面板已装载（${entries.length} 个导出）：`);
+  if (!entries.length) {
+    console.log('[shared] （面板没有挂任何导出——数据请挂到 globalThis 或用 export 声明）');
+    return;
+  }
+  for (const [k, v] of entries) {
+    console.log(`  ${k}: ${describeValue(v)}`);
+  }
+}
+
+// 单个值的「可读描述」：能 JSON 表示就预览，否则只报类型（不泄露内部结构）
+function describeValue(v) {
+  if (typeof v === 'function') {
+    return `[function ${v.name || 'anonymous'}]`;
+  }
+  // Map / Set / Buffer 这类：JSON.stringify 会给出误导性的 "{}" / "[]"，
+  // 看起来像「空对象」而不是「不可 JSON 表示」——直接报类型更诚实。
+  if (v instanceof Map) return `[Map · ${v.size} 项]（非 JSON 可表示，内部细节已清理）`;
+  if (v instanceof Set) return `[Set · ${v.size} 项]（非 JSON 可表示，内部细节已清理）`;
+  if (v instanceof WeakMap) return '[WeakMap]（非 JSON 可表示，内部细节已清理）';
+  if (v instanceof WeakSet) return '[WeakSet]（非 JSON 可表示，内部细节已清理）';
+  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(v)) {
+    return `[Buffer · ${v.length} 字节]（非 JSON 可表示，内部细节已清理）`;
+  }
+  if (ArrayBuffer.isView(v)) {
+    return `[${v.constructor.name} · ${v.length} 项]（非 JSON 可表示，内部细节已清理）`;
+  }
+  // 普通对象：逐键展开——对象的价值通常在它的函数成员（api.getCustomers 等），
+  // 直接 JSON.stringify 会把它们全抹成 {}，等于什么都没说。
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    const keys = Object.keys(v);
+    if (keys.length && keys.some((k) => typeof v[k] === 'function')) {
+      const body = keys
+        .map((k) => `${k}: ${typeof v[k] === 'function' ? `[function ${v[k].name || 'anonymous'}]` : describeValue(v[k])}`)
+        .join(', ');
+      return `{ ${body} }`;
     }
+  }
+  try {
+    const s = JSON.stringify(v);
+    if (s === undefined) return `[${typeName(v)}]（undefined）`;
+    return s.length > 240 ? s.slice(0, 240) + '…(截断)' : s;
+  } catch {
+    return `[${typeName(v)}]（非 JSON 可表示，内部细节已清理）`;
+  }
+}
+
+// ---- 隐藏测试案例 ----
+//
+// 面板里可以放 globalThis.__tests = { '用例名': () => bool }。
+// 装载完面板就跑一遍：失败只告警不阻断（面板坏了不该拖垮业务脚本），
+// 通过的用例不出声——它本来就该是「隐藏」的。
+async function runPanelTests() {
+  const tests = globalThis.__tests;
+  if (!tests || typeof tests !== 'object') return;
+  const cases = Object.entries(tests).filter(([, fn]) => typeof fn === 'function');
+  if (!cases.length) return;
+
+  let failed = 0;
+  for (const [name, fn] of cases) {
     try {
-      const s = JSON.stringify(v);
-      const preview = s === undefined ? 'undefined' : s.length > 240 ? s.slice(0, 240) + '…(截断)' : s;
-      console.log(`  ${k}: ${preview}`);
-    } catch {
-      console.log(`  ${k}: [${typeName(v)}]（非 JSON 可表示，内部细节已清理）`);
+      const r = await fn();
+      if (r === false) {
+        failed++;
+        console.error(`[shared] 隐藏用例失败: ${name}`);
+      }
+    } catch (err) {
+      failed++;
+      console.error(`[shared] 隐藏用例抛错: ${name} — ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+  const total = cases.length;
+  if (failed === 0) {
+    console.log(`[shared] 隐藏用例 ${total}/${total} 通过`);
+  } else {
+    console.error(`[shared] 隐藏用例 ${total - failed}/${total} 通过，${failed} 个失败`);
   }
 }
 

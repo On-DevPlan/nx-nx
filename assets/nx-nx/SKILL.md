@@ -50,6 +50,11 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 Web 面板顶部有「新建项目 / 模板 / 脚本 / 服务」四个 tab；「脚本」页可直接编辑并运行脚本
 （共享面板 `⛭` 也可编辑，运行按钮禁用），「服务」页用**表单**管理服务组：状态卡（活性/自愈/日志）、
 启动/停止/活性检测/跑流水线按钮、主脚本与活性检测字段全部下拉与输入，不需要手写 JSON。
+「流水线步骤」区可以**上下移动**client 脚本——列表顺序就是执行顺序。
+
+面板前端基于 **Ant Design 6**（`@ant-design/icons`），token 在 `src/web/frontend/components/theme.tsx`
+里对齐本项目的灰阶视觉规范（黑主色 / 12px 字号 / 28px 行高 / 1px 底线分隔 / 无阴影堆叠），
+换肤只需改 `style.css` 的 `:root` 变量 + 该文件。
 
 模板 id（共 4 套）：
 
@@ -192,9 +197,22 @@ if (expectStatus(r, 200, 'getCustomers')) ok(`拿到 ${r.json.data.length} 条`)
 log(`请求日志: ${r.logFile}`);
 ```
 
-**共享面板装载后会打印一次堆快照**：可 JSON 表示的数据直接显示（token、随机数组），
-函数只报签名，Map / Buffer 这类只报类型、不泄露内部细节——用来确认「面板产出了什么」，
-不会把运行时垃圾刷满屏。面板里还可以放 `__tests`（隐藏测试案例），装载后自动跑。
+**共享面板装载后会打印一次堆快照**：面板的具名导出与 `globalThis` 上新增的数据都会显示——
+可 JSON 表示的数据直接预览（token、随机数组），函数只报签名，对象展开列出它的函数成员
+（`api: { getCustomers: [function getCustomers] }`），Map / Buffer 这类只报类型与条数、不泄露内部细节
+——用来确认「面板产出了什么」，不会把运行时垃圾刷满屏。
+
+面板里还可以放 `__tests`（**隐藏测试案例**），装载后自动跑一遍：
+
+```js
+globalThis.__tests = {
+  'token 可 JSON 表示': () => JSON.stringify(API_TOKEN).length > 8,
+  'makeUsers 返回数组': () => Array.isArray(makeUsers(1)),
+};
+```
+
+通过的用例不出声，失败的会在 stderr 报「隐藏用例失败: <用例名>」——**只告警不阻断**，
+面板里的用例坏了不该拖垮同一次执行里的业务脚本。
 
 ### 网络内置函数（别名模块的「网络」组）
 
