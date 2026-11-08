@@ -333,8 +333,10 @@ RESPONSE 段（状态/耗时/全部响应头/body）、META 段（ok/error）。
 | --- | --- |
 | 主脚本 stdout/stderr（含崩溃堆栈、周期心跳） | `~/.nx-nx/services/logs/<组>-<启动时间>.log` |
 | 服务组事件（启动/停止/检测失败/自愈） | `~/.nx-nx/services/logs/events-<组>.log` |
+| client 脚本的执行记录（退出码 / 耗时 / 输出尾部） | `~/.nx-nx/services/logs/clients-<组>.log` |
 | 每个 HTTP 请求的全量 req/resp | `~/.nx-nx/services/http-logs/<组>/` |
 | 服务组配置 / 运行态 | `~/.nx-nx/service-groups.json` · `~/.nx-nx/services/runtime.json` |
+| 管理空间索引（各空间的方法清单） | `~/.nx-nx/services/spaces.json` |
 
 配置与运行态是**两份数据**：改配置不会重置运行态，删运行态也不会丢配置。
 

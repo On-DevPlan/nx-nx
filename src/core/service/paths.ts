@@ -37,6 +37,11 @@ export function serviceSpacesPath(): string {
   return join(SERVICES_DIR, 'spaces.json');
 }
 
+// client 脚本的执行记录（流水线每次跑完都往这里追加）
+export function serviceClientsLogPath(groupId: string): string {
+  return join(serviceLogsDir(), `clients-${groupId}.log`);
+}
+
 // 组 id：小写字母数字与连字符，作为文件名与 URL 片段使用。
 export function assertGroupId(id: unknown): string {
   const s = String(id ?? '').trim();

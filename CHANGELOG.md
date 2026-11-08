@@ -22,8 +22,12 @@
   （此前只能多选，表达不了顺序）。
 - **共享面板隐藏测试案例（`__tests`）真的会跑**：装载面板后自动执行一遍，通过的用例不出声，
   失败的写 stderr 告警（不阻断业务脚本）——此前文档承诺了自动执行，runner 却从未实现。
-- **服务组日志抽屉**：Web「服务」页可拉出日志抽屉（事件 / 主脚本 IO 尾部 / HTTP 请求清单），
+- **服务组日志抽屉**：Web「服务」页可拉出日志抽屉（事件 / 主脚本 IO 尾部 / client 执行 / HTTP 请求清单），
   新增 `sg logs <id>` 命令与 `GET /api/service-groups/:id/logs` 路由。
+- **client 执行记录落盘**：流水线每跑一个 client 就往
+  `~/.nx-nx/services/logs/clients-<组>.log` 追加一条（脚本名 / 退出码 / 耗时 / 输出尾部），
+  `sg logs` 与日志抽屉新增「client 执行」段 —— client 是业务验证的主体，
+  此前它却是唯一「跑完就没」、查不到执行现场的一段。
 
 ### Changed
 
@@ -42,6 +46,10 @@
 
 ### Fixed
 
+- **服务组别名函数此前读不到面板 API 的真实内容**：面板接口的响应裹了一层
+  `{ ok: true, data: <内容> }`，而脚本侧直接读 `r.json.alive` —— 取到 undefined，
+  于是 `serviceAlive()` **恒为 false**。表现为「HTTP 明明 200，client 脚本却说服务没启动」。
+  `serviceAlive` / `serviceCheck` / `serviceStatus` / `serviceStart` / `serviceStop` 全部修正。
 - **空间闸门管住两扇门**：此前「执行 server 前先 check」只挂在流水线上，
   `sg start` 与面板「启动」按钮直连 `startGroup` —— 同一个组点「跑流水线」不启动、
   点「启动」却照样拉起进程。现已把闸门下沉到 `startGroup`，两扇门共用同一把锁；

@@ -7,12 +7,16 @@
 //
 // 只读、不删、不改：日志是排查问题的现场，不是可以随手清理的缓存。
 // 读取有上限（尾部若干行），避免把几 MB 的日志灌进面板。
-import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from 'node:fs';
+//
+// 写只有一处：client 脚本的执行记录（appendClientRecord）——
+// client 是业务验证的主体，却是唯一「跑完就没」的一段，得落盘才查得到。
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { serviceHttpLogsDir, serviceLogsDir } from './paths.js';
+import { serviceClientsLogPath, serviceHttpLogsDir, serviceLogsDir } from './paths.js';
 
 const MAX_LINES = 200;
 const MAX_BYTES = 256 * 1024;
+const CLIENT_BODY_MAX = 8 * 1024;
 
 // 读文件尾部若干行（先按字节截尾，再按行切——日志可能很大，整读会撑爆内存）
 export function tailFile(path: string, maxLines = MAX_LINES): string {
@@ -67,6 +71,40 @@ export interface GroupLogs {
   main: string;
   mainFile: string;
   http: HttpLogEntry[];
+  /** client 脚本的执行记录（脚本名 / 退出码 / 耗时 / 输出尾部） */
+  clients: string;
+}
+
+export interface ClientRecord {
+  script: string;
+  code: number;
+  ms: number;
+  stdout: string;
+  stderr: string;
+}
+
+/**
+ * 追加一条 client 执行记录。
+ * 格式是给人看的一行行文本（不是 JSON）——排查时直接 tail 就行，
+ * 不用先想「这文件怎么解析」。
+ */
+export function appendClientRecord(groupId: string, rec: ClientRecord): void {
+  try {
+    mkdirSync(serviceLogsDir(), { recursive: true });
+    const body = (s: string) => {
+      const t = (s ?? '').trim();
+      if (!t) return '(空)';
+      return t.length > CLIENT_BODY_MAX ? t.slice(0, CLIENT_BODY_MAX) + '…(截断)' : t;
+    };
+    const mark = rec.code === 0 ? 'OK  ' : 'FAIL';
+    const line =
+      `[${new Date().toISOString()}] ${mark} ${rec.script} · 退出码 ${rec.code} · 耗时 ${rec.ms}ms\n` +
+      `  stdout: ${body(rec.stdout)}\n` +
+      `  stderr: ${body(rec.stderr)}\n`;
+    appendFileSync(serviceClientsLogPath(groupId), line, 'utf8');
+  } catch {
+    // 写日志失败不该让业务流水线崩掉——记录本身就是辅助手段
+  }
 }
 
 /** 一个服务组的全部日志视图。 */
@@ -76,5 +114,6 @@ export function groupLogs(groupId: string, mainFile?: string): GroupLogs {
     main: mainFile ? tailFile(mainFile) : '',
     mainFile: mainFile ?? '',
     http: listHttpLogs(groupId),
+    clients: tailFile(serviceClientsLogPath(groupId)),
   };
 }

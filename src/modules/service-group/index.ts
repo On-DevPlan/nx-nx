@@ -164,6 +164,7 @@ export default defineModule({
         const lines: string[] = [];
         if (r.events.trim()) lines.push('事件日志:', r.events.trimEnd());
         if (r.main.trim()) lines.push('主脚本日志（尾部）:', r.main.trimEnd());
+        if (r.clients.trim()) lines.push('client 执行记录:', r.clients.trimEnd());
         if (r.http.length) {
           lines.push(`HTTP 请求日志（${r.http.length} 条，最近在前）:`);
           for (const h of r.http.slice(0, 20)) lines.push(`  ${h.name}  ${h.size} 字节`);

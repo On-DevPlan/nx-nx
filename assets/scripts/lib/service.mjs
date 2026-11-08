@@ -14,11 +14,21 @@ function base() {
   return `http://127.0.0.1:${env('NX_NX_SERVE_PORT', '7880')}`;
 }
 
+// 面板 API 的响应有一层包装：{ ok: true, data: <真正的内容> }。
+// 取字段时要把这层剥掉——否则 r.json.alive 永远是 undefined，
+// 表现为「接口返回 200，但 serviceAlive 说是死的」。
+function payload(json) {
+  if (json && typeof json === 'object' && 'data' in json && json.data && typeof json.data === 'object') {
+    return json.data;
+  }
+  return json ?? {};
+}
+
 // 活性 check：返回 bool（服务组存在但检测失败也算「不活」）
 export async function serviceAlive(groupId) {
   try {
     const r = await get(`${base()}/api/service-groups/${groupId}/alive`);
-    return r?.json?.alive === true;
+    return payload(r?.json)?.alive === true;
   } catch {
     return false;
   }
@@ -28,7 +38,8 @@ export async function serviceAlive(groupId) {
 export async function serviceCheck(groupId) {
   try {
     const r = await get(`${base()}/api/service-groups/${groupId}/alive`);
-    return { alive: r?.json?.alive === true, detail: r?.json?.detail ?? '' };
+    const p = payload(r?.json);
+    return { alive: p?.alive === true, detail: p?.detail ?? '' };
   } catch (e) {
     return { alive: false, detail: 'serve 不可达: ' + (e?.message ?? e) };
   }
@@ -37,17 +48,17 @@ export async function serviceCheck(groupId) {
 // 启动主脚本（幂等：已在运行则跳过）
 export async function serviceStart(groupId) {
   const r = await post(`${base()}/api/service-groups/${groupId}/start`);
-  return r?.json ?? { started: false, detail: 'serve 不可达' };
+  return payload(r?.json) ?? { started: false, detail: 'serve 不可达' };
 }
 
 // 停止（关停脚本 → 杀端口 → 杀 pid）
 export async function serviceStop(groupId) {
   const r = await post(`${base()}/api/service-groups/${groupId}/stop`);
-  return r?.json ?? { stopped: false, detail: 'serve 不可达' };
+  return payload(r?.json) ?? { stopped: false, detail: 'serve 不可达' };
 }
 
 // 运行态快照（status/pid/活性/自愈计数）
 export async function serviceStatus(groupId) {
   const r = await get(`${base()}/api/service-groups/${groupId}`);
-  return r?.json?.runtime ?? undefined;
+  return payload(r?.json)?.runtime ?? undefined;
 }

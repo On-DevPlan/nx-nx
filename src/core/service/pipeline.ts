@@ -9,6 +9,7 @@
 import { runScript } from '../script/service.js';
 import { checkHealth } from './check.js';
 import { serviceHttpLogsDir } from './paths.js';
+import { appendClientRecord } from './logs.js';
 import {
   getGroup,
   loadRuntime,
@@ -85,6 +86,7 @@ export async function runPipeline(groupId: string): Promise<PipelineReport> {
 
   // 3) client 脚本依次执行
   for (const client of g.clients) {
+    const started = Date.now();
     try {
       const r = await runScript(client, {
         shared: g.shared,
@@ -99,9 +101,23 @@ export async function runPipeline(groupId: string): Promise<PipelineReport> {
         ok: r.code === 0,
         detail: (r.stdout + (r.stderr ? '\n[stderr] ' + r.stderr : '')).trim().slice(0, 2000),
       });
+      appendClientRecord(g.id, {
+        script: client,
+        code: r.code,
+        ms: Date.now() - started,
+        stdout: r.stdout,
+        stderr: r.stderr,
+      });
       if (r.code !== 0) ok = false;
     } catch (err) {
       steps.push({ step: 'client', script: client, ok: false, detail: msg(err) });
+      appendClientRecord(g.id, {
+        script: client,
+        code: 1,
+        ms: Date.now() - started,
+        stdout: '',
+        stderr: msg(err),
+      });
       ok = false;
     }
   }

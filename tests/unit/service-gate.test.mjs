@@ -139,3 +139,30 @@ test.after(() => {
   rmSync(HOME, { recursive: true, force: true });
   delete process.env.NX_NX_HOME;
 });
+
+test('client 执行记录：落盘后能看到脚本名 / 退出码 / 耗时 / 输出', async () => {
+  const { groupLogs, appendClientRecord } = await import('../../src/core/service/logs.js');
+  appendClientRecord('log-group', {
+    script: 'demo-client',
+    code: 0,
+    ms: 42,
+    stdout: '服务组活性 OK',
+    stderr: '',
+  });
+  appendClientRecord('log-group', {
+    script: 'bad-client',
+    code: 1,
+    ms: 7,
+    stdout: '',
+    stderr: '连接被拒绝',
+  });
+  const logs = groupLogs('log-group');
+  assert.ok(logs.clients.includes('demo-client'), '应记下脚本名');
+  assert.ok(logs.clients.includes('退出码 0'), '应记下退出码');
+  assert.ok(logs.clients.includes('42ms'), '应记下耗时');
+  assert.ok(logs.clients.includes('服务组活性 OK'), '应记下 stdout');
+  // 失败的 client 也要留痕，并且能看出是失败的
+  assert.ok(logs.clients.includes('bad-client'));
+  assert.ok(logs.clients.includes('FAIL'));
+  assert.ok(logs.clients.includes('连接被拒绝'), '应记下 stderr');
+});

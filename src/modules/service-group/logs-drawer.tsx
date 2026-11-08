@@ -22,6 +22,7 @@ interface LogsPayload {
   main: string;
   mainFile: string;
   http: HttpLogEntry[];
+  clients: string;
 }
 
 function fmtSize(n: number): string {
@@ -61,6 +62,7 @@ export function LogsDrawer({
 
   const events = data?.events ?? '';
   const main = data?.main ?? '';
+  const clients = data?.clients ?? '';
   const http = data?.http ?? [];
 
   return (
@@ -98,6 +100,18 @@ export function LogsDrawer({
               </>
             ) : (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无主脚本日志（先启动一次服务）" />
+            ),
+          },
+          {
+            key: 'clients',
+            label: 'client 执行',
+            children: clients ? (
+              <pre className="sg-log-pre">{clients}</pre>
+            ) : (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="暂无 client 执行记录（跑一次流水线就会记下退出码与输出）"
+              />
             ),
           },
           {
