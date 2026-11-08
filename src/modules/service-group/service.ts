@@ -17,6 +17,13 @@ import {
   stopGroup,
 } from '../../core/service/runtime.js';
 import { runPipeline } from '../../core/service/pipeline.js';
+import { groupLogs } from '../../core/service/logs.js';
+import {
+  callSpaceMethod,
+  introspectSpace,
+  resolvePanelPath,
+  type SpaceActionResult,
+} from '../../core/service/namespace.js';
 
 export interface ServiceGroupView {
   config: ServiceGroupConfig;
@@ -111,6 +118,14 @@ export function status(id?: unknown): unknown {
   return runtimeSnapshot(id === undefined || id === '' ? undefined : assertGroupId(id));
 }
 
+// 日志视图：事件日志 / 主脚本 IO 日志尾部 / HTTP 请求日志清单。
+// 排查「它怎么就失活了」「请求发出去什么样」时，答案都在这里。
+export function logs(id: unknown): ReturnType<typeof groupLogs> {
+  const gid = assertGroupId(id);
+  const rt = loadRuntime(gid);
+  return groupLogs(gid, rt.logFile);
+}
+
 // 立即执行一次活性检测（设置检测后，这就是「函数面板 check 的服务端事实源」）
 export async function check(id: unknown): Promise<{ id: string; alive: boolean; detail: string }> {
   const g = getGroup(assertGroupId(id));
@@ -123,4 +138,86 @@ export async function check(id: unknown): Promise<{ id: string; alive: boolean; 
 // 流水线：main 启动 → 等活性 → clients 依次执行
 export function run(id: unknown): ReturnType<typeof runPipeline> {
   return runPipeline(assertGroupId(id));
+}
+
+// ---- 管理空间 ----
+//
+// 空间 = 共享面板被装载后的可管理实体。core 侧只做「索引 + 派发」：
+// 真正的装载与调用在 _runner.mjs 子进程里发生，core 永远不执行用户代码。
+
+// 某组绑定的空间：面板 + 启动前的 check 方法名
+export function groupSpace(id: unknown): { panel: string; check: string } | null {
+  const g = getGroup(assertGroupId(id));
+  const panel = g.space?.panel || g.shared;
+  if (!panel) return null;
+  return { panel, check: g.space?.check ?? 'checkUp' };
+}
+
+// 空间清单：这个组的空间有哪些方法、状态里有什么
+export async function spaceIntrospect(id: unknown): Promise<SpaceActionResult> {
+  const s = groupSpace(id);
+  if (!s) throw new Error(`服务组 ${assertGroupId(id)} 未绑定管理空间（shared / space.panel 都没配）`);
+  return introspectSpace(resolvePanelPath(s.panel));
+}
+
+// 调用空间的一个方法
+export async function spaceCall(
+  id: unknown,
+  method: unknown,
+  args: unknown[] = [],
+): Promise<SpaceActionResult> {
+  const s = groupSpace(id);
+  if (!s) throw new Error(`服务组 ${assertGroupId(id)} 未绑定管理空间（shared / space.panel 都没配）`);
+  return callSpaceMethod(resolvePanelPath(s.panel), String(method ?? ''), args);
+}
+
+// 空间的堆快照（只含可 JSON 表示的数据确认）
+export async function spaceSnapshot(id: unknown): Promise<SpaceActionResult> {
+  return spaceIntrospect(id);
+}
+
+// ---- hub 概览 ----
+//
+// 「一组 = 一个 hub」的日常视图：一个命令看清整组——
+//   server 是什么、有没有活；client 有哪些、按什么顺序跑；空间能干什么。
+export interface HubOverview {
+  id: string;
+  name: string;
+  server: { script: string; args: string[]; status: string; pid?: number; alive?: boolean; detail?: string } | null;
+  clients: string[];
+  stop: string;
+  health: string;
+  space: { panel: string; check: string; methods: string[] } | null;
+  nextCommand: string;
+}
+
+export async function hubOverview(id: unknown): Promise<HubOverview> {
+  const gid = assertGroupId(id);
+  const g = getGroup(gid);
+  const rt = loadRuntime(gid);
+  const s = groupSpace(gid);
+  let methods: string[] = [];
+  if (s) {
+    const r = await introspectSpace(resolvePanelPath(s.panel));
+    if (r.ok) methods = (r.methods ?? []).map((m) => m.name);
+  }
+  return {
+    id: g.id,
+    name: g.name,
+    server: g.main
+      ? {
+          script: g.main.script,
+          args: g.main.args,
+          status: rt.status,
+          pid: rt.pid,
+          alive: rt.alive,
+          detail: rt.detail,
+        }
+      : null,
+    clients: g.clients,
+    stop: g.stop ? g.stop.script : g.killPort ? `杀端口 ${g.killPort}` : '（无）',
+    health: g.health ? `${g.health.kind} ${g.health.host}:${g.health.port}` : '（无）',
+    space: s ? { panel: s.panel, check: s.check, methods } : null,
+    nextCommand: `nx-nx sg run ${g.id}`,
+  };
 }

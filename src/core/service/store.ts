@@ -37,7 +37,16 @@ export interface ServiceGroupConfig {
   killPort?: number; // stop 兜底：杀掉占用该端口的进程
   health?: HealthConfig;
   shared?: string; // 共享函数面板脚本名（如 demo.shared），组内脚本执行时自动装载
+  space?: SpaceConfig; // 管理空间：面板 + 启动前的 bool check 方法
   clients: string[]; // client 脚本名列表（流水线的次步骤，依次执行）
+}
+
+// 管理空间配置：
+//   panel —— 空间面板脚本名（共享面板）；为空则沿用 shared
+//   check —— 空间里那个返回 bool 的方法名；执行 server 前先调它
+export interface SpaceConfig {
+  panel?: string;
+  check?: string;
 }
 
 export interface GroupRuntime {
@@ -117,6 +126,15 @@ export function normalizeGroup(raw: unknown, id: string): ServiceGroupConfig {
     };
   };
 
+  const space = (v: unknown): SpaceConfig | undefined => {
+    if (!v || typeof v !== 'object') return undefined;
+    const s = v as Record<string, unknown>;
+    const panel = typeof s.panel === 'string' && s.panel.trim() ? s.panel.trim() : undefined;
+    const check = typeof s.check === 'string' && s.check.trim() ? s.check.trim() : undefined;
+    if (!panel && !check) return undefined;
+    return { panel, check };
+  };
+
   const cfg: ServiceGroupConfig = {
     id,
     name: String(r.name).trim(),
@@ -125,6 +143,7 @@ export function normalizeGroup(raw: unknown, id: string): ServiceGroupConfig {
     killPort: Number.isInteger(r.killPort) ? (r.killPort as number) : undefined,
     health: h(r.health),
     shared: typeof r.shared === 'string' && r.shared.trim() ? r.shared.trim() : undefined,
+    space: space(r.space),
     clients: Array.isArray(r.clients) ? r.clients.map(String) : [],
   };
   return cfg;

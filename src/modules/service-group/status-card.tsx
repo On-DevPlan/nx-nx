@@ -3,11 +3,7 @@
 // 从 view.tsx 拆出来（单文件 300 行上限）：状态卡自成一体——
 // 「现在这个服务是活的还是死的、自愈过几次、下一步按哪个钮」都在这一张卡里。
 import { Badge, Button, Card, Space, Statistic, Tooltip, Typography } from 'antd';
-import {
-  CaretRightOutlined,
-  ReloadOutlined,
-  ThunderboltOutlined,
-} from '@ant-design/icons';
+import { CaretRightOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import type { GroupView } from './types.js';
 
 const { Paragraph, Text } = Typography;
@@ -18,6 +14,7 @@ interface Props {
   group: GroupView;
   working: boolean;
   onAction: (action: SgAction, id: string) => void;
+  onShowLogs: (id: string) => void;
 }
 
 // 状态徽标：停 / 活 / 失活 —— 一眼看清「自愈是否生效」
@@ -28,7 +25,7 @@ function statusBadge(rt: GroupView['runtime']) {
   return <Badge status="processing" text="运行中 · 未检测" />;
 }
 
-export function StatusCard({ group, working, onAction }: Props) {
+export function StatusCard({ group, working, onAction, onShowLogs }: Props) {
   const rt = group.runtime;
   const id = group.config.id;
   return (
@@ -44,7 +41,15 @@ export function StatusCard({ group, working, onAction }: Props) {
         </Space>
       }
       extra={
+        // 按钮刻意少：hub 组的调试主力是「跑流水线」（server + client 一条龙）。
+        // 活性检测 / 日志 / 空间方法调用都有等价命令（sg check / sg logs / sg space-call），
+        // 堆在界面上只会挤占空间、也让自动化时多点几下。
         <Space size={4} wrap>
+          <Tooltip title="停止：关停脚本 → 杀端口 → 杀 pid">
+            <Button size="small" disabled={working} onClick={() => onAction('serviceGroup.stop', id)}>
+              停止
+            </Button>
+          </Tooltip>
           <Tooltip title="启动主脚本（幂等：已在运行则跳过）">
             <Button
               size="small"
@@ -55,22 +60,7 @@ export function StatusCard({ group, working, onAction }: Props) {
               启动
             </Button>
           </Tooltip>
-          <Tooltip title="停止：关停脚本 → 杀端口 → 杀 pid">
-            <Button size="small" disabled={working} onClick={() => onAction('serviceGroup.stop', id)}>
-              停止
-            </Button>
-          </Tooltip>
-          <Tooltip title="立即执行一次活性检测">
-            <Button
-              size="small"
-              icon={<ReloadOutlined />}
-              disabled={working}
-              onClick={() => onAction('serviceGroup.check', id)}
-            >
-              活性检测
-            </Button>
-          </Tooltip>
-          <Tooltip title="流水线：启动 main → 等活性就绪 → client 依次执行">
+          <Tooltip title="流水线：空间 check → 启动 server → 等活性就绪 → client 依次执行">
             <Button
               size="small"
               type="primary"
@@ -117,6 +107,16 @@ export function StatusCard({ group, working, onAction }: Props) {
           日志：{rt.logFile}
         </Paragraph>
       )}
+      {/* 调试入口做成命令链接而不是按钮：既不挤占卡片，
+          又把「这个操作在命令行怎么写」直接摆出来——自动化时照抄即可。 */}
+      <div className="sg-links">
+        <button type="button" onClick={() => onAction('serviceGroup.check', id)} disabled={working}>
+          sg check
+        </button>
+        <button type="button" onClick={() => onShowLogs(id)}>
+          sg logs
+        </button>
+      </div>
     </Card>
   );
 }

@@ -2,8 +2,13 @@
 //
 // 「依次启动」的语义：main 先行，health 配了就轮询活性直到就绪或超时，
 // 然后 clients 按数组顺序逐个同步执行（collect stdout/stderr 进报告）。
+//
+// 空间 check 的位置很讲究：**在启动 server 之前**。
+// 空间里那个返回 bool 的方法（如 checkUp）回答的是「现在该不该起这个服务」——
+// 依赖没就绪就别起，起早了只会白占端口再被杀掉。check 不过直接短路，不启动。
 import { runScript } from '../script/service.js';
 import { checkHealth } from './check.js';
+import { checkSpace, resolvePanelPath } from './namespace.js';
 import { serviceHttpLogsDir } from './paths.js';
 import {
   getGroup,
@@ -29,10 +34,28 @@ export interface PipelineReport {
 const ALIVE_TIMEOUT_MS = 20000;
 const ALIVE_POLL_MS = 500;
 
+// 空间的 check 方法名：配置里没写就用约定名（面板里最常见的那一个）
+const DEFAULT_CHECK_METHOD = 'checkUp';
+
 export async function runPipeline(groupId: string): Promise<PipelineReport> {
   const g: ServiceGroupConfig = getGroup(groupId);
   const steps: PipelineStepReport[] = [];
   let ok = true;
+
+  // 0) 执行 server 前先 check：问空间一句「现在能起吗」
+  const spaceCheck = await runSpaceCheck(g);
+  if (spaceCheck) {
+    steps.push({
+      step: 'space.check',
+      script: spaceCheck.method,
+      ok: spaceCheck.alive,
+      detail: spaceCheck.detail,
+    });
+    if (!spaceCheck.alive) {
+      patchRuntime(groupId, { lastEvent: '空间 check 未通过，未启动主脚本' });
+      return { groupId, ok: false, steps };
+    }
+  }
 
   // 1) 主脚本
   if (g.main) {
@@ -102,6 +125,27 @@ export async function runPipeline(groupId: string): Promise<PipelineReport> {
 
 function msg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+// 空间的 check：没配空间或没配 check 方法名 → 不做前置 check（返回 null）。
+// 配了就一定要问到答案：面板找不到、方法不存在、抛错，都算「不通过」——
+// 保守地不启动，比启动一个注定失败的服务强。
+async function runSpaceCheck(
+  g: ServiceGroupConfig,
+): Promise<{ method: string; alive: boolean; detail: string } | null> {
+  const cfg = g.space;
+  if (!cfg) return null;
+  const panel = cfg.panel || g.shared;
+  if (!panel) return null;
+  const method = cfg.check || DEFAULT_CHECK_METHOD;
+  let panelPath: string;
+  try {
+    panelPath = resolvePanelPath(panel);
+  } catch (err) {
+    return { method, alive: false, detail: msg(err) };
+  }
+  const r = await checkSpace(panelPath, method);
+  return { method, alive: r.alive, detail: r.detail };
 }
 
 // 供 CLI/HTTP 直接使用 runtime 快照展示

@@ -10,16 +10,36 @@
 //
 // 共享函数面板（服务组）：
 //   环境变量 NX_SHARED_PANEL 指向 <group>.shared.mjs 时，先装载面板（「常量 = 函数 = {}」
-//   整体优先执行），再把面板挂到 globalThis 的新增键做「堆快照日志」——
+//   整体优先执行），把它建成一个「管理空间」（namespace），再输出堆快照——
 //   只输出可 JSON 表示的数据确认；函数报签名，循环引用 / 原生句柄类对象只报类型，
 //   不打印内部表示（无地址、无句柄细节）。
+//
+// 管理空间的三种动作（env 驱动，供 core 侧用子进程调用）：
+//   NX_NS_ACTION=introspect  列出空间的方法清单与状态键（管理：能干什么）
+//   NX_NS_ACTION=call        调用一个方法（NX_NS_METHOD / NX_NS_ARGS_JSON）
+//   NX_NS_ACTION=check       调用一个返回 bool 的方法当活性 check（执行 server 前先 check）
+// 动作模式下不执行业务脚本，结果以 JSON 打到 stdout（NX_NS_RESULT 标记行）。
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { installAliases, ALIASES } from './aliases.mjs';
+import {
+  callMethod,
+  describeValue,
+  listMethods,
+  resolvePanelSpace,
+  spaceHeap,
+  spaceReport,
+  typeName,
+} from './_ns.mjs';
 
 const [target, ...rest] = process.argv.slice(2);
 
-if (!target) {
+// 空间动作模式（introspect / call / check）
+const nsAction = process.env.NX_NS_ACTION || '';
+const nsMethod = process.env.NX_NS_METHOD || '';
+const nsArgsJson = process.env.NX_NS_ARGS_JSON || '[]';
+
+if (!target && !nsAction) {
   console.error('用法: _runner.mjs <script.mjs> [args...]');
   process.exit(2);
 }
@@ -31,11 +51,20 @@ installAliases(globalThis);
 
 // 共享函数面板：整体优先执行（服务组绑定，env 注入面板路径）。
 const sharedPanel = process.env.NX_SHARED_PANEL;
+let space = null;
 if (sharedPanel) {
   const panel = await import(pathToFileURL(resolve(sharedPanel)).href);
-  dumpSharedPanelSnapshot(aliasNames, beforeKeys, panel);
-  await runPanelTests();
+  space = resolvePanelSpace(panel, beforeKeys, aliasNames);
+  if (nsAction) {
+    await runSpaceAction(space);
+  } else {
+    dumpSharedPanelSnapshot(aliasNames, beforeKeys, panel, space);
+    await runPanelTests();
+  }
 }
+
+// 动作模式到此为止：不执行业务脚本。
+if (nsAction) process.exit(0);
 
 // 让脚本看到的 argv 只有自己：argv[0]=node，argv[1]=脚本路径，之后是脚本参数。
 process.argv = [process.argv[0], target, ...rest];
@@ -53,7 +82,8 @@ await import(pathToFileURL(resolve(target)).href);
 // 「清理」的含义：Map / Buffer / 循环引用 / 原生句柄这类对象**不打印内部表示**——
 // 里面混着地址与系统句柄，泄露出去既没用又脏；只报类型名就够了。
 // __tests 是控制用的（见 runPanelTests），不进快照。
-function dumpSharedPanelSnapshot(aliasNames, beforeKeys, panel) {
+// 空间状态（显式 defineSpace 的 state）也一并列出——那是空间的「堆」。
+function dumpSharedPanelSnapshot(aliasNames, beforeKeys, panel, space) {
   const added = Object.keys(globalThis).filter(
     (k) => !beforeKeys.has(k) && !aliasNames.has(k) && k !== '__tests',
   );
@@ -73,7 +103,24 @@ function dumpSharedPanelSnapshot(aliasNames, beforeKeys, panel) {
     entries.push([k, globalThis[k]]);
   }
 
-  console.log(`[shared] 共享面板已装载（${entries.length} 个导出）：`);
+  // 空间的方法清单：管理空间的第一问——「它到底能干什么」
+  const methods = space ? listMethods(space) : [];
+  console.log(
+    `[shared] 共享面板已装载（${entries.length} 个导出` +
+      (space ? `，空间「${space.name}」${methods.length} 个方法` : '') +
+      '）：',
+  );
+  for (const m of methods) {
+    console.log(`  · ${m.name}(${m.arity})${m.async ? ' async' : ''}`);
+  }
+  // 显式空间的状态（堆）单独列：它不在 globalThis 上，但确实是空间的产出
+  if (space) {
+    for (const [k, v] of spaceHeap(space)) {
+      if (seen.has(k)) continue;
+      seen.add(k);
+      entries.push([k, v]);
+    }
+  }
   if (!entries.length) {
     console.log('[shared] （面板没有挂任何导出——数据请挂到 globalThis 或用 export 声明）');
     return;
@@ -83,40 +130,79 @@ function dumpSharedPanelSnapshot(aliasNames, beforeKeys, panel) {
   }
 }
 
-// 单个值的「可读描述」：能 JSON 表示就预览，否则只报类型（不泄露内部结构）
-function describeValue(v) {
-  if (typeof v === 'function') {
-    return `[function ${v.name || 'anonymous'}]`;
+// ---- 空间动作（introspect / call / check）----
+//
+// 结果统一以一行 JSON 打到 stdout，前缀 NX_NS_RESULT ——
+// core 侧靠这个标记行取结构化结果，不去猜业务脚本的输出格式。
+async function runSpaceAction(space) {
+  const emit = (obj) => {
+    console.log(`NX_NS_RESULT ${JSON.stringify(obj)}`);
+  };
+
+  if (nsAction === 'introspect') {
+    emit({
+      ok: true,
+      action: 'introspect',
+      space: spaceReport(space),
+      methods: listMethods(space),
+      heap: spaceHeap(space).map(([k, v]) => ({ key: k, describe: describeValue(v), type: typeName(v) })),
+    });
+    return;
   }
-  // Map / Set / Buffer 这类：JSON.stringify 会给出误导性的 "{}" / "[]"，
-  // 看起来像「空对象」而不是「不可 JSON 表示」——直接报类型更诚实。
-  if (v instanceof Map) return `[Map · ${v.size} 项]（非 JSON 可表示，内部细节已清理）`;
-  if (v instanceof Set) return `[Set · ${v.size} 项]（非 JSON 可表示，内部细节已清理）`;
-  if (v instanceof WeakMap) return '[WeakMap]（非 JSON 可表示，内部细节已清理）';
-  if (v instanceof WeakSet) return '[WeakSet]（非 JSON 可表示，内部细节已清理）';
-  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(v)) {
-    return `[Buffer · ${v.length} 字节]（非 JSON 可表示，内部细节已清理）`;
+
+  if (!nsMethod) {
+    emit({ ok: false, action: nsAction, error: '缺少 NX_NS_METHOD（要调用哪个方法）' });
+    return;
   }
-  if (ArrayBuffer.isView(v)) {
-    return `[${v.constructor.name} · ${v.length} 项]（非 JSON 可表示，内部细节已清理）`;
+
+  let args = [];
+  try {
+    const parsed = JSON.parse(nsArgsJson);
+    args = Array.isArray(parsed) ? parsed : [parsed];
+  } catch (err) {
+    emit({ ok: false, action: nsAction, error: `NX_NS_ARGS_JSON 不是合法 JSON: ${err?.message ?? err}` });
+    return;
   }
-  // 普通对象：逐键展开——对象的价值通常在它的函数成员（api.getCustomers 等），
-  // 直接 JSON.stringify 会把它们全抹成 {}，等于什么都没说。
-  if (v && typeof v === 'object' && !Array.isArray(v)) {
-    const keys = Object.keys(v);
-    if (keys.length && keys.some((k) => typeof v[k] === 'function')) {
-      const body = keys
-        .map((k) => `${k}: ${typeof v[k] === 'function' ? `[function ${v[k].name || 'anonymous'}]` : describeValue(v[k])}`)
-        .join(', ');
-      return `{ ${body} }`;
-    }
+
+  let value;
+  try {
+    value = await callMethod(space, nsMethod, args);
+  } catch (err) {
+    emit({
+      ok: false,
+      action: nsAction,
+      method: nsMethod,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return;
   }
+
+  if (nsAction === 'check') {
+    // check 的契约：方法返回 bool。返回非 bool 视为不通过——宁可保守，别假装活。
+    const alive = value === true;
+    emit({
+      ok: true,
+      action: 'check',
+      method: nsMethod,
+      alive,
+      detail: alive
+        ? `空间方法 ${nsMethod}() 返回 true`
+        : `空间方法 ${nsMethod}() 返回 ${describeValue(value)}（非 true，判定不通过）`,
+    });
+    return;
+  }
+
+  emit({ ok: true, action: 'call', method: nsMethod, value: toJsonSafe(value) });
+}
+
+// 值转 JSON：不可表示的（Map/循环引用等）换成类型描述，不抛错
+function toJsonSafe(v) {
   try {
     const s = JSON.stringify(v);
-    if (s === undefined) return `[${typeName(v)}]（undefined）`;
-    return s.length > 240 ? s.slice(0, 240) + '…(截断)' : s;
+    if (s === undefined) return { __type: typeName(v) };
+    return JSON.parse(s);
   } catch {
-    return `[${typeName(v)}]（非 JSON 可表示，内部细节已清理）`;
+    return { __type: typeName(v), __note: '非 JSON 可表示，内部细节已清理' };
   }
 }
 
@@ -150,11 +236,4 @@ async function runPanelTests() {
   } else {
     console.error(`[shared] 隐藏用例 ${total - failed}/${total} 通过，${failed} 个失败`);
   }
-}
-
-function typeName(v) {
-  if (v === null) return 'null';
-  if (Array.isArray(v)) return 'array';
-  const c = v.constructor && v.constructor.name;
-  return c || typeof v;
 }

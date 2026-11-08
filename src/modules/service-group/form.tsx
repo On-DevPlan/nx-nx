@@ -6,6 +6,7 @@
 // 多选框表达不了顺序，用户只能靠勾选先后猜，那就等于没有流水线。
 import { Form, Input, InputNumber, Select, Switch, Button, Space, Tag, Empty } from 'antd';
 import { ArrowDownOutlined, ArrowUpOutlined, DeleteOutlined } from '@ant-design/icons';
+import { SpaceField } from './space-field.js';
 import type { GroupConfig } from './types.js';
 
 export interface FormState {
@@ -23,6 +24,9 @@ export interface FormState {
   healthFailThreshold: string;
   onDead: 'restart' | 'none';
   shared: string;
+  spaceEnabled: boolean;
+  spacePanel: string;
+  spaceCheck: string;
   clients: string[];
 }
 
@@ -42,6 +46,9 @@ export function emptyForm(): FormState {
     healthFailThreshold: '3',
     onDead: 'restart',
     shared: '',
+    spaceEnabled: false,
+    spacePanel: '',
+    spaceCheck: 'checkUp',
     clients: [],
   };
 }
@@ -62,6 +69,9 @@ export function formFromConfig(c: GroupConfig): FormState {
     healthFailThreshold: String(c.health?.failThreshold ?? 3),
     onDead: c.health?.onDead ?? 'restart',
     shared: c.shared ?? '',
+    spaceEnabled: !!c.space,
+    spacePanel: c.space?.panel ?? c.shared ?? '',
+    spaceCheck: c.space?.check ?? 'checkUp',
     clients: [...c.clients],
   };
 }
@@ -85,6 +95,7 @@ export function configFromForm(id: string, f: FormState): Record<string, unknown
         }
       : undefined,
     shared: f.shared || undefined,
+    space: f.spaceEnabled ? { panel: f.spacePanel || f.shared || undefined, check: f.spaceCheck || 'checkUp' } : undefined,
     clients: f.clients,
   };
 }
@@ -241,6 +252,8 @@ export function SgForm({ form, set, toggleClient, entryScripts, panelScripts }: 
           ]}
         />
       </Form.Item>
+
+      <SpaceField form={form} set={set} panelScripts={panelScripts} shared={form.shared} />
 
       <Form.Item
         label="流水线步骤（client 脚本，按顺序依次执行）"

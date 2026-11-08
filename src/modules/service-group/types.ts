@@ -16,6 +16,7 @@ export interface GroupConfig {
     onDead: 'restart' | 'none';
   };
   shared?: string;
+  space?: { panel?: string; check?: string };
   clients: string[];
 }
 

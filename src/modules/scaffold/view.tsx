@@ -12,6 +12,7 @@
 // （判定逻辑见 option-form.ts）。曾经这里写死 `letters`——那是 server-cli-web
 // 家族的专属字段，mono-gf（name）与 std-a-lang（lang）因此永远点不动。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Button, Card, Input, Tag } from 'antd';
 import { CliHints } from '../../web/frontend/components/CliHints.js';
 import { useToast, useDialog } from '../../web/frontend/components/ui.jsx';
 import { useStore } from '../../web/frontend/store.jsx';
@@ -226,8 +227,7 @@ export default function CreateView() {
       {dialogNode}
       <div className="create-grid">
       {/* ---- 左：模板选择 ---- */}
-      <div className="card">
-        <div className="colhead">模板</div>
+      <Card size="small" title="模板">
         {templates.map((t) => (
           <button
             key={t.id}
@@ -243,14 +243,14 @@ export default function CreateView() {
             <div className="tpl-desc muted">{t.description}</div>
           </button>
         ))}
-      </div>
+      </Card>
 
       {/* ---- 中：表单 ---- */}
-      <div className="card">
-        <div className="colhead">
-          <span>选项</span>
-          <span className="tag mono">{tplId}</span>
-        </div>
+      <Card
+        size="small"
+        title="选项"
+        extra={<Tag color="#8b9096" className="mono">{tplId}</Tag>}
+      >
         <div className="opt-body">
           {/* 必填在前、可选在后：填到哪儿、还差什么，一眼能看完 */}
           <OptionGroup title="必填" items={required} values={values} onChange={setOpt} />
@@ -261,7 +261,7 @@ export default function CreateView() {
               输出目录
               {siblingsMode ? <span className="req" title="必填">*</span> : <span className="opt-badge">选填</span>}
             </label>
-            <input
+            <Input
               id="opt-dir"
               value={outDir}
               onChange={(e) => {
@@ -287,27 +287,26 @@ export default function CreateView() {
         </div>
 
         {/* 灰着的按钮必须说清自己在等什么：只禁用不解释，用户只能干瞪眼 */}
-        {allIssues.length > 0 && <div className="opt-blocked">{describeIssues(allIssues)}</div>}
+        {allIssues.length > 0 && <Alert type="warning" showIcon message={describeIssues(allIssues)} className="opt-blocked" />}
 
         <div className="opt-actions">
-          <button className="btn ghost" onClick={doPreview} disabled={busy || !tpl || allIssues.length > 0}>
+          <Button onClick={doPreview} disabled={busy || !tpl || allIssues.length > 0}>
             预览文件
-          </button>
-          <button
-            className="btn"
+          </Button>
+          <Button
+            type="primary"
             onClick={doCreate}
             disabled={busy || !tpl || allIssues.length > 0 || dirState?.usable === false}
           >
             生成项目
-          </button>
+          </Button>
         </div>
 
         <CliHints module="template" />
-      </div>
+      </Card>
 
       {/* ---- 右：预览 ---- */}
-      <div className="card">
-        <div className="colhead">预览</div>
+      <Card size="small" title="预览">
         <div className="preview-body">
           {/* 模板声明 logo:false（纯目录骨架等）就不画 logo 与撞色行——是否画是模板的事实，面板照办。 */}
           {tpl?.logo !== false && (
@@ -351,7 +350,7 @@ export default function CreateView() {
             </>
           )}
         </div>
-      </div>
+      </Card>
       </div>
     </>
   );

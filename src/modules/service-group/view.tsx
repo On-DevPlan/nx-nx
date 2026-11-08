@@ -15,6 +15,8 @@ import { useDialog, useToast } from '../../web/frontend/components/ui.jsx';
 import { useStore } from '../../web/frontend/store.jsx';
 import { SgForm, configFromForm, emptyForm, formFromConfig, type FormState } from './form.js';
 import { StatusCard, type SgAction } from './status-card.js';
+import { LogsDrawer } from './logs-drawer.js';
+import { SpacePanel } from './space-panel.js';
 import type { GroupView } from './types.js';
 
 export default function ServiceView() {
@@ -28,6 +30,7 @@ export default function ServiceView() {
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState('');
   const [showJson, setShowJson] = useState(false);
+  const [logsOpen, setLogsOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -201,7 +204,15 @@ export default function ServiceView() {
         ) : (
           <>
             {/* 状态卡：活性 / 自愈次数 / 事件 */}
-            <StatusCard group={current} working={working} onAction={act} />
+            <StatusCard
+              group={current}
+              working={working}
+              onAction={act}
+              onShowLogs={() => setLogsOpen(true)}
+            />
+
+            {/* 管理空间：方法清单 + 一键调用（对应「启动按钮对应一段管理空间」）*/}
+            <SpacePanel groupId={selected} />
 
             {/* 配置表单 */}
             <Card
@@ -229,6 +240,7 @@ export default function ServiceView() {
           </>
         )}
       </div>
+      <LogsDrawer groupId={selected} open={logsOpen} onClose={() => setLogsOpen(false)} />
       {dialogNode}
     </div>
   );

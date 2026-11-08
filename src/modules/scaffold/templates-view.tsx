@@ -4,6 +4,7 @@
 // 必填 / 可选的呈现与新建项目面板同源（都走 option-form 的 splitOptions）：
 // 一个视图说「可选项」却把必填项混在里面列出，用户没法判断哪些是非填不可的。
 import { useEffect, useState } from 'react';
+import { Alert, Badge, Card, Empty, Tag } from 'antd';
 import { CliHints } from '../../web/frontend/components/CliHints.js';
 import { useStore } from '../../web/frontend/store.jsx';
 import { splitOptions } from './option-form.js';
@@ -30,12 +31,8 @@ function OptionRows({ title, items }: { title: string; items: OptionSpec[] }) {
             {o.hint ? <span className="muted"> · {o.hint}</span> : null}
           </div>
           <div className="acts">
-            <span className="tag">{o.type || 'string'}</span>
-            {o.required ? (
-              <span className="tag strong">必填</span>
-            ) : (
-              <span className="tag">选填</span>
-            )}
+            <Tag>{o.type || 'string'}</Tag>
+            {o.required ? <Tag color="#14161a">必填</Tag> : <Tag>选填</Tag>}
           </div>
         </div>
       ))}
@@ -73,11 +70,11 @@ export default function TemplatesView() {
 
   return (
     <div className="create-grid">
-      <div className="card">
-        <div className="colhead">
-          <span>模板</span>
-          <span className="tag">{templates.length}</span>
-        </div>
+      <Card
+        size="small"
+        title="模板"
+        extra={<Badge count={templates.length} showZero color="#8b9096" />}
+      >
         {templates.map((t) => (
           <button
             key={t.id}
@@ -88,32 +85,31 @@ export default function TemplatesView() {
             <div className="tpl-desc muted">{t.description}</div>
           </button>
         ))}
-        {!templates.length && <div className="empty">暂无模板</div>}
+        {!templates.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无模板" style={{ margin: '24px 0' }} />}
         {boot?.templateErrors?.length ? (
-          <div className="empty bad">
-            {boot.templateErrors.map((e) => (
-              <div key={e.id}>{e.id}: {e.message}</div>
-            ))}
-          </div>
+          <Alert
+            type="error"
+            showIcon
+            style={{ margin: 12 }}
+            message={boot.templateErrors.map((e) => `${e.id}: ${e.message}`).join('；')}
+          />
         ) : null}
-      </div>
+      </Card>
 
-      <div className="card">
-        <div className="colhead">选项</div>
-        {!detail && <div className="empty">← 选一个模板查看</div>}
+      <Card size="small" title="选项">
+        {!detail && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="选一个模板查看" />}
         {detail && (
           <>
             <OptionGroupList detail={detail} />
             <CliHints module="template" />
           </>
         )}
-      </div>
+      </Card>
 
-      <div className="card">
-        <div className="colhead">说明</div>
+      <Card size="small" title="说明">
         <div className="readme-body">
           {err && <div className="bad">{err}</div>}
-          {!detail && <div className="empty">← 选一个模板查看</div>}
+          {!detail && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="选一个模板查看" />}
           {detail && (
             <>
               <div className="snippet-box" style={{ marginBottom: 10 }}>
@@ -125,7 +121,7 @@ export default function TemplatesView() {
             </>
           )}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

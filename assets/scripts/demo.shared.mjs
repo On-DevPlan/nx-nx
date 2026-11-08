@@ -1,12 +1,13 @@
-// 共享函数面板（demo-group 服务组绑定）。
+// 共享函数面板（demo-group 服务组绑定）——装载后即成为「管理空间」。
 //
 // 约定：
 //   - 不作为入口执行（.shared 后缀，runner 会拒绝直接运行）
 //   - 「常量 = 函数 = {}」整体优先执行：把要共享的东西挂到 globalThis
-//   - 执行完成后 runner 扫描具名导出 + 新增全局键并输出堆快照——
+//   - 装载完成后 runner 扫描具名导出 + 新增全局键并输出堆快照——
 //     可 JSON 表示的数据确认；函数报签名；Map/循环引用等只报类型（无地址/句柄细节）
 //   - __tests 是隐藏测试案例：对导出做 JSON 可表示性断言，runner 装载后自动运行
 //     （通过不出声，失败只告警不阻断）
+//   - checkUp() 是空间的 bool 方法：执行 server 之前先问它「现在能起吗」
 //
 // client-base 思想：基础设施全在这里（token、API 端点封装、通用头），
 // client 业务脚本只写业务流程。
@@ -25,14 +26,14 @@ globalThis.sendHeaders = function sendHeaders() {
   return bearer(API_TOKEN);
 };
 
-// ---- 基础设施函数（服务组活性 check：执行 server 前先 check）----
-globalThis.serviceAlive = async function serviceAlive(groupId) {
-  // 内置别名 serviceAlive 已存在；这里显式转发保持面板自洽
-  return serviceAlive2(groupId);
-};
-// 避免与内置别名同名覆盖：内部实现走内置 serviceCheck
-globalThis.serviceAlive2 = async function serviceAlive2(groupId) {
-  const r = await serviceCheck(groupId);
+// ---- 空间的 bool check 方法（执行 server 前先 check）----
+//
+// 返回 bool 的方法就是空间的「活性闸门」：流水线在启动主脚本之前调它，
+// 返回 false 就不启动（依赖没就绪，起早了只会白占端口）。
+// 名字由服务组配置指定（space.check），默认 checkUp。
+globalThis.checkUp = async function checkUp() {
+  // 这里的判断逻辑属于业务：例如「上游依赖是否可达」「token 是否已生成」
+  const r = await serviceCheck('demo-group');
   return r.alive;
 };
 

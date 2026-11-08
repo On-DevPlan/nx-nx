@@ -60,7 +60,6 @@ export const ALIASES = [
   { name: 'serviceStart', group: '服务组', desc: 'serviceStart(id)：启动主脚本（幂等，已在运行则跳过）' },
   { name: 'serviceStop', group: '服务组', desc: 'serviceStop(id)：停止（关停脚本 → 杀端口 → 杀 pid）' },
   { name: 'serviceStatus', group: '服务组', desc: 'serviceStatus(id) → 运行态（pid/活性/自愈计数）' },
-  { name: 'send', group: '网络', desc: 'HTTP 请求（带时间戳日志）：{ method, url, headers, body, timeoutMs, label } → { ok, status, body, json, ms }' },
   { name: 'log', group: '输出', desc: '打印一行' },
   { name: 'ok', group: '输出', desc: '打印一行成功信息' },
   { name: 'warn', group: '输出', desc: '打印一行警告（stderr）' },

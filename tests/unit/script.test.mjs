@@ -45,6 +45,15 @@ test('别名清单里的每一项都有分组与说明（人读文档不能空�
   }
 });
 
+test('别名清单没有重复项（同一个函数只登记一次）', async () => {
+  const list = await aliases();
+  const seen = new Set();
+  for (const a of list) {
+    assert.ok(!seen.has(a.name), `别名 ${a.name} 重复登记`);
+    seen.add(a.name);
+  }
+});
+
 test('内置脚本清单至少含 sync-nx-skills，且带用法', () => {
   const list = scripts();
   const s = list.find((x) => x.name === 'sync-nx-skills');
@@ -93,6 +102,68 @@ test('runScript：脚本非零退出码如实带回', async () => {
   writeFileSync(file, "process.exit(3);\n");
   const r = await runScript(file);
   assert.equal(r.code, 3);
+});
+
+// ---- 共享函数面板：堆快照 + 隐藏测试案例 ----
+//
+// 这两条是「服务组」的运行时契约（面板装载后自动跑、产出什么要能看见），
+// 之前只有文档、没有实现，也没有测试盯着——所以钉在这里。
+
+function sharedPanelCase() {
+  const dir = tmp();
+  const panel = join(dir, 'demo.shared.mjs');
+  const script = join(dir, 'client.mjs');
+  writeFileSync(
+    panel,
+    [
+      "export const PANEL_TOKEN = 'tok_abc123';",
+      'export function panelHelper() { return 1; }',
+      "globalThis.PANEL_OBJ = { doThing: function doThing() { return 2; } };",
+      'globalThis.PANEL_CACHE = new Map([["k", "v"]]);',
+      'globalThis.__tests = {',
+      "  'token 非空': () => PANEL_TOKEN.length > 3,",
+      "  'helper 是函数': () => typeof panelHelper === 'function',",
+      "  '故意失败': () => false,",
+      '};',
+    ].join('\n'),
+  );
+  writeFileSync(script, "log('client ran');\n");
+  return { dir, panel, script };
+}
+
+test('共享面板：装载后自动执行隐藏用例（失败只告警，不阻断业务脚本）', async () => {
+  const { dir, panel, script } = sharedPanelCase();
+  try {
+    const r = await runScript(script, { shared: panel });
+    assert.equal(r.code, 0, r.stderr);
+    // 业务脚本照常跑完——面板用例坏了不该拖垮它
+    assert.match(r.stdout, /client ran/);
+    // 通过的用例不出声，失败的用例要在 stderr 里点名
+    assert.match(r.stderr, /隐藏用例失败: 故意失败/);
+    assert.match(r.stderr, /隐藏用例 2\/3 通过/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('共享面板：堆快照覆盖具名导出，且非 JSON 可表示的值只报类型', async () => {
+  const { dir, panel, script } = sharedPanelCase();
+  try {
+    const r = await runScript(script, { shared: panel });
+    assert.equal(r.code, 0, r.stderr);
+    // 模块具名导出（export const / export function）要进快照
+    assert.match(r.stdout, /PANEL_TOKEN: "tok_abc123"/);
+    assert.match(r.stdout, /panelHelper: \[function panelHelper\]/);
+    // 对象的函数成员要展开——JSON.stringify 会把它们全抹成 {}
+    assert.match(r.stdout, /PANEL_OBJ: \{ doThing: \[function doThing\] \}/);
+    // Map 报类型与条数，而不是误导性的 {}
+    assert.match(r.stdout, /PANEL_CACHE: \[Map · 1 项\]/);
+    assert.doesNotMatch(r.stdout, /PANEL_CACHE: \{\}/);
+    // 隐藏用例本身不进快照
+    assert.doesNotMatch(r.stdout, /__tests:/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('flagTokens：布尔不带值，字符串用等号连写（值里的空格不会散成两个 token）', () => {

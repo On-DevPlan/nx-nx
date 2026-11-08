@@ -5,7 +5,7 @@
 // Node 侧只负责把「哪个脚本 + 哪些参数」翻译成一次子进程调用。
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { badInput, conflict, notFound } from '../errors/index.js';
 import { parseParams, type ScriptParam } from './params.js';
@@ -215,11 +215,18 @@ export async function runScript(
   const argv = [runner, target.path, ...(opts.args ?? [])];
   const extraEnv: NodeJS.ProcessEnv = {};
   if (opts.shared) {
-    const p = join(scriptsDir(), opts.shared.endsWith('.mjs') ? opts.shared : opts.shared + '.mjs');
-    if (!existsSync(p)) throw notFound(`共享面板不存在: ${opts.shared}`);
-    extraEnv['NX_SHARED_PANEL'] = p;
+    extraEnv['NX_SHARED_PANEL'] = resolveSharedPanel(opts.shared);
   }
   Object.assign(extraEnv, opts.env ?? {});
   const r = await execNode(argv, opts.cwd, extraEnv);
   return { script: target.name, path: target.path, code: r.code, stdout: r.stdout, stderr: r.stderr };
+}
+
+// 共享面板定位：组内引用写的是脚本名（如 demo.shared）→ 落在 scriptsDir 下；
+// 也接受绝对路径（面板放在包外时用；测试也走这条路径）。
+function resolveSharedPanel(name: string): string {
+  if (isAbsolute(name) && existsSync(name)) return name;
+  const p = join(scriptsDir(), name.endsWith('.mjs') ? name : name + '.mjs');
+  if (!existsSync(p)) throw notFound(`共享面板不存在: ${name}`);
+  return p;
 }

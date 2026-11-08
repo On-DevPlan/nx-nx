@@ -40,17 +40,23 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 | `nx-nx script run <脚本名\|路径> [--参数 值...]` | 跑内置脚本或任意 .mjs 脚本（内置全局函数已注入） |
 | `nx-nx sg list` | 列出服务组（配置 + 运行态） |
 | `nx-nx sg show <id>` | 服务组详情：状态 / pid / 活性 / 自愈次数 / 日志路径 |
+| `nx-nx sg hub <id>` | **hub 概览**：一组看清 server / client / 空间方法 / 当前状态 |
 | `nx-nx sg set <id> --config <JSON>` | 创建或整组更新服务组配置（Web「服务」页是表单，手写 JSON 只在脚本/CI 里用） |
-| `nx-nx sg run <id>` | **流水线**：启动主脚本 → 等活性就绪 → client 脚本依次执行 |
+| `nx-nx sg run <id>` | **流水线**：空间 check → 启动主脚本 → 等活性就绪 → client 脚本依次执行 |
 | `nx-nx sg start <id>` / `sg stop <id>` | 只启 / 只停主脚本（stop = 关停脚本 → 杀端口 → 杀 pid 三重兜底） |
 | `nx-nx sg status [id]` / `sg check <id>` | 运行态快照 / 立即活性检测（返回 `{ alive, detail }`） |
+| `nx-nx sg logs <id>` | 查看日志：事件（启动/停止/检测失败/自愈）/ 主脚本 IO 尾部 / HTTP 请求日志清单 |
+| `nx-nx sg space <id>` | 管理空间的方法清单 + 状态堆快照 |
+| `nx-nx sg space-call <id> --method <名> [--args <JSON数组>]` | 调用空间里的一个方法 |
 | `nx-nx sg delete <id>` | 删除服务组（先停服务） |
 | 任何命令 + `--json` | 机器可读输出（agent 模式） |
 
 Web 面板顶部有「新建项目 / 模板 / 脚本 / 服务」四个 tab；「脚本」页可直接编辑并运行脚本
 （共享面板 `⛭` 也可编辑，运行按钮禁用），「服务」页用**表单**管理服务组：状态卡（活性/自愈/日志）、
-启动/停止/活性检测/跑流水线按钮、主脚本与活性检测字段全部下拉与输入，不需要手写 JSON。
+启动/停止/跑流水线按钮、主脚本与活性检测字段全部下拉与输入，不需要手写 JSON。
 「流水线步骤」区可以**上下移动**client 脚本——列表顺序就是执行顺序。
+「管理空间」卡列出空间的方法与状态；**按钮刻意少**——活性检测、日志、空间方法调用都给出了等价命令
+（`sg check` / `sg logs` / `sg space-call`），界面上不铺按钮，自动化时照抄命令即可。
 
 面板前端基于 **Ant Design 6**（`@ant-design/icons`），token 在 `src/web/frontend/components/theme.tsx`
 里对齐本项目的灰阶视觉规范（黑主色 / 12px 字号 / 28px 行高 / 1px 底线分隔 / 无阴影堆叠），
@@ -128,6 +134,50 @@ nx-nx script run sync-nx-skills --root D:\code\a_js\proj --dry   # 只看会发�
 
 可选：`stop`（优雅关停脚本）、`killPort`（stop 时兜底杀端口）。
 
+### 管理空间（namespace）：面板不是一段脚本，是一个可管理的空间
+
+共享面板装载后就成了**管理空间**：有名字、有状态（堆）、有方法（可列举 / 可调用）、有调用栈。
+一个服务组的启动按钮对应的就是这段空间。
+
+```json
+"shared": "myapi.shared",
+"space": { "panel": "myapi.shared", "check": "checkUp" }
+```
+
+`space.check` 指向空间里那个**返回 bool** 的方法。流水线在**启动 server 之前**先调它：
+
+```
+space.check → false  ⇒  不启动主脚本（依赖没就绪，起早了只会白占端口）
+space.check → true   ⇒  启动 server → 等活性就绪 → client 依次执行
+```
+
+面板里怎么写都行——挂到 `globalThis` 或用 `defineSpace` 显式声明：
+
+```js
+// myapi.shared.mjs
+import { defineSpace } from './_ns.mjs';
+
+globalThis.checkUp = async function checkUp() {
+  return (await serviceCheck('my-svc')).alive;   // 返回 bool 即可
+};
+
+export const SPACE = defineSpace({
+  name: 'myapi',
+  state: { BASE_URL: 'http://127.0.0.1:18080' },
+  methods: {
+    getCustomers: async () => send({ method: 'GET', url: `${BASE_URL}/api/customers` }),
+  },
+});
+```
+
+### 命令覆盖全部能力（界面不堆按钮，自动化照抄即可）
+
+```bash
+nx-nx sg hub my-svc        # 一组看清：server / client / 空间方法 / 当前状态
+nx-nx sg space my-svc      # 空间的方法清单 + 状态堆快照
+nx-nx sg space-call my-svc --method getCustomers --args '[]'   # 调空间方法
+```
+
 ### 三条命令覆盖大部分场景
 
 ```bash
@@ -140,10 +190,11 @@ nx-nx sg set my-svc --config '{
   "health": { "kind": "http", "host": "127.0.0.1", "port": 18080, "path": "/health",
               "intervalMs": 3000, "failThreshold": 3, "onDead": "restart" },
   "shared": "myapi.shared",
+  "space": { "panel": "myapi.shared", "check": "checkUp" },
   "clients": ["my-client"]
 }'
 
-# 2) 跑流水线：启动服务 → 等活性就绪 → client 依次执行
+# 2) 跑流水线：空间 check → 启动服务 → 等活性就绪 → client 依次执行
 nx-nx sg run my-svc
 
 # 3) 看状态 / 立即检测 / 停

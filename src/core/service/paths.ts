@@ -28,6 +28,11 @@ export function serviceHttpLogsDir(groupId: string): string {
   return join(SERVICES_DIR, 'http-logs', groupId);
 }
 
+// 管理空间索引（空间 = 共享面板被装载后的可管理实体）
+export function serviceSpacesPath(): string {
+  return join(SERVICES_DIR, 'spaces.json');
+}
+
 // 组 id：小写字母数字与连字符，作为文件名与 URL 片段使用。
 export function assertGroupId(id: unknown): string {
   const s = String(id ?? '').trim();

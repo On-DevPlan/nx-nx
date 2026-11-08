@@ -371,6 +371,9 @@ main { padding: 16px; }
   accent-color: var(--ink);
 }
 .opt-hint { font-size: 11px; color: var(--mid); margin-top: 3px; line-height: 1.4; }
+/* antd 控件接管后：输入类铺满整行，开关与文字同行 */
+.opt-row .ant-input, .opt-row .ant-input-number, .opt-row .ant-select { width: 100%; }
+.opt-row .ant-switch { margin-right: 6px; }
 
 /* 分组标题（必填 / 可选）：11px 弱化字 + 1px 底线，与全站的分隔语言一致 */
 .opt-group { margin-bottom: 16px; }
@@ -393,12 +396,10 @@ main { padding: 16px; }
 
 /* 按钮为什么灰着：紧贴操作区上方，不占正文空间 */
 .opt-blocked {
-  padding: 8px 12px;
   border-top: var(--border);
-  background: var(--soft);
-  color: var(--bad);
   font-size: 11px;
   line-height: 1.5;
+  border-radius: 0;
 }
 
 .opt-actions {
@@ -533,6 +534,28 @@ main { padding: 16px; }
   font-size: 12px;
 }
 .sg-step-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 命令式入口：不是按钮，而是「这条操作在命令行怎么写」。
+   自动化时照抄即可；界面上也不必为每个动作铺一个按钮。 */
+.sg-links {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: var(--border);
+}
+.sg-links button {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--mid);
+  text-decoration: underline dotted;
+}
+.sg-links button:hover:not(:disabled) { color: var(--ink); }
+.sg-links button:disabled { color: var(--mid); opacity: 0.5; cursor: default; }
 .sg-json-pre {
   font-size: 11px;
   line-height: 1.5;
@@ -543,6 +566,33 @@ main { padding: 16px; }
   border-radius: 4px;
   margin: 4px 0 0;
 }
+
+/* ---- 服务组日志抽屉 ---- */
+.sg-log-pre {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--soft);
+  border-radius: 4px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 60vh;
+  overflow: auto;
+}
+.sg-http-list { display: flex; flex-direction: column; }
+.sg-http-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--soft-2);
+  font-size: 11px;
+}
+.sg-http-row:last-child { border-bottom: 0; }
+.sg-http-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--mid); }
 .dot-ok { background: #2f9e44; }

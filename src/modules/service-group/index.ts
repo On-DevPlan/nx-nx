@@ -1,9 +1,11 @@
-// 服务组域：主/次脚本编排 + 活性检测 + 自愈 + 共享函数面板 + 执行流水线。
+// 服务组域：主/次脚本编排 + 活性检测 + 自愈 + 管理空间 + 执行流水线。
 //
 // 概念（与脚本域的关系）：
 //   服务组 = 1 个主脚本（长驻服务，IO 重定向到日志）+ N 个 client 脚本（依次执行的请求方）
 //   活性检测 = 端口可连 / HTTP 可响应；连续失败达阈值 → 自愈重启（serve 进程内的 watcher）
-//   共享函数面板 = <group>.shared.mjs：常量 = 函数 = {}，组内脚本执行前自动装载并输出堆快照
+//   管理空间 = 共享面板（<group>.shared.mjs）被装载后的可管理实体：
+//               有名字、有状态（堆）、有方法（可列举 / 可调用）、有调用栈。
+//               空间里的 bool 方法在执行 server 之前先 check——不通过就不启动。
 //
 // 所有操作同时是 CLI 命令与 HTTP 路由；Web「服务」页的每个按钮都有等价命令。
 import { defineAction } from '../../runtime/types/action.js';
@@ -18,6 +20,7 @@ const CONFIG_HINT = `--json '{
   "health": { "kind": "http", "port": 8080, "host": "127.0.0.1", "path": "/health",
               "intervalMs": 5000, "failThreshold": 3, "onDead": "restart" },
   "shared": "demo.shared",
+  "space": { "panel": "demo.shared", "check": "checkUp" },
   "clients": ["demo-client"]
 }'`;
 
@@ -90,8 +93,8 @@ export default defineModule({
         config: { type: "string", required: true, hint: "服务组配置 JSON（name/main/stop/killPort/health/shared/clients）" },
       },
     })(
-      (ctx) => { console.error("DBG type=" + typeof ctx.config + " val=" + String(ctx.config).slice(0, 100)); return service.setGroup(ctx.id, ctx.config); },
-      (r) => `已保存服务组 ${r.id}（${r.name}）\n  main: ${r.main?.script ?? '(未配置)'} · health: ${r.health ? r.health.kind + ':' + r.health.port : '无'} · clients: ${r.clients.join(', ') || '无'}\n  示例配置: ${CONFIG_HINT.slice(0, 0) || ''}`.trim(),
+      (ctx) => service.setGroup(ctx.id, ctx.config),
+      (r) => `已保存服务组 ${r.id}（${r.name}）\n  main: ${r.main?.script ?? '(未配置)'} · health: ${r.health ? r.health.kind + ':' + r.health.port : '无'} · clients: ${r.clients.join(', ') || '无'}\n  示例配置: ${CONFIG_HINT}`,
     ),
 
     defineAction({
@@ -150,10 +153,119 @@ export default defineModule({
     ),
 
     defineAction({
+      id: 'serviceGroup.logs',
+      cli: ['sg', 'logs'],
+      http: ['GET', '/api/service-groups/:id/logs'],
+      summary: '查看服务组日志：事件（启动/停止/检测失败/自愈）/ 主脚本 IO 尾部 / HTTP 请求日志清单',
+      args: ['id'],
+    })(
+      (ctx) => service.logs(ctx.id),
+      (r) => {
+        const lines: string[] = [];
+        if (r.events.trim()) lines.push('事件日志:', r.events.trimEnd());
+        if (r.main.trim()) lines.push('主脚本日志（尾部）:', r.main.trimEnd());
+        if (r.http.length) {
+          lines.push(`HTTP 请求日志（${r.http.length} 条，最近在前）:`);
+          for (const h of r.http.slice(0, 20)) lines.push(`  ${h.name}  ${h.size} 字节`);
+        }
+        if (!lines.length) lines.push('（该服务组还没有日志）');
+        return lines.join('\n');
+      },
+    ),
+
+    defineAction({
+      id: 'serviceGroup.hub',
+      cli: ['sg', 'hub'],
+      http: ['GET', '/api/service-groups/:id/hub'],
+      summary: 'hub 概览：一组看清 server / client / 空间方法 / 当前状态',
+      args: ['id'],
+    })(
+      (ctx) => service.hubOverview(ctx.id),
+      (r) => {
+        const lines = [`hub ${r.id} · ${r.name}`];
+        if (r.server) {
+          const s = r.server;
+          const mark = s.status !== 'running' ? '·' : s.alive === false ? '✘' : '✔';
+          lines.push(`  server  ${mark} ${s.script} ${s.args.join(' ')}`.trimEnd());
+          lines.push(`          状态 ${s.status}${s.pid ? ` (pid ${s.pid})` : ''}${s.detail ? ` · ${s.detail}` : ''}`);
+        } else {
+          lines.push('  server  （未配置）');
+        }
+        lines.push(`  client  ${r.clients.length ? r.clients.join(' → ') : '（无）'}`);
+        lines.push(`  stop    ${r.stop}`);
+        lines.push(`  health  ${r.health}`);
+        if (r.space) {
+          lines.push(`  space   ${r.space.panel} · check=${r.space.check}`);
+          lines.push(`          方法 ${r.space.methods.length ? r.space.methods.join(', ') : '（无）'}`);
+        } else {
+          lines.push('  space   （未绑定）');
+        }
+        lines.push(`  下一步  ${r.nextCommand}`);
+        return lines.join('\n');
+      },
+    ),
+
+    defineAction({
+      id: 'serviceGroup.space',
+      cli: ['sg', 'space'],
+      http: ['GET', '/api/service-groups/:id/space'],
+      summary: '查看管理空间：方法清单 + 状态堆快照（可 JSON 表示的部分）',
+      args: ['id'],
+    })(
+      (ctx) => service.spaceIntrospect(ctx.id),
+      (r) => {
+        if (!r.ok) return `✘ 空间装载失败：${r.error}`;
+        const lines = ['管理空间:'];
+        const methods = r.methods ?? [];
+        if (methods.length) {
+          lines.push(`  方法（${methods.length}）:`);
+          for (const m of methods) lines.push(`    ${m.name}(${m.arity})${m.async ? ' async' : ''}`);
+        } else {
+          lines.push('  （空间没有方法——在面板里挂 globalThis.xxx = function () {} 或用 defineSpace）');
+        }
+        const heap = r.heap ?? [];
+        if (heap.length) {
+          lines.push(`  状态（${heap.length}）:`);
+          for (const h of heap) lines.push(`    ${h.key}: ${h.describe}`);
+        }
+        return lines.join('\n');
+      },
+    ),
+
+    defineAction({
+      id: 'serviceGroup.spaceCall',
+      cli: ['sg', 'space-call'],
+      http: ['POST', '/api/service-groups/:id/space-call'],
+      summary: '调用管理空间的一个方法（--method 名，--args JSON 数组）',
+      args: ['id'],
+      flags: {
+        method: { type: 'string', required: true, hint: '要调用的方法名' },
+        args: { type: 'string', hint: '参数（JSON 数组，如 ["demo-group"]）' },
+      },
+    })(
+      (ctx) => {
+        let parsed: unknown[] = [];
+        if (ctx.args) {
+          try {
+            const v = JSON.parse(ctx.args);
+            parsed = Array.isArray(v) ? v : [v];
+          } catch (err) {
+            throw new Error(`--args 不是合法 JSON: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+        return service.spaceCall(ctx.id, ctx.method, parsed);
+      },
+      (r) => {
+        if (!r.ok) return `✘ 调用失败：${r.error}`;
+        return `✔ ${r.method}() = ${JSON.stringify(r.value)}`;
+      },
+    ),
+
+    defineAction({
       id: 'serviceGroup.run',
       cli: ['sg', 'run'],
       http: ['POST', '/api/service-groups/:id/run'],
-      summary: '执行流水线：启动 main → 等活性就绪 → clients 依次执行',
+      summary: '执行流水线：空间 check → 启动 main → 等活性就绪 → clients 依次执行',
       args: ['id'],
     })(
       (ctx) => service.run(ctx.id),
