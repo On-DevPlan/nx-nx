@@ -346,6 +346,7 @@ RESPONSE 段（状态/耗时/全部响应头/body）、META 段（ok/error）。
 | 每个 HTTP 请求的全量 req/resp | `~/.nx-nx/services/http-logs/<组>/` |
 | 服务组配置 / 运行态 | `~/.nx-nx/service-groups.json` · `~/.nx-nx/services/runtime.json` |
 | 管理空间索引（各空间的方法清单） | `~/.nx-nx/services/spaces.json` |
+| serve 落点（端口 / pid，CLI 据此转交空间命令） | `~/.nx-nx/serve.json` |
 
 配置与运行态是**两份数据**：改配置不会重置运行态，删运行态也不会丢配置。
 
