@@ -19,11 +19,19 @@ interface SpaceMethod {
   async: boolean;
 }
 
+interface SpaceFrame {
+  method: string;
+  at: string;
+  resultType: string | null;
+  error: string | null;
+}
+
 interface SpaceView {
   ok: boolean;
   error?: string;
   methods?: SpaceMethod[];
   heap?: { key: string; describe: string; type: string }[];
+  frames?: SpaceFrame[];
 }
 
 interface Props {
@@ -60,7 +68,7 @@ export function SpacePanel({ groupId }: Props) {
       size="small"
       title="管理空间"
       extra={
-        <Tooltip title="重新装载空间，刷新方法清单与状态">
+        <Tooltip title="刷新空间视图（空间常驻：状态与调用记录跨刷新保留）">
           <Button size="small" icon={<ReloadOutlined />} onClick={() => void load()} disabled={loading} />
         </Tooltip>
       }
@@ -102,6 +110,29 @@ export function SpacePanel({ groupId }: Props) {
               <pre className="mono sg-log-pre" style={{ maxHeight: 160, overflow: 'auto' }}>
                 {view.heap.map((h) => `${h.key}: ${h.describe}`).join('\n')}
               </pre>
+            </div>
+          )}
+
+          {/* 调用栈：空间被调用过的痕迹（空间常驻，这些记录跨刷新保留） */}
+          {view.frames && view.frames.length > 0 && (
+            <div>
+              <Text type="secondary" style={{ fontSize: 11 }}>
+                最近调用（{view.frames.length}）
+              </Text>
+              <div className="sg-steps">
+                {view.frames
+                  .slice(-5)
+                  .reverse()
+                  .map((f, i) => (
+                    <div key={`${f.at}-${i}`} className="sg-step">
+                      <Tag color="#8b9096">call</Tag>
+                      <span className="mono sg-step-name">{f.method}</span>
+                      <Text type="secondary" style={{ fontSize: 11 }}>
+                        {String(f.at).slice(11, 19)} → {f.resultType ?? f.error ?? '?'}
+                      </Text>
+                    </div>
+                  ))}
+              </div>
             </div>
           )}
         </Space>
