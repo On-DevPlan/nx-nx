@@ -82,7 +82,8 @@ class SpaceSession {
       if (w) clearTimeout(w.timer);
       this.kill();
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
-    }    this.touchIdle();
+    }
+    this.touchIdle();
     return promise;
   }
 
