@@ -54,6 +54,31 @@ export function upsertSpace(entry: SpaceIndexEntry): void {
   saveSpaceIndex(idx);
 }
 
+/**
+ * 装载空间并把它的方法清单写进索引。
+ * 索引是「本机有哪些空间、各自能干什么」的落盘视图——
+ * 有了它，`sg space-list` 不用每次都起子进程装载面板。
+ */
+export async function refreshSpaceIndex(
+  id: string,
+  panelPath: string,
+  groupId?: string,
+): Promise<SpaceIndexEntry> {
+  const r = await introspectSpace(panelPath);
+  const report = (r.space ?? {}) as { name?: string; methods?: SpaceMethodInfo[] };
+  const entry: SpaceIndexEntry = {
+    id,
+    name: report.name ?? id,
+    panel: panelPath,
+    groupId,
+    methods: report.methods ?? [],
+    stateKeys: ((r.heap ?? []) as { key: string }[]).map((h) => h.key),
+    updatedAt: Date.now(),
+  };
+  upsertSpace(entry);
+  return entry;
+}
+
 // ---- 面板定位 ----
 
 /**

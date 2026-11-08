@@ -13,6 +13,7 @@
 // client 业务脚本只写业务流程。
 
 import { installAliases } from './aliases.mjs';
+import { defineSpace } from './_ns.mjs';
 
 installAliases(globalThis);
 
@@ -73,6 +74,20 @@ globalThis.makeUsers = function makeUsers(n) {
 
 // ---- 故意放一个非 JSON 可表示的东西：验证堆快照的「清理」行为 ----
 globalThis._internalCache = new Map([['session', 'should-not-leak']]);
+
+// ---- 显式声明空间（名字 + 状态）----
+//
+// 面板也可以只靠 globalThis 挂东西（那样空间名是 'panel'）；
+// 显式声明的好处是空间有名字、状态集中在一处，索引里一眼认得出。
+export const SPACE = defineSpace({
+  name: 'demo',
+  description: '演示服务组的管理空间：token / API 封装 / 活性 check',
+  state: {
+    API_TOKEN,
+    BASE_URL,
+    CREATED_AT,
+  },
+});
 
 // ---- 隐藏测试案例（runner 自动执行，失败只告警不阻断）----
 globalThis.__tests = {

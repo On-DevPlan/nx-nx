@@ -21,8 +21,11 @@ import { groupLogs } from '../../core/service/logs.js';
 import {
   callSpaceMethod,
   introspectSpace,
+  loadSpaceIndex,
+  refreshSpaceIndex,
   resolvePanelPath,
   type SpaceActionResult,
+  type SpaceIndexEntry,
 } from '../../core/service/namespace.js';
 
 export interface ServiceGroupView {
@@ -153,11 +156,26 @@ export function groupSpace(id: unknown): { panel: string; check: string } | null
   return { panel, check: g.space?.check ?? 'checkUp' };
 }
 
-// 空间清单：这个组的空间有哪些方法、状态里有什么
+// 空间清单：方法清单 + 状态堆
 export async function spaceIntrospect(id: unknown): Promise<SpaceActionResult> {
   const s = groupSpace(id);
   if (!s) throw new Error(`服务组 ${assertGroupId(id)} 未绑定管理空间（shared / space.panel 都没配）`);
-  return introspectSpace(resolvePanelPath(s.panel));
+  const panelPath = resolvePanelPath(s.panel);
+  const r = await introspectSpace(panelPath);
+  // 顺手刷新索引：空间清单落盘后，`sg spaces` 不用每次装载面板
+  if (r.ok) {
+    try {
+      await refreshSpaceIndex(assertGroupId(id), panelPath, assertGroupId(id));
+    } catch {
+      // 索引写失败不该影响空间本身的读取
+    }
+  }
+  return r;
+}
+
+// 本机所有空间（从索引读）：每个空间有哪些方法
+export function listSpaces(): SpaceIndexEntry[] {
+  return loadSpaceIndex().spaces;
 }
 
 // 调用空间的一个方法
