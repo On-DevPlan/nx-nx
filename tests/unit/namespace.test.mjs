@@ -7,7 +7,7 @@
 //   4. check 动作调用返回 bool 的方法，给出 alive 判定
 //
 // 一律在临时目录里造面板，绝不碰真实 assets/scripts。
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -20,6 +20,10 @@ import {
   introspectSpace,
   resolvePanelPath,
 } from '../../src/core/service/namespace.js';
+import { closeAllSpaceSessions } from '../../src/core/service/space-session.js';
+
+// 测试跑完把常驻空间会话收掉，别留下子进程
+after(() => closeAllSpaceSessions());
 
 function tmp() {
   return mkdtempSync(join(tmpdir(), 'nxnx-ns-'));
@@ -180,6 +184,31 @@ test('空间调用后带回状态堆与调用栈：空间是个实体，调用�
     assert.equal(f.method, 'remember');
     assert.equal(f.resultType, 'String');
     assert.ok(Array.isArray(f.frames), '调用帧应当带落点');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('常驻空间会话：多次调用之间保留状态与调用栈（空间是个实体，不是一段散脚本）', async () => {
+  const { dir, panel } = panelCase();
+  try {
+    const a = await callSpaceMethod(panel, 'remember', ['x1']);
+    const b = await callSpaceMethod(panel, 'remember', ['x2']);
+    assert.equal(a.ok, true, a.error);
+    assert.equal(b.ok, true, b.error);
+
+    const aLast = (a.heap ?? []).find((h) => h.key === 'LAST');
+    const bLast = (b.heap ?? []).find((h) => h.key === 'LAST');
+    assert.equal(aLast?.describe, '"x1"');
+    // 第二次调用看得到第一次留下的状态——同一个空间实例
+    assert.equal(bLast?.describe, '"x2"');
+    // 面板装载时生成的状态在两次调用之间不变（一次性进程每次都会重置）
+    const aToken = (a.heap ?? []).find((h) => h.key === 'API_TOKEN')?.describe;
+    const bToken = (b.heap ?? []).find((h) => h.key === 'API_TOKEN')?.describe;
+    assert.equal(aToken, bToken, '会话里的空间状态不该被重置');
+
+    // 调用栈累积：第二次能看到两次调用
+    assert.ok((b.frames ?? []).length >= 2, `调用栈应累积：${(b.frames ?? []).length}`);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

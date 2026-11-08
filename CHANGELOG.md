@@ -2,6 +2,13 @@
 
 ### Added
 
+- **管理空间成为常驻实体**：新增 `src/core/service/space-session.ts` 与 `_runner.mjs` 的
+  `NX_NS_SESSION=1` 会话模式——空间面板**只装载一次**，之后所有 introspect / call / check
+  都在同一个空间实例上执行（stdin/stdout 走 NDJSON 协议）。此前每次动作都新起子进程重新装载，
+  于是状态堆每次重置、调用栈永远为空，空间退化成了「一段跑完就散的脚本」。
+  现在 `sg space-call` 能看见**调用后的空间状态**与**这次调用的调用栈**，
+  服务组的面板与 check 闸门也共享同一个空间实例。空闲 5 分钟自动回收，
+  serve 退出 / CLI 结束都会收掉会话进程，不留孤儿。
 - **共享面板升格为「管理空间」（namespace）**：新增 `assets/scripts/_ns.mjs`，把面板从
   「一段跑完就散的脚本」变成可装载、可列举、可调用的空间实体——有名字、有状态（堆）、
   有方法（可列举 / 可调用）、有调用栈。面板既可沿用 `globalThis` 风格，也可

@@ -13,6 +13,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { runnerPath, scriptsDir } from '../script/paths.js';
 import { serviceSpacesPath } from './paths.js';
+import { getSpaceSession } from './space-session.js';
 import { readJsonFile, writeJsonAtomic } from './store-json.js';
 
 // ---- 空间索引（落盘） ----
@@ -193,9 +194,35 @@ export function runSpaceAction(
 
 // ---- 面向业务的三个入口 ----
 
+/**
+ * 会话版的三个入口：走常驻空间进程，同一个空间实例跨调用保留状态与调用栈。
+ * 会话不可用（进程起不来 / 卡死）时退回一次性动作——
+ * 管理面宁可慢一点，也不能因为会话坏了就什么都看不到。
+ */
+async function viaSession(
+  panelPath: string,
+  action: 'introspect' | 'call' | 'check',
+  opts: { method?: string; args?: unknown[] } = {},
+): Promise<SpaceActionResult> {
+  try {
+    const session = getSpaceSession(panelPath);
+    const reply = await session.request({ action, method: opts.method, args: opts.args });
+    return fromReply(action, reply as unknown as Record<string, unknown>);
+  } catch {
+    // 会话层面失败（起不来 / 卡死 / 进程退了）→ 退回一次性路径
+    return runSpaceAction(panelPath, action, opts);
+  }
+}
+
+function fromReply(action: string, reply: Record<string, unknown>): SpaceActionResult {
+  const { id: _id, ...rest } = reply as { id?: number | null } & Record<string, unknown>;
+  const ok = rest['ok'] === true;
+  return { action, ...rest, ok } as SpaceActionResult;
+}
+
 /** 空间清单：有哪些空间、每个空间有哪些方法 */
 export async function introspectSpace(panelPath: string): Promise<SpaceActionResult> {
-  return runSpaceAction(panelPath, 'introspect');
+  return viaSession(panelPath, 'introspect');
 }
 
 /** 调用空间的一个方法 */
@@ -204,7 +231,7 @@ export async function callSpaceMethod(
   method: string,
   args: unknown[] = [],
 ): Promise<SpaceActionResult> {
-  return runSpaceAction(panelPath, 'call', { method, args });
+  return viaSession(panelPath, 'call', { method, args });
 }
 
 /**
@@ -215,7 +242,7 @@ export async function checkSpace(
   panelPath: string,
   method: string,
 ): Promise<{ alive: boolean; detail: string }> {
-  const r = await runSpaceAction(panelPath, 'check', { method });
+  const r = await viaSession(panelPath, 'check', { method });
   if (!r.ok) return { alive: false, detail: r.error ?? '空间 check 失败' };
   return { alive: r.alive === true, detail: r.detail ?? '' };
 }

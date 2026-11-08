@@ -19,8 +19,15 @@
 //   NX_NS_ACTION=call        调用一个方法（NX_NS_METHOD / NX_NS_ARGS_JSON）
 //   NX_NS_ACTION=check       调用一个返回 bool 的方法当活性 check（执行 server 前先 check）
 // 动作模式下不执行业务脚本，结果以 JSON 打到 stdout（NX_NS_RESULT 标记行）。
+//
+// 管理空间的常驻会话（NX_NS_SESSION=1）：
+//   空间要是个「实体」，就不能每次调用都重新装载面板——那样状态每次都重置、
+//   调用栈永远为空。于是这里提供会话模式：装载一次面板，然后守着 stdin，
+//   每收到一行 JSON 请求（{id, action, method, args}）就在**同一个空间实例**上
+//   执行一个动作，回一行 NX_NS_RESULT {id, ...}。stdin 关闭 → 进程退出。
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { createInterface } from 'node:readline';
 import { installAliases, ALIASES } from './aliases.mjs';
 import {
   callMethod,
@@ -40,7 +47,10 @@ const nsAction = process.env.NX_NS_ACTION || '';
 const nsMethod = process.env.NX_NS_METHOD || '';
 const nsArgsJson = process.env.NX_NS_ARGS_JSON || '[]';
 
-if (!target && !nsAction) {
+// 常驻会话模式：装载一次面板，之后靠 stdin 驱动动作
+const sessionMode = process.env.NX_NS_SESSION === '1';
+
+if (!target && !nsAction && !sessionMode) {
   console.error('用法: _runner.mjs <script.mjs> [args...]');
   process.exit(2);
 }
@@ -58,6 +68,10 @@ if (sharedPanel) {
   space = resolvePanelSpace(panel, beforeKeys, aliasNames);
   if (nsAction) {
     await runSpaceAction(space);
+  } else if (sessionMode) {
+    // 会话模式：先验一遍隐藏用例（面板坏在这里就该露出来），然后守着 stdin。
+    await runPanelTests();
+    await runSession(space);
   } else {
     dumpSharedPanelSnapshot(aliasNames, beforeKeys, panel, space);
     await runPanelTests();
@@ -66,6 +80,8 @@ if (sharedPanel) {
 
 // 动作模式到此为止：不执行业务脚本。
 if (nsAction) process.exit(0);
+// 会话模式同样不执行业务脚本——它只托管空间。
+if (sessionMode) process.exit(0);
 
 // 让脚本看到的 argv 只有自己：argv[0]=node，argv[1]=脚本路径，之后是脚本参数。
 process.argv = [process.argv[0], target, ...rest];
@@ -136,77 +152,118 @@ function dumpSharedPanelSnapshot(aliasNames, beforeKeys, panel, space) {
 // 结果统一以一行 JSON 打到 stdout，前缀 NX_NS_RESULT ——
 // core 侧靠这个标记行取结构化结果，不去猜业务脚本的输出格式。
 async function runSpaceAction(space) {
-  const emit = (obj) => {
-    console.log(`NX_NS_RESULT ${JSON.stringify(obj)}`);
-  };
+  const result = await handleSpaceAction(space, {
+    action: nsAction,
+    method: nsMethod,
+    args: nsArgsJson,
+  });
+  console.log(`NX_NS_RESULT ${JSON.stringify(result)}`);
+}
 
-  if (nsAction === 'introspect') {
-    emit({
+/**
+ * 执行一个空间动作，返回结果对象（不负责输出）。
+ * 一次性动作与常驻会话共用这一份实现——两条路的语义必须一模一样。
+ */
+async function handleSpaceAction(space, { action, method, args }) {
+  if (action === 'introspect') {
+    return {
       ok: true,
       action: 'introspect',
       space: spaceReport(space),
       methods: listMethods(space),
       heap: heapRows(space),
       frames: spaceStack(space),
-    });
-    return;
+    };
   }
 
-  if (!nsMethod) {
-    emit({ ok: false, action: nsAction, error: '缺少 NX_NS_METHOD（要调用哪个方法）' });
-    return;
+  if (!method) {
+    return { ok: false, action, error: '缺少方法名（要调用哪个方法）' };
   }
 
-  let args = [];
+  let parsed = [];
   try {
-    const parsed = JSON.parse(nsArgsJson);
-    args = Array.isArray(parsed) ? parsed : [parsed];
+    const v = JSON.parse(args ?? '[]');
+    parsed = Array.isArray(v) ? v : [v];
   } catch (err) {
-    emit({ ok: false, action: nsAction, error: `NX_NS_ARGS_JSON 不是合法 JSON: ${err?.message ?? err}` });
-    return;
+    return { ok: false, action, error: `参数不是合法 JSON: ${err?.message ?? err}` };
   }
 
   let value;
   try {
-    value = await callMethod(space, nsMethod, args);
+    value = await callMethod(space, method, parsed);
   } catch (err) {
-    emit({
+    return {
       ok: false,
-      action: nsAction,
-      method: nsMethod,
+      action,
+      method,
       error: err instanceof Error ? err.message : String(err),
       // 调用栈：空间方法抛错时最需要的信息（callMethod 挂在错误上）
       stack: err && typeof err === 'object' ? err.__spaceStack : undefined,
       frames: spaceStack(space),
-    });
-    return;
+    };
   }
 
-  if (nsAction === 'check') {
+  if (action === 'check') {
     // check 的契约：方法返回 bool。返回非 bool 视为不通过——宁可保守，别假装活。
     const alive = value === true;
-    emit({
+    return {
       ok: true,
       action: 'check',
-      method: nsMethod,
+      method,
       alive,
       detail: alive
-        ? `空间方法 ${nsMethod}() 返回 true`
-        : `空间方法 ${nsMethod}() 返回 ${describeValue(value)}（非 true，判定不通过）`,
+        ? `空间方法 ${method}() 返回 true`
+        : `空间方法 ${method}() 返回 ${describeValue(value)}（非 true，判定不通过）`,
       frames: spaceStack(space),
-    });
-    return;
+    };
   }
 
-  emit({
+  return {
     ok: true,
     action: 'call',
-    method: nsMethod,
+    method,
     value: toJsonSafe(value),
     // 调用后的空间状态与调用栈：空间是个实体，调用它会改变状态、也会留下调用痕迹。
     heap: heapRows(space),
     frames: spaceStack(space),
-  });
+  };
+}
+
+// ---- 常驻会话 ----
+//
+// 一个空间实例守在进程里：core 侧发一行 JSON 请求，这里在同一空间上执行动作，
+// 回一行 NX_NS_RESULT {id, ...}。stdin 关掉 → 会话结束。
+// 动作串行执行（一次一个）：空间方法可能改自身状态，并发调等于自找麻烦。
+async function runSession(space) {
+  const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
+  for await (const line of rl) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let req;
+    try {
+      req = JSON.parse(trimmed);
+    } catch (err) {
+      writeResult({ id: null, ok: false, error: `请求不是合法 JSON: ${err?.message ?? err}` });
+      continue;
+    }
+    const id = req?.id ?? null;
+    try {
+      const result = await handleSpaceAction(space, {
+        action: String(req?.action ?? ''),
+        method: req?.method ? String(req.method) : '',
+        args: JSON.stringify(Array.isArray(req?.args) ? req.args : []),
+      });
+      writeResult({ id, ...result });
+    } catch (err) {
+      // 会话本身不能因为一次动作失败就崩掉——崩了等于空间没了。
+      writeResult({ id, ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+}
+
+/** 回一行结果给 core 侧 */
+function writeResult(obj) {
+  process.stdout.write(`NX_NS_RESULT ${JSON.stringify(obj)}\n`);
 }
 
 /** 堆快照的统一形态：每项给 key / 可读描述 / 类型 */

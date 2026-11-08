@@ -296,6 +296,8 @@ async function cmdServe(ctx: { port?: number; 'no-open'?: boolean }): Promise<vo
 
   const shutdown = () => {
     console.log('\n正在停止...');
+    // 收掉常驻的空间会话子进程，别留孤儿
+    void import('../core/service/space-session.js').then((m) => m.closeAllSpaceSessions());
     server.close(() => process.exit(0));
   };
   process.on('SIGINT', shutdown);
@@ -338,6 +340,10 @@ export async function runCli(argv: string[]): Promise<void> {
     await emit(cmd, data, json, ctx as Record<string, unknown>);
   } catch (err) {
     fail(err, json);
+  } finally {
+    // CLI 是一次性进程：常驻空间会话用完就收（serve 才会一直留着）。
+    const { closeAllSpaceSessions } = await import('../core/service/space-session.js');
+    closeAllSpaceSessions();
   }
 }
 
