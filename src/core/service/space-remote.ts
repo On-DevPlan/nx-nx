@@ -60,6 +60,10 @@ export async function remoteSpaceAction(
   if (insideServe()) return null;
   const info = readServeInfo();
   if (!info) return null;
+  // 兜底：目标端口就是本机 serve 自己 → 别把请求转给自己（会无限回环）
+  if (process.env.NX_NX_SERVE_PORT && Number(process.env.NX_NX_SERVE_PORT) === info.port) {
+    return null;
+  }
 
   const base = `http://127.0.0.1:${info.port}/api/service-groups/${encodeURIComponent(groupId)}`;
   try {
