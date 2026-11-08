@@ -42,6 +42,12 @@ export function serviceClientsLogPath(groupId: string): string {
   return join(serviceLogsDir(), `clients-${groupId}.log`);
 }
 
+// serve 的落点信息（端口 / pid）——CLI 据此判断「本机是否有个面板在跑」，
+// 好让命令作用在同一个空间实例上，而不是各起各的。
+export function serveInfoPath(): string {
+  return join(APP_DIR, 'serve.json');
+}
+
 // 组 id：小写字母数字与连字符，作为文件名与 URL 片段使用。
 export function assertGroupId(id: unknown): string {
   const s = String(id ?? '').trim();

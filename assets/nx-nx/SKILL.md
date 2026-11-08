@@ -46,8 +46,8 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 | `nx-nx sg start <id>` / `sg stop <id>` | 只启 / 只停主脚本（stop = 关停脚本 → 杀端口 → 杀 pid 三重兜底）；start 同样要过空间闸门 |
 | `nx-nx sg status [id]` / `sg check <id>` | 运行态快照 / 立即活性检测（返回 `{ alive, detail }`） |
 | `nx-nx sg logs <id>` | 查看日志：事件（启动/停止/检测失败/自愈）/ 主脚本 IO 尾部 / HTTP 请求日志清单 |
-| `nx-nx sg space <id>` | 管理空间的方法清单 + 状态堆快照 |
-| `nx-nx sg space-call <id> --method <名> [--args <JSON数组>]` | 调用空间里的一个方法 |
+| `nx-nx sg space <id>` | 管理空间的方法清单 + 状态堆快照 + 调用记录 |
+| `nx-nx sg space-call <id> --method <名> [--args <JSON数组>]` | 调用空间里的一个方法（附带调用后的空间状态与调用栈） |
 | `nx-nx sg delete <id>` | 删除服务组（先停服务） |
 | 任何命令 + `--json` | 机器可读输出（agent 模式） |
 
@@ -159,7 +159,7 @@ nx-nx script run sync-nx-skills --root D:\code\a_js\proj --dry   # 只看会发�
 ### 管理空间（namespace）：面板不是一段脚本，是一个可管理的空间
 
 共享面板装载后就成了**管理空间**：有名字、有状态（堆）、有方法（可列举 / 可调用）、有调用栈。
-一个服务组的启动按钮对应的就是这段空间。
+一个服务组的启动按钮对应的就是这段空间。空间**常驻**：面板只装载一次，状态与调用栈跨调用保留。
 
 ```json
 "shared": "myapi.shared",
@@ -200,6 +200,14 @@ export const SPACE = defineSpace({
 > 面板里凡是走 serve API 的判断（`serviceCheck` / `serviceAlive`），都靠 `NX_NX_SERVE_PORT`
 > 回连本机面板。CLI 直跑（不经 `nx-nx serve`）时该变量不存在 —— 那种场景下 check
 > 应当自包含（判依赖可达性），不要绕回 serve。
+
+**空间是常驻的**：面板**只装载一次**，之后 `sg space` / `sg space-call` / 启动闸门都作用在
+同一个空间实例上——状态堆跨调用保留，调用栈会累积（`sg space-call` 会一并打印「调用后的
+空间状态」与「这次调用的调用栈」）。空闲 5 分钟自动回收，serve 退出时收掉，不留孤儿进程。
+
+> 注意实例边界：**serve 进程里的空间**与**CLI 直跑时起的空间**是两个实例（CLI 是一次性
+> 进程，用完即走）。所以「面板里随机生成的 token」在 CLI 直跑时每次都不同；
+> 想在同一个空间上连续操作，就用 `nx-nx serve` 起的面板（Web 界面 / HTTP API 走它）。
 
 ### 命令覆盖全部能力（界面不堆按钮，自动化照抄即可）
 
