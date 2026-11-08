@@ -64,8 +64,9 @@ export async function refreshSpaceIndex(
   id: string,
   panelPath: string,
   groupId?: string,
+  precomputed?: SpaceActionResult,
 ): Promise<SpaceIndexEntry> {
-  const r = await introspectSpace(panelPath);
+  const r = precomputed ?? (await introspectSpace(panelPath));
   const report = (r.space ?? {}) as { name?: string; methods?: SpaceMethodInfo[] };
   const entry: SpaceIndexEntry = {
     id,

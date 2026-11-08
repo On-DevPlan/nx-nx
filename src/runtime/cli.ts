@@ -286,6 +286,10 @@ async function cmdServe(ctx: { port?: number; 'no-open'?: boolean }): Promise<vo
   const { resumeWatchers } = await import('../core/service/runtime.js');
   resumeWatchers();
 
+  // 记下落点：CLI 据此把空间命令转给 serve，作用在同一个常驻空间上
+  const { writeServeInfo } = await import('../core/service/space-remote.js');
+  writeServeInfo({ port: actualPort, pid: process.pid, startedAt: Date.now() });
+
   console.log(APP_NAME + ' · ' + APP_TITLE + ' v' + VERSION);
   console.log(`面板:   ${addr}`);
   console.log(`存储:   ${storePathFromEnv()}`);
@@ -296,8 +300,9 @@ async function cmdServe(ctx: { port?: number; 'no-open'?: boolean }): Promise<vo
 
   const shutdown = () => {
     console.log('\n正在停止...');
-    // 收掉常驻的空间会话子进程，别留孤儿
+    // 收掉常驻的空间会话子进程，别留孤儿；落点信息也别指向死进程
     void import('../core/service/space-session.js').then((m) => m.closeAllSpaceSessions());
+    void import('../core/service/space-remote.js').then((m) => m.clearServeInfo());
     server.close(() => process.exit(0));
   };
   process.on('SIGINT', shutdown);

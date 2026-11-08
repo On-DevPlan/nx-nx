@@ -27,6 +27,7 @@ import {
   type SpaceActionResult,
   type SpaceIndexEntry,
 } from '../../core/service/namespace.js';
+import { remoteSpaceAction } from '../../core/service/space-remote.js';
 
 export interface ServiceGroupView {
   config: ServiceGroupConfig;
@@ -160,12 +161,15 @@ export function groupSpace(id: unknown): { panel: string; check: string } | null
 export async function spaceIntrospect(id: unknown): Promise<SpaceActionResult> {
   const s = groupSpace(id);
   if (!s) throw new Error(`服务组 ${assertGroupId(id)} 未绑定管理空间（shared / space.panel 都没配）`);
+  const gid = assertGroupId(id);
   const panelPath = resolvePanelPath(s.panel);
-  const r = await introspectSpace(panelPath);
+  // serve 在跑时，命令作用在它那个常驻空间上（命令与界面是同一个实体）；
+  // serve 不可达就退回本地会话。
+  const r = (await remoteSpaceAction(gid, 'introspect')) ?? (await introspectSpace(panelPath));
   // 顺手刷新索引：空间清单落盘后，`sg spaces` 不用每次装载面板
   if (r.ok) {
     try {
-      await refreshSpaceIndex(assertGroupId(id), panelPath, assertGroupId(id));
+      await refreshSpaceIndex(gid, panelPath, gid, r);
     } catch {
       // 索引写失败不该影响空间本身的读取
     }
@@ -186,7 +190,11 @@ export async function spaceCall(
 ): Promise<SpaceActionResult> {
   const s = groupSpace(id);
   if (!s) throw new Error(`服务组 ${assertGroupId(id)} 未绑定管理空间（shared / space.panel 都没配）`);
-  return callSpaceMethod(resolvePanelPath(s.panel), String(method ?? ''), args);
+  const gid = assertGroupId(id);
+  const name = String(method ?? '');
+  const remote = await remoteSpaceAction(gid, 'call', { method: name, args });
+  if (remote) return remote;
+  return callSpaceMethod(resolvePanelPath(s.panel), name, args);
 }
 
 // 空间的堆快照（只含可 JSON 表示的数据确认）
