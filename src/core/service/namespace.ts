@@ -100,6 +100,14 @@ export function resolvePanelPath(panel: string): string {
 
 // ---- 派发到子进程 ----
 
+export interface SpaceStackFrame {
+  method: string;
+  at: string;
+  resultType: string | null;
+  error: string | null;
+  frames: string[];
+}
+
 export interface SpaceActionResult {
   ok: boolean;
   action: string;
@@ -113,6 +121,8 @@ export interface SpaceActionResult {
   space?: unknown;
   methods?: SpaceMethodInfo[];
   heap?: { key: string; describe: string; type: string }[];
+  /** 空间的调用栈（方法被调用过的记录） */
+  frames?: SpaceStackFrame[];
 }
 
 const RESULT_MARK = 'NX_NS_RESULT ';

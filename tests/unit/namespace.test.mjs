@@ -48,6 +48,8 @@ function panelCase() {
       "  state: { BASE_URL: 'http://127.0.0.1:18999' },",
       '  methods: {',
       '    ping: async function ping() { return { ok: true }; },',
+      // 会改空间自身状态的方法：用来验证「调用后能看到堆的变化」
+      '    remember: function remember(v) { SPACE.state.LAST = v; return v; },',
       '  },',
       '});',
     ].join('\n'),
@@ -157,6 +159,27 @@ test('空间 check：bool 方法给出 alive 判定，非 true 一律判不通�
     // 方法不存在 → 不通过（保守：宁可不起，也不假装活）
     const missing = await checkSpace(panel, 'nope');
     assert.equal(missing.alive, false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('空间调用后带回状态堆与调用栈：空间是个实体，调用会留痕', async () => {
+  const { dir, panel } = panelCase();
+  try {
+    const r = await callSpaceMethod(panel, 'remember', ['hello']);
+    assert.equal(r.ok, true, r.error);
+    // 调用后的堆：方法改了空间状态，就得看得见
+    const last = (r.heap ?? []).find((h) => h.key === 'LAST');
+    assert.ok(last, `调用后应当看见状态变化：${(r.heap ?? []).map((h) => h.key).join(',')}`);
+    assert.equal(last.describe, '"hello"');
+    // 调用栈：这次调用的痕迹
+    const frames = r.frames ?? [];
+    assert.ok(frames.length >= 1, '应当带回调用栈');
+    const f = frames[frames.length - 1];
+    assert.equal(f.method, 'remember');
+    assert.equal(f.resultType, 'String');
+    assert.ok(Array.isArray(f.frames), '调用帧应当带落点');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -11,6 +11,7 @@
 import { defineAction } from '../../runtime/types/action.js';
 import { defineModule } from '../../runtime/types/module.js';
 import * as service from './service.js';
+import { formatSpace, formatSpaceCall } from './space-text.js';
 
 const CONFIG_HINT = `--json '{
   "name": "示例服务",
@@ -236,23 +237,7 @@ export default defineModule({
       args: ['id'],
     })(
       (ctx) => service.spaceIntrospect(ctx.id),
-      (r) => {
-        if (!r.ok) return `✘ 空间装载失败：${r.error}`;
-        const lines = ['管理空间:'];
-        const methods = r.methods ?? [];
-        if (methods.length) {
-          lines.push(`  方法（${methods.length}）:`);
-          for (const m of methods) lines.push(`    ${m.name}(${m.arity})${m.async ? ' async' : ''}`);
-        } else {
-          lines.push('  （空间没有方法——在面板里挂 globalThis.xxx = function () {} 或用 defineSpace）');
-        }
-        const heap = r.heap ?? [];
-        if (heap.length) {
-          lines.push(`  状态（${heap.length}）:`);
-          for (const h of heap) lines.push(`    ${h.key}: ${h.describe}`);
-        }
-        return lines.join('\n');
-      },
+      (r) => formatSpace(r),
     ),
 
     defineAction({
@@ -278,17 +263,7 @@ export default defineModule({
         }
         return service.spaceCall(ctx.id, ctx.method, parsed);
       },
-      (r) => {
-        if (!r.ok) {
-          const lines = [`✘ 调用失败：${r.error}`];
-          if (r.stack?.length) {
-            lines.push('  调用栈:');
-            for (const f of r.stack.slice(0, 8)) lines.push(`    ${f}`);
-          }
-          return lines.join('\n');
-        }
-        return `✔ ${r.method}() = ${JSON.stringify(r.value)}`;
-      },
+      (r) => formatSpaceCall(r),
     ),
 
     defineAction({

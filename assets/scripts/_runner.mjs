@@ -29,6 +29,7 @@ import {
   resolvePanelSpace,
   spaceHeap,
   spaceReport,
+  spaceStack,
   typeName,
 } from './_ns.mjs';
 
@@ -145,7 +146,8 @@ async function runSpaceAction(space) {
       action: 'introspect',
       space: spaceReport(space),
       methods: listMethods(space),
-      heap: spaceHeap(space).map(([k, v]) => ({ key: k, describe: describeValue(v), type: typeName(v) })),
+      heap: heapRows(space),
+      frames: spaceStack(space),
     });
     return;
   }
@@ -175,6 +177,7 @@ async function runSpaceAction(space) {
       error: err instanceof Error ? err.message : String(err),
       // 调用栈：空间方法抛错时最需要的信息（callMethod 挂在错误上）
       stack: err && typeof err === 'object' ? err.__spaceStack : undefined,
+      frames: spaceStack(space),
     });
     return;
   }
@@ -190,11 +193,29 @@ async function runSpaceAction(space) {
       detail: alive
         ? `空间方法 ${nsMethod}() 返回 true`
         : `空间方法 ${nsMethod}() 返回 ${describeValue(value)}（非 true，判定不通过）`,
+      frames: spaceStack(space),
     });
     return;
   }
 
-  emit({ ok: true, action: 'call', method: nsMethod, value: toJsonSafe(value) });
+  emit({
+    ok: true,
+    action: 'call',
+    method: nsMethod,
+    value: toJsonSafe(value),
+    // 调用后的空间状态与调用栈：空间是个实体，调用它会改变状态、也会留下调用痕迹。
+    heap: heapRows(space),
+    frames: spaceStack(space),
+  });
+}
+
+/** 堆快照的统一形态：每项给 key / 可读描述 / 类型 */
+function heapRows(space) {
+  return spaceHeap(space).map(([k, v]) => ({
+    key: k,
+    describe: describeValue(v),
+    type: typeName(v),
+  }));
 }
 
 // 值转 JSON：不可表示的（Map/循环引用等）换成类型描述，不抛错

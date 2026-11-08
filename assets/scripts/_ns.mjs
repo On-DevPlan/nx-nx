@@ -124,6 +124,22 @@ export function spaceHeap(space) {
   return Object.entries(space.state).map(([k, v]) => [k, v]);
 }
 
+/**
+ * 空间的调用栈：方法被调用过的记录（每次调用一帧）。
+ * 这是「空间有调用栈」的可见面——调用成功后也能看到从哪儿调进去的，
+ * 不只在抛错时才给栈。
+ */
+export function spaceStack(space) {
+  if (!space) return [];
+  return space.stack.map((f) => ({
+    method: f.method,
+    at: f.at,
+    resultType: f.resultType ?? null,
+    error: f.error ?? null,
+    frames: Array.isArray(f.stack) ? f.stack.slice(0, 8) : [],
+  }));
+}
+
 /** 空间报告：可 JSON 表示的完整视图（core 侧落盘成索引） */
 export function spaceReport(space) {
   if (!space) return null;
