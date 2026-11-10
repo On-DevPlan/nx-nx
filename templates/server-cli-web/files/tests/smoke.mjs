@@ -65,6 +65,12 @@ test('greet 缺名字被拒且 exit 1', async () => {
   );
 });
 
+test('help <模块>：主题是位置参数（help home 列出该模块命令）', async () => {
+  const text = (await run('help home')).stdout;
+  assert.match(text, /home:/, '应按模块分组列出');
+  assert.match(text, /greet/, 'home 模块的命令应在其中');
+});
+
 test('未知命令 exit 1', async () => {
   await assert.rejects(() => run('nope'));
 });

@@ -107,6 +107,9 @@ export class PlatformModule extends ModuleBase {
     id: 'help',
     cli: ['help'],
     summary: '显示帮助（可跟模块名或命令组，如 {{name}} help home）',
+    // topic 是**位置参数**（`help home`）：zod 通道里位置性由 args 声明，
+    // 漏写就会变成「多余的参数」。
+    args: ['topic'],
     input: helpInput,
     render: (entries, ctx) => renderHelp(entries as CommandEntry[], (ctx as { topic?: string } | undefined)?.topic),
   })
