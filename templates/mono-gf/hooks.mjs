@@ -11,7 +11,7 @@
 // 为什么派生不写在 template.json 的 default 里：default 是**字面量**，
 // 写 {{name}} 只会原样出现在文件里（渲染只有一遍）。派生必须走钩子。
 
-// 端口家族：与 server-cli-web-ts（7920+）区分开，
+// 端口家族：与 server-cli-web（7920+）区分开，
 // 那是 Web 应用的习惯端口段。
 const API_PORT_START = 8000;
 const WEB_PORT_START = 8080;

@@ -2,7 +2,7 @@
 
 生成一个**开箱能跑**的全栈 mono-repo：GoFrame v2 后端 + PostgreSQL + React 面板 + nginx 前置。
 
-与其他模板的区别：`server-cli-web-ts` 系列是「本机小工具」（CLI 与面板同源、状态落本机文件），
+与其他模板的区别：`server-cli-web` 系列是「本机小工具」（CLI 与面板同源、状态落本机文件），
 这个是**标准 Web 应用**（服务端 + 数据库 + 反向代理），面向需要多人访问、要落库的场景。
 
 ## 生成
@@ -48,7 +48,7 @@ cd web && npm i && npm run dev    # 起面板
 
 ## 后续可加
 
-- 前端 eslint（带分层/体积约束，与 `server-cli-web-ts` 同款）
+- 前端 eslint（带分层/体积约束，与 `server-cli-web` 同款）
 - 一个 `job` 应用示例（mono 里的定时任务）
 - 数据库迁移目录约定（`db/migrations/`）
 - 本 skill（让 agent 学会用它）—— 本模板暂未随包发 skill

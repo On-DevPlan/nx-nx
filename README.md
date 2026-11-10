@@ -2,7 +2,7 @@
 
 **通用项目模板生成管理器**：输入两个字母，生成一个开箱可用的 CLI + Web 面板项目。
 
-`server-cli-web-ts` 骨架（serve 驱动 CLI 与 Web 面板、CLI 与 API 同源、编译期类型安全、带发版流水线）
+`server-cli-web` 骨架（serve 驱动 CLI 与 Web 面板、CLI 与 API 同源、编译期类型安全、带发版流水线）
 是它的第一个模板，**不是唯一模板**——任何满足模板契约的目录都能被
 list / describe / preview / create 四条路径一致地处理。
 
@@ -12,8 +12,8 @@ list / describe / preview / create 四条路径一致地处理。
 pnpm install && pnpm start        # 起面板（可视化创建）
 # 或纯 CLI：
 node bin/nx-nx.mjs template list
-node bin/nx-nx.mjs template describe server-cli-web-ts
-node bin/nx-nx.mjs template create server-cli-web-ts --letters zz --dir ../nx-zz
+node bin/nx-nx.mjs template describe server-cli-web
+node bin/nx-nx.mjs template create server-cli-web --letters zz --dir ../nx-zz
 cd ../nx-zz && pnpm install && pnpm start
 ```
 

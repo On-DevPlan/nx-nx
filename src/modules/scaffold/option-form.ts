@@ -3,7 +3,7 @@
 //   2. 当前填写够不够格生成（决定「预览文件」「生成项目」两个按钮的可点性）
 //   3. 输出目录的默认建议名
 //
-// 为什么单列一个文件：面板此前把可点性硬编码在 letters 上——那是 server-cli-web-ts
+// 为什么单列一个文件：面板此前把可点性硬编码在 letters 上——那是 server-cli-web
 // 家族的专属选项。mono-gf 的必填项是 name、std-a-lang 是 lang，两个模板怎么填都
 // 够不到那条分支，按钮恒灰、点了没反应、界面上也看不出差什么。改成完全由 schema
 // 驱动后，模板换必填项、加选项，面板不必跟着改。
@@ -122,7 +122,7 @@ function slug(value: unknown): string {
  * 由 schema 推项目名，用于输出目录的默认值与右侧预览标题。
  *
  * 派生顺序与服务端对齐（core/templates.ts 的派生变量 + 模板钩子）：
- *   1. letters / name 选项有值就用 —— server-cli-web-ts（nx-xx）、mono-gf（demo）
+ *   1. letters / name 选项有值就用 —— server-cli-web（nx-xx）、mono-gf（demo）
  *   2. 否则取第一个必填选项的值，配上 namePrefix —— std-a-lang：lang=ts → a_ts
  *   3. 推不出就返回空串，由用户自己填目录；宁可空着也不猜错。
  */

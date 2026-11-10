@@ -98,7 +98,7 @@ test('nx-dev 在非仓库目录安装被 preInstall 拒绝', async () => {
 test('template create --dry-run：预览不落盘', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'nxnx-smoke-'));
   const { stdout } = await run(
-    `template create server-cli-web-ts --letters qq --dir ${dir}/out --dry-run --json`
+    `template create server-cli-web --letters qq --dir ${dir}/out --dry-run --json`
   );
   const r = JSON.parse(stdout);
   assert.ok(r.count >= 20, `应预览 20+ 文件，实际 ${r.count}`);
@@ -108,7 +108,7 @@ test('template create --dry-run：预览不落盘', async () => {
 
 test('非法字母被拒且 exit 1', async () => {
   await assert.rejects(
-    () => run('template create server-cli-web-ts --letters AB1'),
+    () => run('template create server-cli-web --letters AB1'),
     (err) => {
       assert.match(err.stderr, /1~5 位小写字母/);
       return true;

@@ -54,7 +54,7 @@ test('模板的 lint 带单文件字符数闸门（templates/** 不被根 lint �
   // 只有在「生成出项目之后」才会被执行。也就是说模板里的 lint 规则改动，
   // 在本仓库内没有任何东西会跑到它 —— 静默失效的典型地形。
   // 这里钉住规则存在性；真正生效的验证在 e2e（生成项目跑 pnpm lint）。
-  for (const id of ['server-cli-web-ts']) {
+  for (const id of ['server-cli-web']) {
     const config = readFileSync(join(ROOT, 'templates', id, 'files', 'eslint.config.js'), 'utf8');
     assert.ok(
       config.includes("'local/max-file-chars'"),

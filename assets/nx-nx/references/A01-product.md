@@ -17,11 +17,11 @@ nx-nx 把这套在多个真实项目上验证过的骨架沉淀为模板。用�
 
 | 模板 | 产出一个 | 适合 |
 | --- | --- | --- |
-| `server-cli-web-ts`  | 可运行的 CLI + Web 面板项目（TypeScript） | 本机工具通用基线；编译器提前暴露问题 |
+| `server-cli-web`  | 可运行的 CLI + Web 面板项目（TypeScript） | 本机工具通用基线；编译器提前暴露问题 |
 | `mono-gf`            | GoFrame v2 + React + PostgreSQL 全栈 mono-repo | 后端用 Go、需要数据库、需要 docker-compose 一键起服 |
 | `std-a-lang`         | `a_<lang>/{sdk, proj, res, doc}` 四象限目录骨架 | 给某个语言铺工作区，不产出可运行项目（参考 `D:\code\` 布局；`--lang` 支持逗号分隔多值） |
 
-`server-cli-web-ts` 带一层**编译期**检查：action 的
+`server-cli-web` 带一层**编译期**检查：action 的
 ctx 由声明精确派生（漏传参数、flag 类型写错即红）、模块 / action / CLI / HTTP
 重复注册检查、typed client（未知 action、漏传参数即红，返回数据精确推导）、
 branded 路径类型、错误码穷尽映射。
@@ -45,13 +45,13 @@ runtime 装配 / web 壳），一条 action 声明同时派生 CLI、HTTP 与 he
 npx nx-nx template list
 
 # 2. 看模板的可选项（TS 模板示例）
-npx nx-nx template describe server-cli-web-ts
+npx nx-nx template describe server-cli-web
 
 # 3. 检查输出目录
 npx nx-nx template check-dir --dir D:\proj\my-xx
 
 # 4. 生成（letters 决定项目名，如 xx → nx-xx）
-npx nx-nx template create server-cli-web-ts --letters xx --dir D:\proj\my-xx
+npx nx-nx template create server-cli-web --letters xx --dir D:\proj\my-xx
 
 # 5. 装依赖并跑完整闸门
 cd D:\proj\my-xx

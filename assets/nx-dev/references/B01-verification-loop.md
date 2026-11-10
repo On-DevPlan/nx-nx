@@ -45,7 +45,7 @@ node bin/nx-nx.mjs template create <id> --<必填项> <值> --dir <案例目录>
 
 ## 4. 生成案例的验证闸门
 
-Node/server-cli-web-ts 类模板：
+Node/server-cli-web 类模板：
 
 ```bash
 cd <案例目录>

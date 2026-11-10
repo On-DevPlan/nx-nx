@@ -11,7 +11,7 @@
 
 ### Added
 
-- 初始骨架：TypeScript 版骨架，自带编译期类型安全系统（由 nx-nx 的 `server-cli-web-ts` 模板生成）。
+- 初始骨架：TypeScript 版骨架，自带编译期类型安全系统（由 nx-nx 的 `server-cli-web` 模板生成）。
 - 前端真实路由树：`src/web/frontend/views/<名>/route.ts` 一页一目录，由 `import.meta.glob` 自动发现；加页面不需要改任何全局文件。
 - 可插拔布局壳：`app/shells/` 下每个壳是一个文件，`app/layouts.ts` 加一行即可；出厂带顶栏壳与左侧栏壳，页面 `route.ts` 用 `layout` 字段选择。特殊版式不再需要重写面板。
 - 页面级错误边界与加载态：页面崩溃只影响内容区，导航仍可用。

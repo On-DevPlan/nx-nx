@@ -35,7 +35,7 @@ node bin/nx-nx.mjs <命令...>
 ## 第二条硬规则：新栈 = 新模板目录，不改既有模板
 
 - 新技术栈一律新建 `templates/<新 id>/`，**不要**为了复用去改
-  `server-cli-web-ts`——它是已发布的稳定基线
+  `server-cli-web`——它是已发布的稳定基线
 - 模板 id 用小写、连字符，且与 `template.json` 的 id 逐字一致
 - 通用生成器（src/core）不认识任何具体技术栈；栈特有逻辑全部放进模板的
   `hooks.mjs` 与 `files/`

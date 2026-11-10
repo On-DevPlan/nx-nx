@@ -9,7 +9,7 @@
 //
 // 核心约束：**面板不认识任何具体的选项名**。必填与否、能不能点「生成项目」、
 // 输出目录叫什么，全部由模板的 option schema + resolveVars 的同一套规则推出
-// （判定逻辑见 option-form.ts）。曾经这里写死 `letters`——那是 server-cli-web-ts
+// （判定逻辑见 option-form.ts）。曾经这里写死 `letters`——那是 server-cli-web
 // 家族的专属字段，mono-gf（name）与 std-a-lang（lang）因此永远点不动。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Card, Input, Tag } from 'antd';

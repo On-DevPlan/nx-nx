@@ -100,15 +100,15 @@ test('suggestProjectName: 各模板各自推出自己的项目名（不认 lette
   const { templates } = await listTemplates();
   const by = (id) => templates.find((t) => t.id === id);
 
-  // server-cli-web-ts：namePrefix + letters
-  assert.equal(suggestProjectName(by('server-cli-web-ts'), { letters: 'ab' }), 'nx-ab');
+  // server-cli-web：namePrefix + letters
+  assert.equal(suggestProjectName(by('server-cli-web'), { letters: 'ab' }), 'nx-ab');
   // mono-gf：没有 namePrefix，直接用 name 选项
   assert.equal(suggestProjectName(by('mono-gf'), { name: 'demo' }), 'demo');
   // std-a-lang：namePrefix + 第一个必填项 lang，与 hooks.mjs 的派生一致
   assert.equal(suggestProjectName(by('std-a-lang'), { lang: 'ts' }), 'a_ts');
   // 多语言（ts, go）不是合法目录名 → 不猜，让用户自己填
   assert.equal(suggestProjectName(by('std-a-lang'), { lang: 'ts, go' }), '');
-  assert.equal(suggestProjectName(by('server-cli-web-ts'), {}), '');
+  assert.equal(suggestProjectName(by('server-cli-web'), {}), '');
 });
 
 test('真实模板库逐个对拍：面板说行，服务端必须收；面板说缺，服务端必须拒', async () => {
