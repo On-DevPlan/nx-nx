@@ -2,6 +2,7 @@
 
 ### Added
 
+<<<<<<< HEAD
 - **管理空间成为常驻实体**：新增 `src/core/service/space-session.ts` 与 `_runner.mjs` 的
   `NX_NS_SESSION=1` 会话模式——空间面板**只装载一次**，之后所有 introspect / call / check
   都在同一个空间实例上执行（stdin/stdout 走 NDJSON 协议）。此前每次动作都新起子进程重新装载，
@@ -39,6 +40,26 @@
   `~/.nx-nx/services/logs/clients-<组>.log` 追加一条（脚本名 / 退出码 / 耗时 / 输出尾部），
   `sg logs` 与日志抽屉新增「client 执行」段 —— client 是业务验证的主体，
   此前它却是唯一「跑完就没」、查不到执行现场的一段。
+=======
+### Added
+
+- **仓库内新增 `spike/zod-decorator/`**（不随包发布，`files` 白名单不含它）：
+  **zod + 装饰器** action 模型的验证 spike，29 条断言 + 独立 tsconfig，已纳入 `pnpm test`
+  闸门（`test:spike` 与 `typecheck:spike`）。结论：模型成立（CLI 完全自动化、
+  前端 apiclient 半自动化且可量化），但**建议分两步下沉**——第一步只加 zod、保持
+  `defineAction` 的 builder 形态；第二步（换注解形态 + codegen 前端 client）暂缓。
+  完整评估见仓库内 `plan/2026-11-10-zod-装饰器模型验证.md`。
+
+### Removed
+
+- **删除 JS 版模板 `server-cli-web`**：nx-nx 不再维护 JavaScript 版骨架，
+  `templates/server-cli-web/` 整棵目录下线，只保留 TypeScript 版 `server-cli-web-ts`。
+  理由：两套模板是同一骨架的两个语言副本，每加一个能力（类型系统、路由树、
+  共享面板……）都要写两遍；JS 版没有编译期检查，能被 TS 版覆盖的能力一律覆盖。
+  影响：`template create server-cli-web` 不再可用（会报「模板不存在」并给出可用列表），
+  模板总数 4 → 3（`server-cli-web-ts` / `mono-gf` / `std-a-lang`）。
+  已在用 JS 版模板的存量项目不受影响——模板是复制出去的产物，生成后与生成器无关。
+>>>>>>> 5c64914 (feat(spike): zod + 装饰器 action 模型验证（可跑的 spike + 评估报告）)
 
 ### Changed
 

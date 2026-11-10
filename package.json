@@ -30,9 +30,11 @@
     "dev:serve": "node --import tsx src/runtime/cli.ts serve --no-open",
     "start": "pnpm run build && node bin/nx-nx.mjs serve",
     "lint": "eslint .",
-    "test": "pnpm run lint && pnpm run typecheck && pnpm run build && pnpm run test:smoke && pnpm run test:unit",
+    "test": "pnpm run lint && pnpm run typecheck && pnpm run typecheck:spike && pnpm run build && pnpm run test:smoke && pnpm run test:unit && pnpm run test:spike",
     "test:smoke": "node tests/smoke.mjs",
-    "test:unit": "node --import tsx --test tests/unit/*.test.mjs"
+    "test:unit": "node --import tsx --test tests/unit/*.test.mjs",
+    "test:spike": "node --import tsx --test spike/zod-decorator/test.mjs",
+    "typecheck:spike": "tsc --noEmit -p spike/zod-decorator/tsconfig.json"
   },
   "packageManager": "pnpm@12.11.2",
   "repository": {
@@ -62,6 +64,7 @@
     "tsx": "^4.23.15",
     "typescript": "~5.9.0",
     "typescript-eslint": "^8.71.0",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "zod": "^4.6.7"
   }
 }

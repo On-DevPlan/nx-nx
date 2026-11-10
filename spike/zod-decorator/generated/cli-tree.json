@@ -1,0 +1,125 @@
+{
+  "name": "",
+  "path": [],
+  "action": null,
+  "children": [
+    {
+      "name": "greet",
+      "path": [
+        "greet"
+      ],
+      "action": {
+        "id": "demo.greet",
+        "module": "demo",
+        "moduleTitle": "演示",
+        "summary": "打个招呼",
+        "usage": "greet",
+        "http": "POST /api/greet"
+      },
+      "children": []
+    },
+    {
+      "name": "echo",
+      "path": [
+        "echo"
+      ],
+      "action": {
+        "id": "demo.echo",
+        "module": "demo",
+        "moduleTitle": "演示",
+        "summary": "回声（数字默认值 / 数组 / 枚举）",
+        "usage": "echo",
+        "http": "POST /api/echo"
+      },
+      "children": []
+    },
+    {
+      "name": "config",
+      "path": [
+        "config"
+      ],
+      "action": null,
+      "children": [
+        {
+          "name": "set",
+          "path": [
+            "config",
+            "set"
+          ],
+          "action": {
+            "id": "demo.config",
+            "module": "demo",
+            "moduleTitle": "演示",
+            "summary": "改配置（可重复 kv flag / json / dry-run）",
+            "usage": "config set",
+            "http": "PATCH /api/config"
+          },
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "ping",
+      "path": [
+        "ping"
+      ],
+      "action": {
+        "id": "demo.ping",
+        "module": "demo",
+        "moduleTitle": "演示",
+        "summary": "探活",
+        "usage": "ping",
+        "http": "GET /api/ping"
+      },
+      "children": []
+    },
+    {
+      "name": "health",
+      "path": [
+        "health"
+      ],
+      "action": null,
+      "children": []
+    },
+    {
+      "name": "stats",
+      "path": [
+        "stats"
+      ],
+      "action": {
+        "id": "demo.stats",
+        "module": "demo",
+        "moduleTitle": "演示",
+        "summary": "统计（query 里的数字也要归一化）",
+        "usage": "stats",
+        "http": "GET /api/stats"
+      },
+      "children": []
+    },
+    {
+      "name": "item",
+      "path": [
+        "item"
+      ],
+      "action": null,
+      "children": [
+        {
+          "name": "get",
+          "path": [
+            "item",
+            "get"
+          ],
+          "action": {
+            "id": "demo.item",
+            "module": "demo",
+            "moduleTitle": "演示",
+            "summary": "按 id 取条目（路由参数即位置参数）",
+            "usage": "item get",
+            "http": "GET /api/items/:id"
+          },
+          "children": []
+        }
+      ]
+    }
+  ]
+}
