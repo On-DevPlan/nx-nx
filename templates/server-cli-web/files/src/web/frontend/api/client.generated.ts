@@ -16,6 +16,14 @@ import type {
   settingSetInput,
   settingSetOutput,
 } from '../../../modules/home/schemas.js';
+import type {
+  skillGetInput,
+  skillGetOutput,
+  skillGroupsOutput,
+  skillInstallInput,
+  skillInstallOutput,
+  skillListOutput,
+} from '../../../modules/skill/schemas.js';
 
 /** 传输层契约（手写的那一半）：返回 data（错误信封由 api() 拆好，失败即 throw）。 */
 export interface Transport {
@@ -35,6 +43,14 @@ export interface ApiClient {
   get(): Promise<z.output<typeof settingGetOutput>>;
 /** 修改设置（PATCH 语义：只改传入的项） */
   set(input?: z.input<typeof settingSetInput>): Promise<z.output<typeof settingSetOutput>>;
+/** 列出可装的 skill 与 group */
+  list(): Promise<z.output<typeof skillListOutput>>;
+/** 列出每个 group 含哪些 skill */
+  groups(): Promise<z.output<typeof skillGroupsOutput>>;
+/** 导出 skill 文档（并幂等安装） */
+  skillGet(input?: z.input<typeof skillGetInput>): Promise<z.output<typeof skillGetOutput>>;
+/** 安装 skill、整组 skill 或全部 skill */
+  install(input?: z.input<typeof skillInstallInput>): Promise<z.output<typeof skillInstallOutput>>;
 }
 
 export function createApiClient(transport: Transport): ApiClient {
@@ -72,6 +88,36 @@ export function createApiClient(transport: Transport): ApiClient {
       const path = `/api/settings`;
       const body = { "key": inp["key"], "value": inp["value"], "set": inp["set"], "dry-run": inp["dry-run"] };
       return (await transport.request("PATCH", path, body)) as z.output<typeof settingSetOutput>;
+    },
+    // action: skill.list
+    async list() {
+      const path = `/api/skills`;
+      return (await transport.request("GET", path)) as z.output<typeof skillListOutput>;
+    },
+    // action: skill.groups
+    async groups() {
+      const path = `/api/skill-groups`;
+      return (await transport.request("GET", path)) as z.output<typeof skillGroupsOutput>;
+    },
+    // action: skill.get
+    async skillGet(input?: z.input<typeof skillGetInput>) {
+      const inp = input ?? ({} as z.input<typeof skillGetInput>);
+      let path = `/api/skill-content`;
+      const q = new URLSearchParams();
+      if (inp["name"] !== undefined) q.set("name", String(inp["name"]));
+      if (inp["ref"] !== undefined) q.set("ref", String(inp["ref"]));
+      if (inp["to"] !== undefined) q.set("to", String(inp["to"]));
+      if (inp["force"] !== undefined) q.set("force", String(inp["force"]));
+      const query = q.toString();
+      if (query) path += (path.includes('?')) ? '&' + query : '?' + query;
+      return (await transport.request("GET", path)) as z.output<typeof skillGetOutput>;
+    },
+    // action: skill.install
+    async install(input?: z.input<typeof skillInstallInput>) {
+      const inp = input ?? ({} as z.input<typeof skillInstallInput>);
+      const path = `/api/skill-install`;
+      const body = { "name": inp["name"], "all": inp["all"], "group": inp["group"], "to": inp["to"], "force": inp["force"] };
+      return (await transport.request("POST", path, body)) as z.output<typeof skillInstallOutput>;
     },
   };
 }

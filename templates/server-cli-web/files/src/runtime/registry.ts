@@ -13,53 +13,41 @@
 // 一一对应关系：一个模块可以对应零个、一个或多个页面，多个模块也可以共用一个页面。
 // 把两者绑成「同名同数」是旧骨架最贵的一处耦合——它逼着每加一个页面都回来改后端。
 import { ModuleBase } from './types/module.js';
-import type { AnyModule, RegistryChecks } from './types/module.js';
+import type { AnyModule } from './types/module.js';
+import type { ZodBoundAction } from './action-decorator.js';
 import { cliPathsOf } from './spec.js';
+import { platformModule } from '../modules/platform/index.js';
 import { homeModule } from '../modules/home/index.js';
 import { skillModule } from '../modules/skill/index.js';
-import type { ActionShape } from './types/action.js';
-
-export interface BoundAction {
-  id: string;
-  module: string;
-  cli: unknown;
-  http?: unknown;
-  web?: boolean;
-  run: (...a: unknown[]) => unknown;
-  [k: string]: unknown;
-}
 
 export class Registry {
   private constructor(
     readonly modules: readonly AnyModule[],
-    readonly actions: readonly BoundAction[],
+    readonly actions: readonly ZodBoundAction[],
   ) {}
 
   /**
-   * 唯一装载入口（静态工厂：构造函数私有，const 泛型推断只有函数/方法能提供）。
-   *
-   * 编译期：RegistryChecks 对模块/action id、CLI/HTTP 键查重 + 路由歧义检测
-   * （写错在声明处当场红）；运行时：按 order 排序 + 装载自检（与编译期互为备份）。
+   * 唯一装载入口。单一通道（@action 装饰器）下 actions 是运行时收集的数组，
+   * 编译期 RegistryChecks 已随 builder 通道移除——装载正确性由这里的运行时
+   * 自检负责（重复 id / 重复 CLI 路由 / 缺 run / 缺 http 的纯 CLI 混淆）。
+   * 运行时按 order 排序。
    */
-  static create<const M extends readonly AnyModule[]>(modules: M & RegistryChecks<M>): Registry {
+  static create(modules: readonly ModuleBase[]): Registry {
     const sorted = [...modules].sort((a, b) => (a.order ?? 100) - (b.order ?? 100));
-    const actions: BoundAction[] = sorted.flatMap((m) =>
-      (m.actions || []).map((a) => ({ ...(a as object), module: m.id }) as BoundAction),
+    const actions: ZodBoundAction[] = sorted.flatMap((m) =>
+      (m.actions || []).map((a) => ({ ...(a as object), module: m.id }) as ZodBoundAction),
     );
 
-    // 装载期自检（运行时防线）：把「两个模块声明了同名命令」这类问题暴露在
-    // 启动瞬间，而不是等某个用户敲到那条命令时才发现。
+    // 装载期自检（唯一防线——单一通道下没有编译期对账可互为备份）：
+    // 把「两个模块声明了同名命令」这类问题暴露在启动瞬间，而不是等某个用户
+    // 敲到那条命令时才发现。
     //
-    // 方向性约定（刻意的不对称）：
+    // 方向性约定：
     //   - 每条 action 都必须有 cli —— 保证「Web 上能做的，CLI 都能做」
-    //   - 有 http 才谈得上 Web 入口；http: null 只留给两类：
-    //       a) 豁免前缀（serve / server / skill —— 天然是 CLI 侧能力）
-    //       b) 显式 web: false（这个操作就是不给面板入口）
-    //     其余 http: null 一律视为漏声明，启动即失败（与 eslint 的 local/action-parity 同规）
-    //   - 不允许声明 http 却没有 cli，也不允许 http 与 web: false 同时出现
-    //
-    // 豁免前缀必须与 eslint.config.js 里 local/action-parity 的 cliOnlyPrefixes 一致，
-    // tests/unit/registry.test.mjs 会对账。
+    //   - http 缺省 = 纯 CLI（@action 装饰器里不写 http 就是有意不给面板入口；
+    //     面板入口的硬闸在 tests/unit/registry.test.mjs 的「非 GET 操作必须有
+    //     面板入口」——非 GET 的 action 必须在前端被引用到）
+    //   - 声明了 http 却没有 cli 同样启动即失败
     const seenIds = new Set<string>();
     const seenCli = new Set<string>();
     const seenHttp = new Set<string>();
@@ -67,7 +55,7 @@ export class Registry {
       if (seenIds.has(a.id)) throw new Error('action id 重复: ' + a.id);
       seenIds.add(a.id);
 
-      const paths = cliPathsOf(a as unknown as { cli: ActionShape['cli'] });
+      const paths = cliPathsOf(a);
       if (!paths.length) throw new Error(`action 没有声明 CLI 命令（Web 操作必须有 CLI 等价）: ${a.id}`);
       for (const path of paths) {
         const key = path.join(' ');
@@ -81,18 +69,10 @@ export class Registry {
         const httpKey = method + ' ' + pattern;
         if (seenHttp.has(httpKey)) throw new Error(`HTTP 路由重复: ${httpKey}（action ${a.id}）`);
         seenHttp.add(httpKey);
-        if (a.web === false) {
-          throw new Error(`action 同时声明了 http 与 web: false，语义冲突: ${a.id}`);
-        }
-      } else if (http === null) {
-        const segment = paths[0]?.[0];
-        if (a.web !== false && !(segment && CLI_ONLY_PREFIXES.includes(segment))) {
-          throw new Error(
-            `action 没有声明 HTTP 路由（CLI 与 Web 必须成对；纯 CLI 请显式 web: false 或使用豁免前缀）: ${a.id}`
-          );
-        }
       } else {
-        throw new Error(`action 的 http 必须是路由数组或显式 null: ${a.id}`);
+        // http 缺省 = 纯 CLI（@action 装饰器不写 http 就是有意不给面板入口）
+        if (!a.run) throw new Error(`action 缺少 run: ${a.id}`);
+        continue;
       }
 
       if (!a.run) throw new Error(`action 缺少 run: ${a.id}`);
@@ -102,12 +82,8 @@ export class Registry {
   }
 }
 
-// 豁免前缀：与 eslint.config.js 里 local/action-parity 的 cliOnlyPrefixes 必须一致
-// （tests/unit/registry.test.mjs 对账），先声明再被 create 的自检引用。
-export const CLI_ONLY_PREFIXES = ['serve', 'server', 'skill'];
-
-/** 模块元组（const 断言保住字面量类型）：typed client 与编译期查重都靠它的形状。 */
-export const MODULES = [homeModule, skillModule] as const;
+/** 模块元组：平台 + 各业务域（tests/unit/registry.test.mjs 对账模块目录一一对应）。 */
+export const MODULES = [platformModule, homeModule, skillModule] as const;
 
 /** 全项目唯一注册表实例：CliApp / ApiRouter / 编程入口都从它取 action 与命令表。 */
 export const registry = Registry.create(MODULES);

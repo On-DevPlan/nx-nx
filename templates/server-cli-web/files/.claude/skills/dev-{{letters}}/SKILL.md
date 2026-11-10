@@ -25,14 +25,14 @@ description: {{name}} 的开发者 skill（项目级，.claude/skills/dev-{{lett
 ## 项目事实（改代码前先确认）
 
 - 架构：一条 action 同时派生 CLI 命令与 HTTP 路由；Web 上能做的，CLI 都能做
-- **action 有两条声明通道**（在同一张注册表汇合）：
-  - `@action` 装饰器（zod schema 即契约，试点=home 模块）：方法上标注解，
-    `src/modules/home/schemas.ts` 放契约常量（命名约定 `<camelCase(actionId)>Input/Output`），
-    `pnpm gen:api` 刷新 `src/web/frontend/api/client.generated.ts`（前端 apiclient，
-    新鲜度由 `tests/unit/api-client.test.mjs` 对账）。债：`:param ⊆ args` 检查降级为
-    运行期；handler 入参手写 `z.output<typeof schema>`
-  - `defineAction` builder（skill 模块在用）：编译期全检查（ParamsCovered / 装载查重）
-  - 完整评估见 nx-nx 仓库的 plan/2026-11-10-zod装饰器下沉-server-cli-web验证.md（生成项目不含）；新域二选一，不要混用
+- **action 单一声明通道：@action 装饰器（zod schema 即契约）**：模块是 ModuleBase
+  子类，方法上标 `@action`，契约常量放同域 `schemas.ts`（命名约定
+  `<camelCase(actionId)>Input/Output`，如 home.greet → homeGreetInput）。
+  `pnpm gen:api` 刷新 `src/web/frontend/api/client.generated.ts`（前端 apiclient，
+  新鲜度由 `tests/unit/api-client.test.mjs` 对账）。债：`:param ⊆ args` 检查在
+  收集期红；handler 入参手写 `z.output<typeof schema>`。
+  前端 action 调用一律走生成的 apiclient（`createApiClient({ request })`，
+  request 适配 `api()`）——typed client 已移除。
 - 命令（项目根执行）：
   - `pnpm dev` —— vite + 后端 tsx 直跑源码，改码即生效
   - `pnpm typecheck` —— 只跑类型检查
@@ -41,8 +41,9 @@ description: {{name}} 的开发者 skill（项目级，.claude/skills/dev-{{lett
 - 代码地图（**前后端是两条目录线，不是同一个模块目录里的两半**）：
   - `src/runtime/` —— CLI / HTTP / 路由注册与参数校验；`types/` 是 action 与模块的类型契约
   - `src/core/` —— 存储（JsonStore 类）、路径、端口等通用能力（Node 侧）
-  - `src/modules/` —— **后端**业务模块：`index.ts` 声明 actions，`service.ts` 写业务
-    （服务用类组织，store 经构造注入）。**不包含任何 tsx**
+  - `src/modules/` —— **后端**业务模块：`index.ts` 是 ModuleBase 子类（@action 装饰
+    方法声明 actions），`service.ts` 写业务（服务用类组织，store 经构造注入），
+    `schemas.ts` 放 zod 契约。**不包含任何 tsx**
   - `src/web/frontend/routes/` —— 路由声明：一条路由一个 `<名>.ts`（`contract.ts` 是公共契约，
     页面发现时被排除）
   - `src/web/frontend/pages/<名>/` —— 页面本体：`index.tsx`（组件，默认导出）+
@@ -54,7 +55,8 @@ description: {{name}} 的开发者 skill（项目级，.claude/skills/dev-{{lett
   - `src/web/frontend/app/` —— 装配层：`pages.ts`（扫描 routes/ 自动发现）、`router.tsx`、
     `nav.ts`（导航计算）、`layouts.ts`（壳清单）、`shells/<名>/index.tsx`（布局壳）
   - `assets/{{name}}/` —— 随包分发的使用 skill（面向"用本项目"，不是"改本项目"）
-  - `tests/` —— smoke 与 unit（`routes.test.mjs` 对账路由声明与页面目录一一对应）
+  - `tests/` —— smoke 与 unit（`routes.test.mjs` 对账路由声明与页面目录；
+    `api-client.test.mjs` 对账生成 apiclient 与 registry 的新鲜度）
 
 ## 约束
 

@@ -7,7 +7,27 @@
 > 交付：模板内的可运行垂直切片（home 模块 6 条 action 全部装饰器化 + codegen
 > apiclient 已接线到页面）+ 本报告的结论。
 
-## 结论
+## 附录（2026-11-11 决策）：已改为**单一通道**
+
+发布方决策：**不要共存，要单一**。本报告原结论（「以双通道共存进」）作废，
+模板已在 v0.15.0 收敛为单一通道：
+
+- skill 域与平台命令（serve / help / version）全部装饰器化——业务 10 条 + 平台 3 条
+  = 13 条 action，同一张注册表、同一条解析路径；
+- **defineAction builder 及其编译期机器整体移除**：FlagSpec 强转、ParamsCovered、
+  RegistryChecks 元组查重、typed client（前端改用生成的 apiclient）全部删除；
+- 因此上表债务 **#2 从「部分模块退化」升级为「永久移除」**：编译期装载查重不再存在，
+  装载正确性只由 `Registry.create` 的运行时自检 + 「非 GET 操作必须有面板入口」测试
+  兜底；债务 #3（handler 入参手写 z.output）与 #4（`_zod.def` 内部 API）不变；
+- 新增两条被单通道放大的债：输出 schema 是纯样板（每个 action 都要写），
+  eslint 的 `action-parity` 规则随 builder 一起删除（扫不到装饰器声明），
+  面板入口改由运行时/测试守。
+
+评估报告其余部分（量化、债务清单、验证记录）仍然成立，仅「结论」一节按上述更新。
+
+---
+
+## 结论（原始）
 
 **能进——但以「双通道共存」进，不替换 defineAction builder。**
 

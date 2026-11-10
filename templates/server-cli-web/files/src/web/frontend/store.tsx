@@ -7,9 +7,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { api } from './api/client.js';
-import { makeTypedClient } from './api/typed-client.js';
-import type { TypedClient } from '../../runtime/types/client.js';
-import type { MODULES } from '../../runtime/registry.js';
 import type { CommandEntry } from '../../runtime/help.js';
 
 // bootstrap 数据形状（与 modules/home 的 bootstrap() 返回一致）
@@ -36,7 +33,6 @@ export interface SettingsResponse {
 interface StoreValue {
   boot: BootData | null;
   settings: SettingsResponse | null;
-  client: TypedClient<typeof MODULES>;
   refreshBoot: () => Promise<BootData>;
   refreshSettings: () => Promise<SettingsResponse>;
 }
@@ -65,12 +61,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     refreshSettings().catch(() => {});
   }, [refreshBoot, refreshSettings]);
 
-  // typed client：延迟读取 boot.commands，启动完成前调用会得到明确报错
-  const client = useMemo(() => makeTypedClient(() => boot?.commands), [boot]);
-
   const value = useMemo(
-    () => ({ boot, settings, client, refreshBoot, refreshSettings }),
-    [boot, settings, client, refreshBoot, refreshSettings],
+    () => ({ boot, settings, refreshBoot, refreshSettings }),
+    [boot, settings, refreshBoot, refreshSettings],
   );
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
 }

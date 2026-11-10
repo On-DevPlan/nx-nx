@@ -14,6 +14,6 @@ const { generateClientSource, generateTreeJson } = await import('../src/runtime/
 const zodActions = registry.actions.filter((a) => Array.isArray(a.fields));
 
 const OUT = join(ROOT, 'src', 'web', 'frontend', 'api');
-writeFileSync(join(OUT, 'client.generated.ts'), generateClientSource(zodActions, { schemaImport: '../../../modules/home/schemas.js' }));
+writeFileSync(join(OUT, 'client.generated.ts'), generateClientSource(zodActions));
 writeFileSync(join(OUT, 'cli-tree.json'), generateTreeJson(zodActions));
 console.log(`gen:api — ${zodActions.length} 个 zod action → client.generated.ts + cli-tree.json`);

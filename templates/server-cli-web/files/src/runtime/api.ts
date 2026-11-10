@@ -5,17 +5,15 @@
 // ApiRouter 在构造期把注册表的 actions 编译成排序好的路由表，
 // handle() 是 PanelServer 的 /api/* 入口——一次编译，常驻复用。
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { compileRoute, applySpec, usageOf } from './spec.js';
+import { compileRoute, usageOf } from './spec.js';
 import { normalizeCliValue, parseInput, parseOutput } from './zod-bridge.js';
 import type { ZodBoundAction } from './action-decorator.js';
 import { toErrorPayload, httpStatusOf, CODES } from '../core/errors/index.js';
 import type { ErrorCode } from '../core/errors/index.js';
-import type { BoundAction } from './registry.js';
-import type { ActionShape } from './types/action.js';
 import type { CompiledRoute } from './spec.js';
 
 interface RouteEntry {
-  action: BoundAction;
+  action: ZodBoundAction;
   route: CompiledRoute;
 }
 
@@ -58,12 +56,12 @@ export function sendJson(res: ServerResponse, status: number, obj: unknown): voi
 export class ApiRouter {
   private readonly routes: RouteEntry[];
 
-  constructor(actions: readonly BoundAction[]) {
+  constructor(actions: readonly ZodBoundAction[]) {
     this.routes = actions
       .filter((a) => a.http)
       .map((action) => ({
         action,
-        route: compileRoute(action as unknown as ActionShape & { http: readonly [string, string] }),
+        route: compileRoute(action as { http: readonly [string, string] }),
       }))
       .sort(compareRoutes);
   }
@@ -87,50 +85,33 @@ export class ApiRouter {
       }
 
       try {
-        const zod = action as Partial<ZodBoundAction>;
-        let data: unknown;
-        if (zod.fields) {
-          // zod 通道：路由参数 / query / body 里的值统一过 normalizeCliValue
-          // （route 与 query 天然是字符串；body 的 JSON 值归一化是幂等的），
-          // 再 zod 校验。出参也守一道 output schema。
-          const fields = (zod as ZodBoundAction).fields;
-          const usage = usageOf(action as unknown as ActionShape);
-          const raw: Record<string, unknown> = {};
-          route.keys.forEach((k, i) => {
+        // 单一通道：路由参数 / query / body 里的值统一过 normalizeCliValue
+        // （route 与 query 天然是字符串；body 的 JSON 值归一化是幂等的），
+        // 再 zod 校验。有 output schema 的 action 出参也守一道。
+        const fields = action.fields;
+        const usage = usageOf(action);
+        const raw: Record<string, unknown> = {};
+        route.keys.forEach((k, i) => {
+          const f = fields.find((x) => x.name === k);
+          const v = decodeURIComponent(m[i + 1]!);
+          raw[k] = f ? normalizeCliValue(f, v) : v;
+        });
+        if (method === 'GET' || method === 'HEAD') {
+          // query 里的未知键忽略（面板可能带缓存穿透参数）；CLI 侧未知 flag 是报错的
+          for (const [k, v] of url.searchParams) {
             const f = fields.find((x) => x.name === k);
-            const v = decodeURIComponent(m[i + 1]!);
-            raw[k] = f ? normalizeCliValue(f, v) : v;
-          });
-          if (method === 'GET' || method === 'HEAD') {
-            // query 里的未知键忽略（面板可能带缓存穿透参数）；CLI 侧未知 flag 是报错的
-            for (const [k, v] of url.searchParams) {
-              const f = fields.find((x) => x.name === k);
-              if (f) raw[k] = normalizeCliValue(f, v);
-            }
-          } else {
-            const body = await this.readBody(req).catch(() => ({}));
-            for (const [k, v] of Object.entries(body)) {
-              const f = fields.find((x) => x.name === k);
-              raw[k] = f ? normalizeCliValue(f, v) : v;
-            }
+            if (f) raw[k] = normalizeCliValue(f, v);
           }
-          const parsed = parseInput((zod as ZodBoundAction).input, raw, usage);
-          data = parseOutput((zod as ZodBoundAction).output, await action.run(parsed, { transport: 'http' }));
         } else {
-          const raw: Record<string, unknown> = {};
-          route.keys.forEach((k, i) => {
-            raw[k] = decodeURIComponent(m[i + 1]!);
-          });
-          if (method === 'GET' || method === 'HEAD') {
-            for (const [k, v] of url.searchParams) raw[k] = v;
-          } else {
-            Object.assign(raw, await this.readBody(req).catch(() => ({})));
+          const body = await this.readBody(req).catch(() => ({}));
+          for (const [k, v] of Object.entries(body)) {
+            const f = fields.find((x) => x.name === k);
+            raw[k] = f ? normalizeCliValue(f, v) : v;
           }
-          data = await action.run(
-            applySpec(action as unknown as ActionShape, raw),
-            { transport: 'http' },
-          );
         }
+        const parsed = parseInput(action.input, raw, usage);
+        let data = await action.run(parsed);
+        if (action.output) data = parseOutput(action.output, data);
         sendJson(res, 200, { ok: true, data });
       } catch (err) {
         // 错误码 → HTTP 状态只在这一处映射（core/errors 提供表）

@@ -16,27 +16,33 @@ const { registry } = await import('../../src/runtime/registry.ts');
 const { generateClientSource, generateTreeJson } = await import('../../src/runtime/codegen.ts');
 
 const zodActions = registry.actions.filter((a) => Array.isArray(a.fields));
-const SCHEMA_IMPORT = '../../../modules/home/schemas.js';
 
-test('zod 装饰器通道：home 模块的 6 条 action 全部收集（与 builder 通道共存）', () => {
+test('单通道：全部 action（业务 + 平台）都是 @action 收集的 zod 契约', () => {
   const ids = zodActions.map((a) => a.id).sort();
   assert.deepEqual(ids, [
+    'help',
     'home.bootstrap',
     'home.greet',
     'home.health',
     'home.routes',
+    'serve',
     'setting.get',
     'setting.set',
+    'skill.get',
+    'skill.groups',
+    'skill.install',
+    'skill.list',
+    'version',
   ]);
-  // builder 通道的 skill 域不受影响（两条通道在同一张注册表汇合）
-  assert.ok(registry.actions.some((a) => a.id === 'skill.list' && !Array.isArray(a.fields)));
+  // 平台命令（serve/help/version）无 http，不进 apiclient；全部 action 都带 fields
+  assert.equal(registry.actions.length, zodActions.length);
 });
 
 test('生成物与 registry 逐字节一致（改声明必须 pnpm gen:api）', () => {
   const generatedPath = join(ROOT, 'src', 'web', 'frontend', 'api', 'client.generated.ts');
   assert.equal(
     readFileSync(generatedPath, 'utf8'),
-    generateClientSource(zodActions, { schemaImport: SCHEMA_IMPORT }),
+    generateClientSource(zodActions),
     'client.generated.ts 过期——运行 pnpm gen:api 重新生成',
   );
   const treePath = join(ROOT, 'src', 'web', 'frontend', 'api', 'cli-tree.json');

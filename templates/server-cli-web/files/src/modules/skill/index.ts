@@ -1,15 +1,29 @@
 // skill 模块：管理随包分发的多 skill（主 skill 与可选配套 skill）。
 // 平台级能力；发现/分组/安装/导出的真相在 core/skills*.ts。
 //
-// serve 端的 OOP 约定：模块是 ModuleBase 子类，业务编排收进 SkillService 类
-// （见下方），装配层只调服务实例的方法。这个域没有自身状态（服务构造无依赖），
-// 类的价值在于**给编排一个名字**——install 的互斥校验、list 的并行聚合，
-// 都是「服务的方法」而不是散在 action 里的内联函数。
-import { defineAction } from '../../runtime/types/action.js';
+// 单一通道：action 一律 @action 装饰器声明（zod schema 即契约，见 ./schemas.ts），
+// 方法即 handler，模块的 actions 字段由 zodActionsOf(this) 从原型上收集。
+// 「声明与实现写在一起、类持有服务实例」是注解式 + OOP 的合流点。
+//
+// 注解式的两笔类型债（0.10.0 验证结论，接受并记录）：
+//   - handler 入参类型手写 z.output<typeof schema>（装饰器改不了方法签名）；
+//   - 路由 :param 与 args 的一致性检查在收集期红（zodActionsOf）。
+import { z } from 'zod';
 import { ModuleBase } from '../../runtime/types/module.js';
+import { action, zodActionsOf } from '../../runtime/action-decorator.js';
 import * as skills from '../../core/skills/index.js';
 import * as skillsGet from '../../core/skills/get.js';
 import { badInput } from '../../core/errors/index.js';
+import {
+  skillGetInput,
+  skillGetOutput,
+  skillGroupsInput,
+  skillGroupsOutput,
+  skillInstallInput,
+  skillInstallOutput,
+  skillListInput,
+  skillListOutput,
+} from './schemas.js';
 
 export class SkillService {
   async list() {
@@ -83,94 +97,92 @@ export class SkillModule extends ModuleBase {
     super();
   }
 
-  override readonly actions = [
-    defineAction({
-      id: 'skill.list',
-      cli: ['skill', 'list'],
-      http: ['GET', '/api/skills'],
-      summary: '列出可装的 skill 与 group',
-    })(
-      () => this.svc.list(),
-      (r) => {
-        const lines = ['可装的 skill:'];
-        for (const n of r.skills) lines.push('  ' + n + (n === r.defaultGroup ? '  （默认 install）' : ''));
-        lines.push('可装的 group:');
-        for (const g of r.groups) lines.push('  ' + g + (g === r.defaultGroup ? '  （默认）' : ''));
-        return lines.join('\n');
-      },
-    ),
+  @action({
+    id: 'skill.list',
+    cli: ['skill', 'list'],
+    http: ['GET', '/api/skills'],
+    summary: '列出可装的 skill 与 group',
+    input: skillListInput,
+    output: skillListOutput,
+    render: (r) => {
+      const lines = ['可装的 skill:'];
+      for (const n of r.skills) lines.push('  ' + n + (n === r.defaultGroup ? '  （默认 install）' : ''));
+      lines.push('可装的 group:');
+      for (const g of r.groups) lines.push('  ' + g + (g === r.defaultGroup ? '  （默认）' : ''));
+      return lines.join('\n');
+    },
+  })
+  list(_ctx: z.output<typeof skillListInput>) {
+    return this.svc.list();
+  }
 
-    defineAction({
-      id: 'skill.groups',
-      cli: ['skill', 'groups'],
-      http: ['GET', '/api/skill-groups'],
-      summary: '列出每个 group 含哪些 skill',
-    })(
-      () => this.svc.groups(),
-      (r) => {
-        const lines = [];
-        for (const [key, g] of Object.entries(r.groups)) {
-          lines.push(`  ${key.padEnd(12)} [${g.skills.join(', ')}]${g.summary ? '  ' + g.summary : ''}`);
-        }
-        if (r.warning) lines.push('', '⚠ ' + r.warning);
-        return `group 清单（来源: ${r.source}）\n` + lines.join('\n');
-      },
-    ),
+  @action({
+    id: 'skill.groups',
+    cli: ['skill', 'groups'],
+    http: ['GET', '/api/skill-groups'],
+    summary: '列出每个 group 含哪些 skill',
+    input: skillGroupsInput,
+    output: skillGroupsOutput,
+    render: (r) => {
+      const lines = [];
+      for (const [key, g] of Object.entries<{ skills: string[]; summary?: string }>(r.groups)) {
+        lines.push(`  ${key.padEnd(12)} [${g.skills.join(', ')}]${g.summary ? '  ' + g.summary : ''}`);
+      }
+      if (r.warning) lines.push('', '⚠ ' + r.warning);
+      return `group 清单（来源: ${r.source}）\n` + lines.join('\n');
+    },
+  })
+  groups(_ctx: z.output<typeof skillGroupsInput>) {
+    return this.svc.groups();
+  }
 
-    defineAction({
-      id: 'skill.get',
-      cli: ['skill', 'get'],
-      http: ['GET', '/api/skill-content'],
-      summary: '导出 skill 文档（并幂等安装）',
-      args: [
-        { name: 'name', required: false },
-        { name: 'ref', required: false },
-      ],
-      flags: {
-        to: { type: 'string' },
-        force: { type: 'boolean' },
-      },
-    })(
-      (ctx) => this.svc.get(ctx.name, { ref: ctx.ref, to: ctx.to, force: ctx.force }),
-      // 人读模式：前缀 → 全文 → 安装状态，三段拼接。
-      (r) => [r.prefix, r.content, '', r.installStatus].join('\n'),
-    ),
+  @action({
+    id: 'skill.get',
+    cli: ['skill', 'get'],
+    http: ['GET', '/api/skill-content'],
+    summary: '导出 skill 文档（并幂等安装）',
+    args: ['name', 'ref'],
+    input: skillGetInput,
+    output: skillGetOutput,
+    // 人读模式：前缀 → 全文 → 安装状态，三段拼接。
+    render: (r) => [r.prefix, r.content, '', r.installStatus].join('\n'),
+  })
+  get(ctx: z.output<typeof skillGetInput>) {
+    return this.svc.get(ctx.name, { ref: ctx.ref, to: ctx.to, force: ctx.force });
+  }
 
-    defineAction({
-      id: 'skill.install',
-      cli: ['skill', 'install'],
-      http: ['POST', '/api/skill-install'],
-      summary: '安装 skill、整组 skill 或全部 skill',
-      args: [{ name: 'name', required: false }],
-      flags: {
-        all: { type: 'boolean' },
-        group: { type: 'string' },
-        to: { type: 'string' },
-        force: { type: 'boolean' },
-      },
-    })(
-      (ctx) => this.svc.install({ name: ctx.name, all: ctx.all, group: ctx.group, to: ctx.to, force: ctx.force }),
-      (r) => {
-        if ('group' in r && Array.isArray((r as skills.GroupInstallResult).skills)) {
-          const g = r as skills.GroupInstallResult;
-          const label = g.group === '*' ? '全部 skill' : `group ${g.group}`;
-          if (g.status === 'conflict') {
-            return `${label} 有冲突（未安装任何文件）:\n` +
-              g.skills.map((x) => `  冲突: ${x.path}（${x.files} 个文件不同）`).join('\n') +
-              '\n确认覆盖: 加 --force';
-          }
-          return `${label} 已安装:\n` +
-            g.skills.map((x) => `  ${x.status === 'skipped' ? '已是最新' : '已安装'}: ${x.path}`).join('\n');
+  @action({
+    id: 'skill.install',
+    cli: ['skill', 'install'],
+    http: ['POST', '/api/skill-install'],
+    summary: '安装 skill、整组 skill 或全部 skill',
+    args: ['name'],
+    input: skillInstallInput,
+    output: skillInstallOutput,
+    render: (r) => {
+      if ('group' in r && Array.isArray(r.skills)) {
+        const label = r.group === '*' ? '全部 skill' : `group ${r.group}`;
+        if (r.status === 'conflict') {
+          return `${label} 有冲突（未安装任何文件）:\n` +
+            r.skills.map((x: { path: string; files: number }) => `  冲突: ${x.path}（${x.files} 个文件不同）`).join('\n') +
+            '\n确认覆盖: 加 --force';
         }
-        const x = r as skills.InstallResult;
-        if (x.status === 'conflict') {
-          return `冲突: ${x.path}（${x.files} 个文件不同）；确认覆盖加 --force`;
-        }
-        if (x.status === 'skipped') return `已是最新: ${x.path}`;
-        return `${x.replaced ? '已替换' : '已安装'}: ${x.path}（${x.files} 个文件）`;
-      },
-    ),
-  ] as const;
+        return `${label} 已安装:\n` +
+          r.skills.map((x: { status: string; path: string }) => `  ${x.status === 'skipped' ? '已是最新' : '已安装'}: ${x.path}`).join('\n');
+      }
+      if (r.status === 'conflict') {
+        return `冲突: ${r.path}（${r.files} 个文件不同）；确认覆盖加 --force`;
+      }
+      if (r.status === 'skipped') return `已是最新: ${r.path}`;
+      return `${r.replaced ? '已替换' : '已安装'}: ${r.path}（${r.files} 个文件）`;
+    },
+  })
+  install(ctx: z.output<typeof skillInstallInput>) {
+    return this.svc.install({ name: ctx.name, all: ctx.all, group: ctx.group, to: ctx.to, force: ctx.force });
+  }
+
+  // actions 由装饰器收集（字段放最后：初始化时 id/title 已就绪）。
+  override readonly actions = zodActionsOf(this);
 }
 
 export const skillModule = new SkillModule();

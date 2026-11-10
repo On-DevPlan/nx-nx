@@ -178,19 +178,37 @@ serve 端的 OOP 分层（从外到内全是类，边界清晰）：
   commandTable → cliApp → registry → 本模块 actions → bootstrap 绕成循环推断，
   整类退化 any——TS7022）。
 
-### 4.3 zod 装饰器通道（home 模块试点，与 builder 共存）
+### 4.3 单一通道：@action 装饰器 + zod 契约
 
-`@action` 装饰器把「声明与实现写进同一个方法」：zod schema 即契约
-（`src/modules/home/schemas.ts`，命名约定 `<camelCase(actionId)>Input/Output`），
-`ModuleBase` 子类的 actions 由 `zodActionsOf(this)` 从装饰过的方法收集。
-- CLI 侧：参数归一化与校验全部从 schema 推导（`runtime/zod-bridge.ts`，
-  `z.coerce` 的 'false'→true / ''→0 两个坑已绕开）；
-- 前端侧：`pnpm gen:api` 生成 `api/client.generated.ts`（类型安全 apiclient，
-  **import type 引 schema，zod 运行时不进浏览器包**）+ `cli-tree.json`（命令树快照）；
-  入库并由 `tests/unit/api-client.test.mjs` 逐字节对账新鲜度；
-- 接受的债务：`:param ⊆ args` 检查降级为运行期、handler 入参手写
-  `z.output<typeof schema>`、`RegistryChecks` 对装饰器模块失效（运行时自检兜底）。
-  完整评估与全量替换的触发条件见仓库 `plan/2026-11-10-zod装饰器下沉-server-cli-web验证.md`。
+**全部 action（业务域 + 平台命令）一律用 `@action` 装饰器声明**，zod schema 即契约：
+
+```
+ModuleBase 子类（HomeModule / SkillModule / PlatformModule）
+  @action({ id, cli, http?, args?, input: zodSchema, output?: zodSchema, render? })
+  method(ctx: z.output<typeof schema>) { return this.svc.doSomething(ctx); }
+        ↓ zodActionsOf(this) 收集（原型上的装饰方法 → actions）
+Registry.create([platformModule, homeModule, skillModule])  ← 唯一注册表
+        ↓
+CliApp.run(argv) / ApiRouter.handle(req)  ← 只有一条解析路径
+```
+
+- **契约文件**：每个域一份 `schemas.ts`（`src/modules/<域>/schemas.ts`），
+  命名约定 `<camelCase(actionId)>Input/Output`（home.greet → homeGreetInput）；
+- **归一化与校验**（`runtime/zod-bridge.ts`）：CLI argv / HTTP query / route 参数
+  一律先归一化成 schema 期待的形状（`z.coerce` 的 'false'→true / ''→0 两坑已绕开），
+  再 zod 校验；错误带「用法:」前缀（对 agent 的分类契约）；
+- **前端 apiclient**：`pnpm gen:api` 生成 `api/client.generated.ts`
+  （类型安全方法 + query/body 分流 + 路径参数编码；schema 以 `import type` 引入，
+  **zod 运行时不进浏览器包**）+ `cli-tree.json`（命令树快照）；
+  产物入库并由 `tests/unit/api-client.test.mjs` 逐字节对账新鲜度；
+- **平台命令也是 action**：`serve` / `help` / `version` 收进 `modules/platform`，
+  不写 http 即纯 CLI——CliApp 因此没有「平台命令特判」；
+- **已随单通道移除**：defineAction builder 与它的编译期机器
+  （FlagSpec 强转、ParamsCovered、RegistryChecks 元组查重、typed client）；
+  装载正确性改由 `Registry.create` 的运行时自检 + 「非 GET 操作必须有面板入口」
+  测试兜底。
+- 接受的债务与全量替换的评估：见仓库
+  `plan/2026-11-10-zod装饰器下沉-server-cli-web验证.md`（含 2026-11-11 的单通道决策附录）。
 
 ---
 

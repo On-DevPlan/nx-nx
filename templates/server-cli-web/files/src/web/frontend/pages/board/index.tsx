@@ -4,7 +4,7 @@
 //   ① 证明页面可以零 action —— 不是每个视图都需要一条 HTTP 路由 + 一条 CLI 命令；
 //   ② 证明「左侧栏壳」是真能跑起来的，而不是图纸。
 //
-// 换成真业务时，把 ITEMS 换成 api.ts 里的 client['域.action']() 即可，
+// 换成真业务时，把 ITEMS 换成生成的 apiclient（api.ts 里 createApiClient 的方法）即可，
 // 页面结构不用动。
 import { Link } from 'react-router-dom';
 

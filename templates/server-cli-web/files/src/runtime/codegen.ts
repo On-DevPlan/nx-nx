@@ -47,22 +47,37 @@ export function clientMethodNames(actions: ZodBoundAction[]): Map<string, string
   return names;
 }
 
-export interface GenCtx {
-  /** schema 模块的相对导入路径（从生成文件算起） */
-  schemaImport: string;
+/**
+ * schema 常量按**模块**分组 import：一个模块一份 schemas.ts
+ * （src/modules/<域>/schemas.ts），生成物从 src/web/frontend/api/ 算起
+ * 的相对路径固定为 '../../../modules/<域>/schemas.js'。
+ */
+function schemaModuleOf(moduleId: string): string {
+  return `../../../modules/${moduleId}/schemas.js`;
 }
 
 /** 生成前端 apiclient 的 TS 源码（type-only 引 schema：zod 不进浏览器包）。 */
-export function generateClientSource(actions: ZodBoundAction[], ctx: GenCtx): string {
+export function generateClientSource(actions: ZodBoundAction[]): string {
   const withHttp = actions.filter((a) => a.http);
   const methodNames = clientMethodNames(withHttp);
 
-  const imports = withHttp
-    .flatMap((a) => (describeInput(a.input, a.args ?? []).length ? [schemaName(a.id, 'Input')] : []))
-    .concat(withHttp.map((a) => schemaName(a.id, 'Output')))
-    .filter((v, i, arr) => arr.indexOf(v) === i)
-    .sort()
-    .map((n) => `  ${n},`)
+  // 按模块分组收集 schema 常量名，逐模块出一条 import type
+  const byModule = new Map<string, Set<string>>();
+  const add = (module: string, name: string) => {
+    const set = byModule.get(module) || new Set<string>();
+    set.add(name);
+    byModule.set(module, set);
+  };
+  for (const a of withHttp) {
+    if (describeInput(a.input, a.args ?? []).length) add(a.module, schemaName(a.id, 'Input'));
+    add(a.module, schemaName(a.id, 'Output'));
+  }
+  const imports = [...byModule.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([module, names]) => {
+      const list = [...names].sort().map((n) => `  ${n},`).join('\n');
+      return `import type {\n${list}\n} from '${schemaModuleOf(module)}';`;
+    })
     .join('\n');
 
   const iface = withHttp
@@ -141,9 +156,7 @@ export function generateClientSource(actions: ZodBoundAction[], ctx: GenCtx): st
 // 重新生成：pnpm gen:api。新鲜度由 tests/unit/api-client.test.mjs 对账。
 
 import type { z } from 'zod';
-import type {
 ${imports}
-} from '${ctx.schemaImport}';
 
 /** 传输层契约（手写的那一半）：返回 data（错误信封由 api() 拆好，失败即 throw）。 */
 export interface Transport {

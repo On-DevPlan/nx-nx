@@ -4,7 +4,15 @@
 import { readFileSync } from 'node:fs';
 import { APP_NAME, STORE_ENV, storePathFromEnv } from '../core/paths.js';
 import { cliPathsOf, usageOf } from './spec.js';
-import type { ActionShape } from './types/action.js';
+
+/** 命令条目来源的公共形状（registry action 与 help 自身都满足）。 */
+interface HelpCommand {
+  id: string;
+  module?: string;
+  cli?: readonly string[] | readonly (readonly string[])[];
+  http?: readonly [string, string] | null;
+  summary?: string;
+}
 
 const VERSION = (
   JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string }
@@ -21,20 +29,14 @@ export interface CommandEntry {
 
 // 命令表的一行。`routes` 与 `help` 共用它，因此两张表必然同源同长——
 // 面板底部的「CLI 等价」提示用的也是这个形状（经 bootstrap 下发）。
-export function commandEntry(c: {
-  id: string;
-  module?: string;
-  cli?: ActionShape['cli'];
-  http?: readonly [string, string] | null;
-  summary?: string;
-}): CommandEntry {
-  const [first] = cliPathsOf(c as { cli: ActionShape['cli'] });
+export function commandEntry(c: HelpCommand): CommandEntry {
+  const [first] = cliPathsOf(c);
   return {
     id: c.id,
     module: c.module || 'platform',
     command: APP_NAME + ' ' + (first || []).join(' '),
     http: c.http ? { method: c.http[0], path: c.http[1] } : null,
-    usage: usageOf(c as ActionShape),
+    usage: usageOf(c),
     summary: c.summary,
   };
 }
@@ -96,18 +98,12 @@ export function renderHelp(entries: CommandEntry[], topic?: unknown): string {
 
 // `nx-nx <命令> --help`：只打印这一条，而不是整个模块——
 // 之前这里传的是 cmd.cli[0]，对别名 action（cli 是数组的数组）会拼出 "bundled,list"。
-export function printCommandHelp(cmd: {
-  id: string;
-  module?: string;
-  cli?: ActionShape['cli'];
-  http?: readonly [string, string] | null;
-  summary?: string;
-}): void {
-  const lines: string[] = [usageOf(cmd as ActionShape)];
+export function printCommandHelp(cmd: HelpCommand): void {
+  const lines: string[] = [usageOf(cmd)];
   if (cmd.summary) lines.push('    ' + cmd.summary);
   lines.push('');
 
-  const aliases = cliPathsOf(cmd as { cli: ActionShape['cli'] })
+  const aliases = cliPathsOf(cmd)
     .slice(1)
     .map((p) => APP_NAME + ' ' + p.join(' '));
   if (aliases.length) lines.push('别名: ' + aliases.join('  ·  '));

@@ -1,10 +1,9 @@
 // home 模块：面板落地页（启动聚合 + 演示业务 + 本机设置）。
 //
-// 本模块是 **@action 装饰器通道的试点**（zod schema 即契约，见 ./schemas.ts）：
+// 本模块的 action 走 **@action 装饰器单一通道**（zod schema 即契约，见 ./schemas.ts）：
 // 方法直接装饰，模块的 actions 字段由 zodActionsOf(this) 从原型上收集——
 // 「声明与实现写在一起、类持有服务实例」正是注解式 + OOP 的合流点。
-// skill 模块仍是 defineAction builder 通道：两条通道在 Registry.create 汇合，
-// 共用同一张命令表与路由表（这条共存本身是本轮验证的交付物之一）。
+// 全部业务域同一通道，与平台命令（serve/help/version）在同一张注册表汇合。
 //
 // 注解式的两笔类型债（0.10.0 验证结论，接受并记录）：
 //   - handler 入参类型手写 z.output<typeof schema>（装饰器改不了方法签名）；

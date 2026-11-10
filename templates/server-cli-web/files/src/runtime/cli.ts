@@ -1,99 +1,31 @@
-// CLI 运行器（OOP：CliApp 类）：解析 argv → 匹配 action → 校验 → 执行 → 渲染。
+// CLI 运行器（OOP：CliApp 类）：解析 argv → 匹配 action → zod 校验 → 执行 → 渲染。
 //
-// 改造前这里是一个 400 行的 switch，每条命令要在 BOOL_FLAGS / helpText / case /
-// renderXxx 四处重复登记。现在命令表、help 文本、参数校验全部由 action 声明派生，
-// 新增命令只需在所属模块（ModuleBase 子类）的 actions 里加一条。
+// 单一通道：所有命令（平台命令 + 业务 action）都是 @action 装饰的 ZodBoundAction——
+// 命令表、help 文本、参数归一化与校验全部由声明派生，新增命令只需在所属模块
+// （ModuleBase 子类）写一个装饰方法。
 //
-// serve 端的 OOP 约定：命令表、平台命令（serve/help/version）、解析与派发都是
-// CliApp 的实例成员——registry 经构造注入，`run(argv)` 是唯一对外入口；
-// bin/nx-nx.mjs 调的是兼容函数 runCli（内部转 cliApp.run）。
-import { readFileSync } from 'node:fs';
-import {
-  APP_NAME,
-  DEFAULT_PORT,
-  STORE_ENV,
-  storePathFromEnv,
-} from '../core/paths.js';
+// serve 端的 OOP 约定：命令解析与派发是 CliApp 的实例成员——registry 经构造注入，
+// `run(argv)` 是唯一对外入口；bin/nx-nx.mjs 调的是兼容函数 runCli（内部转 cliApp.run）。
+import { APP_NAME, STORE_ENV } from '../core/paths.js';
 import { toErrorPayload, exitCodeOf, badInput } from '../core/errors/index.js';
 import { registry } from './registry.js';
 import type { Registry } from './registry.js';
-import {
-  cliPathsOf,
-  argSpecsOf,
-  flagSpecsOf,
-  booleanFlagNames,
-  applySpec,
-  usageOf,
-} from './spec.js';
-import { normalizeCliValue, parseInput, parseOutput } from './zod-bridge.js';
+import { cliPathsOf, usageOf } from './spec.js';
+import { normalizeCliValue, parseInput, parseOutput, type FieldDesc } from './zod-bridge.js';
 import type { ZodBoundAction } from './action-decorator.js';
 import {
   commandEntry,
   helpEntries,
   renderHelp,
   printCommandHelp,
-  type CommandEntry,
 } from './help.js';
-import type { ActionShape, ArgEntry, FlagSpec, TransportMeta } from './types/action.js';
-
-const VERSION = (
-  JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string }
-).version;
-
-// 命令的统一结构（平台命令与模块 action 的公共形状；字段按需可选）
-interface AnyCommand {
-  id: string;
-  module?: string;
-  cli?: ActionShape['cli'];
-  http?: readonly [string, string] | null;
-  summary?: string;
-  args?: readonly ArgEntry[];
-  flags?: Record<string, FlagSpec>;
-  openFlags?: boolean;
-  run?: (ctx: Record<string, unknown>, meta?: TransportMeta) => unknown;
-  render?: (result: unknown, ctx?: Record<string, unknown>) => unknown;
-}
 
 export class CliApp {
-  // ---- 平台命令：不属于任何功能域，不参与 action 表 ----
-  // 用与 action 相同的形状声明，好让参数解析与 help 生成保持同一套逻辑。
-  private readonly builtins: AnyCommand[] = [
-    {
-      id: 'serve',
-      cli: ['serve'],
-      summary: '启动 Web 面板（默认 :{{port}}；--port N 改端口；--no-open 不开浏览器；端口上已是本面板则直接打开它；NX_SERVE_NO_OPEN=1 全局不开浏览器）',
-      flags: {
-        port: { type: 'number', default: DEFAULT_PORT },
-        'no-open': { type: 'boolean' },
-      },
-      run: (ctx) => this.serve(ctx as { port?: number; 'no-open'?: boolean }),
-    },
-    {
-      id: 'help',
-      cli: ['help'],
-      summary: '显示帮助（可跟模块名或命令组，如 {{name}} help home）',
-      args: [{ name: 'topic', required: false }],
-      // 走标准 action 形态：--json 时 emit 会序列化返回的条目，
-      // 于是 `help --json` 输出的是可解析的命令表而非帮助文本
-      run: (ctx) => helpEntries(ctx.topic, this.commands.map(commandEntry)),
-      render: (entries, ctx) => renderHelp(entries as CommandEntry[], ctx?.topic),
-    },
-    // render 让 `{{name}} version` 输出裸版本号（脚本里可 `V=$({{name}} version)`），
-    // 而 `--json` 仍走序列化，保持机器可读
-    {
-      id: 'version',
-      cli: ['version'],
-      summary: '显示版本',
-      run: () => VERSION,
-      render: (v) => v,
-    },
-  ];
-
   constructor(private reg: Registry) {}
 
-  /** 全量命令表 = 平台命令 + 注册表里的模块 action（help / bootstrap 共用）。 */
-  get commands(): AnyCommand[] {
-    return [...this.builtins, ...(this.reg.actions as unknown as AnyCommand[])];
+  /** 全量命令表（help / bootstrap / 面板「CLI 等价」提示共用）。 */
+  get commands(): ZodBoundAction[] {
+    return this.reg.actions as ZodBoundAction[];
   }
 
   /** 唯一对外入口：bin 与 dev（tsx 直跑）都从 run(argv) 进。 */
@@ -123,22 +55,10 @@ export class CliApp {
         return;
       }
 
-      // 双通道分叉：@action 装饰的 action 带 fields（zod 契约），走归一化 + zod
-      // 解析；defineAction builder 的走 FlagSpec/applySpec。两条通道共用解析器与
-      // 渲染器，只在「ctx 怎么来」上分叉。
-      const zod = cmd as Partial<ZodBoundAction>;
-      let ctx: Record<string, unknown>;
-      if (zod.fields) {
-        ctx = this.parseZodInput(zod as ZodBoundAction, tail) as Record<string, unknown>;
-      } else {
-        const { positionals, flags } = this.parseRest(tail, cmd);
-        this.assertKnownFlags(flags, cmd);
-        const input = { ...this.mapPositionals(positionals, cmd), ...flags };
-        ctx = applySpec(cmd as unknown as ActionShape, input) as Record<string, unknown>;
-      }
-      let data = await cmd.run?.(ctx, { transport: 'cli' });
-      if (zod.fields) data = parseOutput((zod as ZodBoundAction).output, data);
-      await this.emit(cmd, data, json, ctx);
+      const input = this.parseInput(cmd, tail);
+      let data = await cmd.run(input);
+      if (cmd.output) data = parseOutput(cmd.output, data);
+      await this.emit(cmd, data, json, input as Record<string, unknown>);
     } catch (err) {
       this.fail(err, json);
     }
@@ -173,28 +93,25 @@ export class CliApp {
   // 匹配命令：把声明路径与 argv 前缀逐 token 比较，选最长匹配。
   //
   // 逐 token 比较（而非只取「开头连续的非 flag token」）是必需的——有些命令路径
-  // 本身就含 flag，例如 `skill install --list` 是「列出内置包」而非「安装」。
+  // 本身就含 flag，例如 `skill install --force demo` 里 demo 本该是位置参数。
   // 最长优先则让 ['skill','central','add'] 压过 ['skill','central']，子命令与别名因此共存。
-  private resolveCommand(argv: string[]): { cmd: AnyCommand; path: string[]; rest: string[] } | null {
-    let best: { cmd: AnyCommand; path: string[] } | null = null;
-    let bestLen = -1;
+  private resolveCommand(argv: string[]): { cmd: ZodBoundAction; rest: string[] } | null {
+    let best: { cmd: ZodBoundAction; len: number } | null = null;
     for (const cmd of this.commands) {
-      for (const path of cliPathsOf(cmd as { cli: ActionShape['cli'] })) {
-        if (path.length > argv.length || path.length <= bestLen) continue;
+      for (const path of cliPathsOf(cmd)) {
+        if (path.length > argv.length || path.length <= (best?.len ?? -1)) continue;
         if (path.every((seg, i) => seg === argv[i])) {
-          best = { cmd, path };
-          bestLen = path.length;
+          best = { cmd, len: path.length };
         }
       }
     }
-    return best ? { ...best, rest: argv.slice(bestLen) } : null;
+    return best ? { cmd: best.cmd, rest: argv.slice(best.len) } : null;
   }
 
   // 解析剩余 token。布尔 flag 不吞下一个 token —— 否则 `skill install --force demo`
   // 会把 force 解析成字符串 'demo'，而 demo 本该是位置参数。
-  // boolsOverride：zod 通道的布尔集合从 schema 字段推出（没有 flags 声明可查）。
-  private parseRest(rest: string[], cmd: AnyCommand, boolsOverride?: Set<string>): { positionals: string[]; flags: Record<string, unknown> } {
-    const bools = boolsOverride ?? booleanFlagNames(cmd);
+  // 布尔集合从 schema 字段推出（kind === 'boolean' 的非位置字段）。
+  private parseRest(rest: string[], fields: FieldDesc[], bools: Set<string>): { positionals: string[]; flags: Record<string, unknown> } {
     const positionals: string[] = [];
     const flags: Record<string, unknown> = {};
     for (let i = 0; i < rest.length; i++) {
@@ -229,32 +146,13 @@ export class CliApp {
     else flags[key] = [prev, value];
   }
 
-  // 位置参数按声明顺序映射成具名输入；末尾声明 { rest: true } 的收集剩余全部
-  private mapPositionals(positionals: string[], cmd: AnyCommand): Record<string, unknown> {
-    const out: Record<string, unknown> = {};
-    let i = 0;
-    for (const spec of argSpecsOf(cmd)) {
-      if (spec.rest) {
-        out[spec.name] = positionals.slice(i);
-        i = positionals.length;
-        break;
-      }
-      if (positionals[i] !== undefined) out[spec.name] = positionals[i];
-      i++;
-    }
-    if (i < positionals.length) {
-      throw badInput(`多余的参数: ${positionals.slice(i).join(' ')}（用法见 ${APP_NAME} help）`);
-    }
-    return out;
-  }
-
-  // zod 通道的输入解析：位置参数按 fields 声明顺序消费 argv，其余是 --flag；
+  // zod 通道输入解析：位置参数按 fields 声明顺序消费 argv，其余是 --flag；
   // 文本值经 normalizeCliValue 归一化成 schema 期待的形状，最后 zod 校验
   // （错误带「用法:」前缀——对 agent 的分类契约）。未知 flag 当场报错。
-  private parseZodInput(cmd: ZodBoundAction, tail: string[]): unknown {
+  private parseInput(cmd: ZodBoundAction, tail: string[]): unknown {
     const bools = new Set(cmd.fields.filter((f) => !f.positional && f.kind === 'boolean').map((f) => f.name));
-    const { positionals, flags } = this.parseRest(tail, cmd, bools);
-    const usage = usageOf(cmd as unknown as ActionShape);
+    const { positionals, flags } = this.parseRest(tail, cmd.fields, bools);
+    const usage = usageOf(cmd);
 
     const positionalFields = cmd.fields.filter((f) => f.positional);
     if (positionals.length > positionalFields.length) {
@@ -274,25 +172,12 @@ export class CliApp {
     return parseInput(cmd.input, raw, usage);
   }
 
-  // 未知 flag 直接报错——`--fiile` 这类拼写错误应该立刻被指出来，而不是被静默忽略。
-  //
-  // 例外：声明了 openFlags 的 action 表示「可选项由数据驱动」（模板的 option
-  // schema），声明期无法枚举。这类 action 放行未知 flag，由 action 自己在 run 里
-  // 按 schema 取白名单——否则用户永远传不进模板选项。
-  private assertKnownFlags(flags: Record<string, unknown>, cmd: AnyCommand): void {
-    if (cmd.openFlags) return;
-    const known = new Set(flagSpecsOf(cmd).map((f) => f.name));
-    for (const k of Object.keys(flags)) {
-      if (!known.has(k)) throw badInput(`未知参数 --${k}（用法见 ${APP_NAME} help）`);
-    }
-  }
-
   // ---- 输出 ----
 
   // render 拿到 (data, ctx)，可以是 async——有些渲染需要补一点上下文才能标注
-  // （例如候选清单要标出哪一项是「当前」），而 `--json` 必须保持纯数据的旧形状。
-  private async emit(cmd: AnyCommand, data: unknown, json: boolean, ctx: unknown): Promise<void> {
-    // 无返回值的命令（help / serve 这类）不该打印任何东西：落进 JSON.stringify(undefined)
+  // （例如 help 要拿 topic），而 `--json` 必须保持纯数据的旧形状。
+  private async emit(cmd: ZodBoundAction, data: unknown, json: boolean, ctx: unknown): Promise<void> {
+    // 无返回值的命令（serve 这类）不该打印任何东西：落进 JSON.stringify(undefined)
     // 会打出字面量 "undefined"，让 `help --json` 的 stdout 不再是合法 JSON。
     if (data === undefined && !cmd.render) return;
 
@@ -303,7 +188,7 @@ export class CliApp {
     }
 
     if (cmd.render) {
-      const text = await cmd.render(data, ctx as Record<string, unknown> | undefined);
+      const text = await cmd.render(data, ctx);
       if (text !== undefined && text !== null && text !== '') console.log(text);
       return;
     }
@@ -323,62 +208,6 @@ export class CliApp {
       console.error('错误: ' + p.message);
     }
     process.exitCode = exitCodeOf(p.code);
-  }
-
-  // ---- serve 平台命令 ----
-
-  private async serve(ctx: { port?: number; 'no-open'?: boolean }): Promise<void> {
-    const { startServer } = await import('./server.js');
-    const { openBrowser } = await import('../core/open.js');
-    const { autoOpenEnabled, resolvePortConflict, describeOccupant } = await import('../core/serve-port.js');
-    const host = '127.0.0.1';
-    const desiredPort = ctx.port || DEFAULT_PORT;
-    // --no-open 与 NX_SERVE_NO_OPEN 都看这里：后者是所有 nx-xx 项目共享的开关
-    const canOpen = autoOpenEnabled(ctx['no-open']);
-
-    let server: Awaited<ReturnType<typeof startServer>>;
-    try {
-      server = await startServer({ port: desiredPort, host });
-    } catch (err) {
-      if (!err || (err as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw err;
-
-      // 端口被占：先问一句「上面跑的是不是我」。
-      const decision = await resolvePortConflict(desiredPort, APP_NAME, host);
-
-      if (decision.action === 'reuse') {
-        // 自己的面板已经在跑：不重复启动，直接把浏览器指过去。
-        const addr = `http://${host}:${desiredPort}`;
-        console.log(APP_NAME + ' 已在运行：' + addr);
-        console.log('直接打开浏览器（不重复启动）；如需重启请先停掉旧实例');
-        if (canOpen) openBrowser(addr);
-        return;
-      }
-
-      // 别人占的：顺延到下一个空闲端口，再起自己的面板。
-      console.log(
-        `端口 ${desiredPort} 已被占用（占用者: ${describeOccupant(decision.occupant)}），改用 ${decision.port}`
-      );
-      server = await startServer({ port: decision.port, host });
-    }
-
-    const bound = server.address();
-    const actualPort = typeof bound === 'object' && bound ? bound.port : desiredPort;
-    const addr = `http://${host}:${actualPort}`;
-
-    console.log(APP_NAME + ' v' + VERSION);
-    console.log(`面板:   ${addr}`);
-    console.log(`存储:   ${storePathFromEnv()}`);
-    console.log('CLI:    ' + APP_NAME + ' help（每个按钮都有对应命令，agent 可加 --json）');
-    console.log('按 Ctrl+C 停止');
-
-    if (canOpen) openBrowser(addr);
-
-    const shutdown = () => {
-      console.log('\n正在停止...');
-      server.close(() => process.exit(0));
-    };
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
   }
 }
 

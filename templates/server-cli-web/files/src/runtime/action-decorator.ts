@@ -2,7 +2,7 @@
 //
 // 来源：spike/zod-decorator（0.10.0 验证）的 action.ts + registry.ts，
 // 装饰方法 → zodActionsOf(instance) 收集 →
-// 模块的 actions 字段。与 defineAction builder 通道**共存**（skill 模块仍走 builder）。
+// 模块的 actions 字段。单一通道：全部业务 action 与平台命令都走这里。
 //
 // 三条实测结论（0.10.0 验证逼出来的，改前先读）：
 //
@@ -19,7 +19,18 @@
 //     的返回值类型，输出类型只能显式声明。这是 codegen apiclient 的类型来源。
 import { describeInput, type FieldDesc } from './zod-bridge.js';
 import type { ZodType } from 'zod';
-import type { BoundAction } from './registry.js';
+
+/** 装饰式 action 绑定到实例后的公共形状（registry.actions 的元素类型）。 */
+export interface BoundAction {
+  id: string;
+  module: string;
+  cli: readonly string[];
+  http?: readonly [string, string];
+  summary?: string;
+  run: (input: unknown) => unknown;
+  render?: (result: any, ctx?: any) => string;
+  [k: string]: unknown;
+}
 
 export interface ActionMeta {
   /** 全局唯一 id，编成 `模块.动作`（如 `home.greet`） */
@@ -34,12 +45,13 @@ export interface ActionMeta {
   args?: readonly string[];
   /** 输入 schema：CLI 与 HTTP 共用的真相源 */
   input: ZodType;
-  /** 输出 schema：codegen apiclient 的返回类型来源 */
-  output: ZodType;
+  /** 输出 schema：codegen apiclient 的返回类型来源。缺省 = 不守出参（平台命令）。 */
+  output?: ZodType;
   /** CLI 人读渲染（面板不用——面板拿 data 走 JSON）。 */
-  /** 参数用 any：上下文类型若给 never，r.greeting 这类属性访问会整片红。 */
+  /** 参数用 any：上下文类型若给 never，r.greeting 这类属性访问会整片红； */
+  /** ctx 是 CLI 解析产物（help 的 render 要读 ctx.topic）。 */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 见上；eslint 对 any 仅警告
-  render?: (result: any) => string;
+  render?: (result: any, ctx?: any) => string;
 }
 
 /** 装饰器元数据表：方法函数 → 声明。WeakMap 不阻止方法被 GC。 */
@@ -75,7 +87,7 @@ export function metaOf(method: unknown): ActionMeta | undefined {
 
 /**
  * 装饰式 action 绑定到实例后的形状：在 BoundAction 之上多带 zod 契约。
- * CliApp 与 ApiRouter 据此走 zod 解析通道（其余 action 走 FlagSpec/applySpec 通道）。
+ * CliApp 与 ApiRouter 据此走 zod 解析通道（单一通道，全部 action 都带 fields）。
  */
 export interface ZodBoundAction extends BoundAction {
   id: string;
@@ -87,8 +99,8 @@ export interface ZodBoundAction extends BoundAction {
   /** 逐字段说明（收集时用 describeInput 算好一次，CLI/HTTP/usage/codegen 共用） */
   fields: FieldDesc[];
   input: ZodType;
-  output: ZodType;
-  render?: (result: any) => string;
+  output?: ZodType;
+  render?: (result: any, ctx?: any) => string;
 }
 
 /**
@@ -99,9 +111,8 @@ export interface ZodBoundAction extends BoundAction {
  * 收集时用 getOwnPropertyDescriptor 取值而不是 proto[name]——
  * 后者会执行 getter，只为了看一眼它有没有被装饰器标过。
  *
- * 装载期自检：路由 :param 未在 args 里声明 → 当场报错。defineAction 的编译期
- * ParamsCovered 检查在注解式下不存在（装饰器拿不到字面量形状），这条降级为
- * 运行期红——注解式的固有代价（0.10.0 验证结论），靠这里的启动检查兜底。
+ * 装载期自检：路由 :param 未在 args 里声明 → 当场报错（单通道下这是该一致性
+ * 的唯一防线——类型层无法校验运行期才拼出来的元数据）。
  */
 export function zodActionsOf(instance: object): ZodBoundAction[] {
   const proto = Object.getPrototypeOf(instance);
