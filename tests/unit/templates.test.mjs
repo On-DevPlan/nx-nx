@@ -285,10 +285,11 @@ test('serve-port 助手：TS 模板与生成器自身逐字节一致', () => {
 test('serve-port 助手：模板里只有一份来源（runtime 不再自带探测/找空闲端口）', () => {
   // 两个来源 = 两套口径 = 这批改造要消灭的东西：
   // 端口探测与找空闲端口只允许存在于 core/serve-port，runtime/server 不再导出它们。
-  // （serve 命令在 v0.15.0 迁到 modules/platform——它现在是平台模块的一条装饰器 action，
-  //  「走共享 serve-port」这条约束因此落在 platform 模块上。）
+  // （serve 命令在 v0.15.0 迁到 modules/platform——它是平台模块的一条装饰器 action；
+  //  v0.16.0 起又按「一条 action 一个文件」拆到 actions/serve.ts，
+  //  「走共享 serve-port」这条约束因此落在那个文件上。）
   for (const [id, platformRel, cliRel, serverRel] of [
-    ['server-cli-web', 'src/modules/platform/index.ts', 'src/runtime/cli.ts', 'src/runtime/server.ts'],
+    ['server-cli-web', 'src/modules/platform/actions/serve.ts', 'src/runtime/cli.ts', 'src/runtime/server.ts'],
   ]) {
     const filesDir = join(TPL_ROOT, id, 'files');
     const platformSrc = readFileSync(join(filesDir, platformRel), 'utf8');
