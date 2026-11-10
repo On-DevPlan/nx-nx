@@ -3,8 +3,8 @@
 // 这是全项目**唯一**需要在「加一种新版式」时改的全局文件——一行。
 // 对比旧骨架：换版式要重写 App.tsx，加页面要改 6 个文件。差别在这里。
 import type { ComponentType } from 'react';
-import AppShell from './shells/AppShell.js';
-import SidebarShell from './shells/SidebarShell.js';
+import AppShell from './shells/app-shell/index.js';
+import SidebarShell from './shells/sidebar-shell/index.js';
 
 export const LAYOUTS: Record<string, ComponentType> = {
   app: AppShell,

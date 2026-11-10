@@ -1,7 +1,7 @@
 // 注册表与 action 契约的一致性断言。
 //
 // 这里**不再有**「页面清单 ↔ 组件表 ↔ 模块目录」三方对账 —— 那三方已经合成一个：
-// 页面由 src/web/frontend/views/*/route.ts 这个文件系统事实决定（见 views.test.mjs）。
+// 页面由 src/web/frontend/routes/*.ts 这个文件系统事实决定（见 routes.test.mjs）。
 // 剩下的断言只关于 action：模块登记全不全、CLI/HTTP 是否成对、豁免名单是否两边一致。
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';

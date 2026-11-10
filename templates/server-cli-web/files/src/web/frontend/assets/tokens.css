@@ -1,0 +1,82 @@
+/* 设计变量（design tokens）。**改这里 = 全局换肤**，不必翻其他文件。
+ *
+ * 深色主题只覆盖 token，原子类与版式不用动（这就是分层的意义）：
+ * 触发方式 <html data-theme="dark">；auto 随系统偏好，在媒体查询里处理。
+ *
+ * 视觉规范（本骨架的硬标准，别用 AI 默认审美覆盖）：
+ *   - 无 emoji；黑白灰为主，只有 --bad 一个语义色
+ *   - 密度双层：行高 28px、按钮 32px、核心字号 12px
+ *   - 分隔靠 1px 浅底线，主体视觉连续，不靠卡片阴影堆叠
+ *   - 立体感只用在按钮（--shadow-relief 三件套）与浮层（--shadow-float），
+ *     别扩散到卡片和列表——那会让界面变吵
+ *   - 颜色一律引用这里的 token，不许在别处写死色值；新增颜色先加 token 再用
+ */
+
+:root {
+  --ink: #14161a;
+  --paper: #fff;
+  --soft: #f5f6f7;
+  --soft-2: #ebedf0;
+  --mid: #8b9096;
+  --bad: #b3261e;
+  --on-bad: #fff;
+
+  --border: 1px solid var(--soft-2);
+  --overlay: rgba(0, 0, 0, 0.28);
+  --row-h: 28px;
+  --btn-h: 32px;
+  --fs-core: 12px;
+  --fs-small: 11px;
+  --radius-btn: 8px;
+  --radius-sm: 6px;
+
+  /* 立体感三件套：常态 / 按下 / 内凹（表单聚焦）。
+     只在这三处用，别扩散到卡片和列表。 */
+  --shadow-relief: -1px -1px 2px rgba(255, 255, 255, 0.85), 2px 2px 6px rgba(20, 22, 26, 0.07);
+  --shadow-relief-press: inset 1px 1px 2px rgba(20, 22, 26, 0.1),
+    inset -1px -1px 2px rgba(255, 255, 255, 0.7);
+  --shadow-relief-inset: inset 1px 1px 2px rgba(20, 22, 26, 0.06),
+    inset -1px -1px 2px rgba(255, 255, 255, 0.9);
+
+  /* 浮层（弹窗）投影：比 relief 重一级，表达「悬在页面之上」 */
+  --shadow-float: 0 8px 30px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme='dark'] {
+  --ink: #e6e8eb;
+  --paper: #15171a;
+  --soft: #1d2024;
+  --soft-2: #2b2f36;
+  --mid: #8d949e;
+  --bad: #f28b82;
+  --on-bad: #3b1410;
+
+  --overlay: rgba(0, 0, 0, 0.55);
+
+  /* 深色下的立体感：高光几乎不可见，靠投影压出层次（白色高光在深色上是噪点） */
+  --shadow-relief: -1px -1px 2px rgba(255, 255, 255, 0.05), 2px 2px 6px rgba(0, 0, 0, 0.45);
+  --shadow-relief-press: inset 1px 1px 2px rgba(0, 0, 0, 0.5),
+    inset -1px -1px 2px rgba(255, 255, 255, 0.06);
+  --shadow-relief-inset: inset 1px 1px 2px rgba(0, 0, 0, 0.4),
+    inset -1px -1px 2px rgba(255, 255, 255, 0.05);
+  --shadow-float: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme='auto'] {
+  @media (prefers-color-scheme: dark) {
+    --ink: #e6e8eb;
+    --paper: #15171a;
+    --soft: #1d2024;
+    --soft-2: #2b2f36;
+    --mid: #8d949e;
+    --bad: #f28b82;
+    --on-bad: #3b1410;
+    --overlay: rgba(0, 0, 0, 0.55);
+    --shadow-relief: -1px -1px 2px rgba(255, 255, 255, 0.05), 2px 2px 6px rgba(0, 0, 0, 0.45);
+    --shadow-relief-press: inset 1px 1px 2px rgba(0, 0, 0, 0.5),
+      inset -1px -1px 2px rgba(255, 255, 255, 0.06);
+    --shadow-relief-inset: inset 1px 1px 2px rgba(0, 0, 0, 0.4),
+      inset -1px -1px 2px rgba(255, 255, 255, 0.05);
+    --shadow-float: 0 8px 30px rgba(0, 0, 0, 0.5);
+  }
+}

@@ -5,8 +5,8 @@
 // 提示说「有」，实际没有，比没有提示更糟。
 // 现在它来自 bootstrap 下发的命令表，与 CLI 实际注册的命令同源。
 import { Fragment } from 'react';
-import { useStore } from '../store.js';
-import { Copyable } from './ui.jsx';
+import { useStore } from '../../store.js';
+import { Copyable } from '../ui/index.js';
 
 export function CliHints({ module: moduleId }: { module: string }) {
   const { boot } = useStore();

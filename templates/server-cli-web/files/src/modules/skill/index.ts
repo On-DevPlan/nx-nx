@@ -1,10 +1,77 @@
 // skill 域：管理随包分发的多 skill（主 skill 与可选配套 skill）。
 // 平台级能力，action 只做 I/O 编排；发现/分组/安装/导出的真相在 core/skills*.ts。
+//
+// serve 端的 OOP 约定：业务编排收进 SkillService 类，action 装配层只调方法。
+// 这个域没有自身状态（构造无依赖），类的价值在于**给编排一个名字**——
+// install 的互斥校验、list 的并行聚合，都是「服务的方法」而不是散在 action 里的内联函数。
 import { defineAction } from '../../runtime/types/action.js';
 import { defineModule } from '../../runtime/types/module.js';
 import * as skills from '../../core/skills/index.js';
 import * as skillsGet from '../../core/skills/get.js';
 import { badInput } from '../../core/errors/index.js';
+
+export class SkillService {
+  async list() {
+    const [names, manifest] = await Promise.all([
+      skills.bundledSkillNames(),
+      skills.loadGroups(),
+    ]);
+    return {
+      skills: names,
+      groups: Object.keys(manifest.groups),
+      defaultGroup: manifest.defaultGroup,
+      source: manifest.source,
+    };
+  }
+
+  async groups() {
+    const manifest = await skills.loadGroups();
+    return { source: manifest.source, groups: manifest.groups, warning: manifest.warning };
+  }
+
+  async get(name: string | undefined, opts: { ref?: unknown; to?: unknown; force?: unknown } = {}) {
+    // 服务是类型边界：core 的导出函数要 string / boolean，这里统一收窄。
+    const result = await skillsGet.getSkill(name || '{{name}}', {
+      ref: opts.ref == null ? undefined : String(opts.ref),
+      to: opts.to == null ? undefined : String(opts.to),
+      force: opts.force === true,
+    });
+    return {
+      skillName: result.skillName,
+      ref: result.ref,
+      contentBytes: result.contentBytes,
+      prefix: skillsGet.skillGetPrefix(result.skillName, result.ref),
+      content: result.content,
+      installStatus: skillsGet.installStatusLine(result.install),
+    };
+  }
+
+  async install(input: {
+    name?: unknown;
+    all?: unknown;
+    group?: unknown;
+    to?: unknown;
+    force?: unknown;
+  }) {
+    // 服务是类型边界：core 的安装函数要 string | undefined / boolean，
+    // action 层传来的 ctx 值经 flag 强转已是这个形状，直调服务的人在这里收窄。
+    const opts = {
+      to: input.to == null ? undefined : String(input.to),
+      force: input.force === true,
+    };
+    if (input.name && input.group) {
+      throw badInput('位置参数 name 与 --group 互斥，只能给一个');
+    }
+    if (input.all && (input.name || input.group)) {
+      throw badInput('--all 与 name / --group 互斥，它会安装全部 skill');
+    }
+    if (input.all) return skills.installAll(opts);
+    if (input.group) return skills.installGroup(String(input.group), opts);
+    return skills.installOne(String(input.name || '{{name}}'), opts);
+  }
+}
+
+export const skillService = new SkillService();
 
 export default defineModule({
   id: 'skill',
@@ -17,18 +84,7 @@ export default defineModule({
       http: ['GET', '/api/skills'],
       summary: '列出可装的 skill 与 group',
     })(
-      async () => {
-        const [names, manifest] = await Promise.all([
-          skills.bundledSkillNames(),
-          skills.loadGroups(),
-        ]);
-        return {
-          skills: names,
-          groups: Object.keys(manifest.groups),
-          defaultGroup: manifest.defaultGroup,
-          source: manifest.source,
-        };
-      },
+      () => skillService.list(),
       (r) => {
         const lines = ['可装的 skill:'];
         for (const n of r.skills) lines.push('  ' + n + (n === r.defaultGroup ? '  （默认 install）' : ''));
@@ -44,10 +100,7 @@ export default defineModule({
       http: ['GET', '/api/skill-groups'],
       summary: '列出每个 group 含哪些 skill',
     })(
-      async () => {
-        const manifest = await skills.loadGroups();
-        return { source: manifest.source, groups: manifest.groups, warning: manifest.warning };
-      },
+      () => skillService.groups(),
       (r) => {
         const lines = [];
         for (const [key, g] of Object.entries(r.groups)) {
@@ -72,21 +125,7 @@ export default defineModule({
         force: { type: 'boolean' },
       },
     })(
-      async (ctx) => {
-        const result = await skillsGet.getSkill(ctx.name || '{{name}}', {
-          ref: ctx.ref,
-          to: ctx.to,
-          force: ctx.force,
-        });
-        return {
-          skillName: result.skillName,
-          ref: result.ref,
-          contentBytes: result.contentBytes,
-          prefix: skillsGet.skillGetPrefix(result.skillName, result.ref),
-          content: result.content,
-          installStatus: skillsGet.installStatusLine(result.install),
-        };
-      },
+      (ctx) => skillService.get(ctx.name, { ref: ctx.ref, to: ctx.to, force: ctx.force }),
       // 人读模式：前缀 → 全文 → 安装状态，三段拼接。
       (r) => [r.prefix, r.content, '', r.installStatus].join('\n'),
     ),
@@ -104,18 +143,7 @@ export default defineModule({
         force: { type: 'boolean' },
       },
     })(
-      async (ctx) => {
-        const opts = { to: ctx.to, force: ctx.force };
-        if (ctx.name && ctx.group) {
-          throw badInput('位置参数 name 与 --group 互斥，只能给一个');
-        }
-        if (ctx.all && (ctx.name || ctx.group)) {
-          throw badInput('--all 与 name / --group 互斥，它会安装全部 skill');
-        }
-        if (ctx.all) return skills.installAll(opts);
-        if (ctx.group) return skills.installGroup(ctx.group, opts);
-        return skills.installOne(ctx.name || '{{name}}', opts);
-      },
+      (ctx) => skillService.install({ name: ctx.name, all: ctx.all, group: ctx.group, to: ctx.to, force: ctx.force }),
       (r) => {
         if ('group' in r && Array.isArray((r as skills.GroupInstallResult).skills)) {
           const g = r as skills.GroupInstallResult;

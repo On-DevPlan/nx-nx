@@ -5,11 +5,11 @@
 // 不喜欢的壳，另写一个文件挂到别的 layout 下即可，页面一行都不用改。
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { useStore } from '../../store.js';
-import { useNav } from '../nav.js';
-import { ThemeToggle, currentTheme } from '../../components/theme.jsx';
-import { PageBoundary } from './PageBoundary.js';
-import type { NavItem, NavSection } from '../../components/navModel.js';
+import { useStore } from '../../../store.js';
+import { useNav } from '../../nav.js';
+import { ThemeToggle, currentTheme } from '../../../components/theme/index.js';
+import { PageBoundary } from '../page-boundary/index.js';
+import type { NavItem, NavSection } from '../../../components/nav-model/index.js';
 
 export default function AppShell() {
   const { boot, settings, refreshBoot } = useStore();

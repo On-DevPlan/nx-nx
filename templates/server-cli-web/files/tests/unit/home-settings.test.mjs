@@ -1,7 +1,7 @@
 // 设置能力测试（设置逻辑归属 home 模块）：重点在**服务层校验的边界**。
 //
 // 边界只有一条：后端校验**形状**，不校验「页面是否存在」。
-// 有哪些页面是前端路由树的事实（src/web/frontend/views/），后端既不知道也不需要知道；
+// 有哪些页面是前端路由树的事实（src/web/frontend/routes/），后端既不知道也不需要知道；
 // 拿它去做存在性校验，后果是每加一个页面都要改后端、删一个页面就让整份配置报错。
 //
 // 摆法自身的矛盾（跨组重复）仍然拒绝——那是与「页面存不存在」无关的数据矛盾。
@@ -17,15 +17,16 @@ function withStore() {
 }
 
 async function loadModules() {
-  const home = await import('../../src/modules/home/service.ts');
-  const store = await import('../../src/core/store.ts');
-  return { home, store };
+  const svc = await import('../../src/modules/home/service.ts');
+  const { store } = await import('../../src/core/store.ts');
+  // home = 服务实例（业务方法）；mod = 模块本身（renderSettings 这类无状态渲染函数在其上）
+  return { home: svc.homeService, mod: svc, store };
 }
 
 test('默认设置：navGroups / navHidden 都是空数组（老 store 读一次自动补）', async () => {
   withStore();
   const { home, store } = await loadModules();
-  const s = await store.loadStore();
+  const s = await store.load();
   assert.deepEqual(s.settings.navGroups, []);
   assert.deepEqual(s.settings.navHidden, []);
   const got = await home.getSettings();
@@ -36,7 +37,7 @@ test('navGroups：含 home 的分组原样落盘，不被 order / 字典序重�
   withStore();
   const { home, store } = await loadModules();
   await home.setSettings({ set: { navGroups: [{ title: '系统', views: ['home'] }] } });
-  assert.deepEqual((await store.loadStore()).settings.navGroups, [{ title: '系统', views: ['home'] }]);
+  assert.deepEqual((await store.load()).settings.navGroups, [{ title: '系统', views: ['home'] }]);
 });
 
 test('navGroups：PATCH 只改传入项（改主题不影响已存分组）', async () => {
@@ -44,7 +45,7 @@ test('navGroups：PATCH 只改传入项（改主题不影响已存分组）', as
   const { home, store } = await loadModules();
   await home.setSettings({ set: { navGroups: [{ title: '系统', views: ['home'] }] } });
   await home.setSettings({ set: { theme: 'dark' } });
-  const s = await store.loadStore();
+  const s = await store.load();
   assert.deepEqual(s.settings.navGroups, [{ title: '系统', views: ['home'] }]);
   assert.equal(s.settings.theme, 'dark');
 });
@@ -52,7 +53,7 @@ test('navGroups：PATCH 只改传入项（改主题不影响已存分组）', as
 test('navGroups 校验：坏形状 / 缺组名 / 跨组重复 —— 都拒绝且不落盘', async () => {
   withStore();
   const { home, store } = await loadModules();
-  const before = JSON.stringify((await store.loadStore()).settings);
+  const before = JSON.stringify((await store.load()).settings);
 
   const cases = [
     [{ title: 'x' }, /数组/],
@@ -66,7 +67,7 @@ test('navGroups 校验：坏形状 / 缺组名 / 跨组重复 —— 都拒绝�
       `应拒绝: ${JSON.stringify(navGroups)}`,
     );
   }
-  assert.equal(JSON.stringify((await store.loadStore()).settings), before, '校验失败不得落盘');
+  assert.equal(JSON.stringify((await store.load()).settings), before, '校验失败不得落盘');
 });
 
 test('后端不校验页面存在性：任意 id、空分组都接受（前端负责忽略/提示）', async () => {
@@ -74,31 +75,31 @@ test('后端不校验页面存在性：任意 id、空分组都接受（前端�
   const { home, store } = await loadModules();
 
   await home.setSettings({ set: { navGroups: [{ title: 'A', views: ['no_such_page'] }] } });
-  assert.deepEqual((await store.loadStore()).settings.navGroups, [{ title: 'A', views: ['no_such_page'] }]);
+  assert.deepEqual((await store.load()).settings.navGroups, [{ title: 'A', views: ['no_such_page'] }]);
 
   await home.setSettings({ set: { navGroups: [{ title: 'B', views: [] }] } });
-  assert.deepEqual((await store.loadStore()).settings.navGroups, [{ title: 'B', views: [] }], '空分组允许暂存');
+  assert.deepEqual((await store.load()).settings.navGroups, [{ title: 'B', views: [] }], '空分组允许暂存');
 
   await home.setSettings({ set: { navHidden: 'whatever' } });
-  assert.deepEqual((await store.loadStore()).settings.navHidden, ['whatever']);
+  assert.deepEqual((await store.load()).settings.navHidden, ['whatever']);
 });
 
 test('navHidden：数组 / 逗号串 / JSON 串都认，并去重保序', async () => {
   withStore();
   const { home, store } = await loadModules();
   await home.setSettings({ set: { navHidden: 'home' } });
-  assert.deepEqual((await store.loadStore()).settings.navHidden, ['home']);
+  assert.deepEqual((await store.load()).settings.navHidden, ['home']);
   await home.setSettings({ set: { navHidden: 'a,b,a' } });
-  assert.deepEqual((await store.loadStore()).settings.navHidden, ['a', 'b'], '逗号串去重保序');
+  assert.deepEqual((await store.load()).settings.navHidden, ['a', 'b'], '逗号串去重保序');
   await home.setSettings({ set: { navHidden: '["x","y"]' } });
-  assert.deepEqual((await store.loadStore()).settings.navHidden, ['x', 'y'], 'JSON 串');
+  assert.deepEqual((await store.load()).settings.navHidden, ['x', 'y'], 'JSON 串');
 });
 
 test('theme：只认 light / dark / auto，坏值拒绝', async () => {
   withStore();
   const { home, store } = await loadModules();
   await home.setSettings({ set: { theme: 'dark' } });
-  assert.equal((await store.loadStore()).settings.theme, 'dark');
+  assert.equal((await store.load()).settings.theme, 'dark');
   await assert.rejects(
     home.setSettings({ set: { theme: 'blue' } }),
     (e) => e.code === 'INVALID_INPUT' && /light \/ dark \/ auto/.test(e.message),
@@ -117,7 +118,7 @@ test('--dry-run 只演练不落盘', async () => {
   const { home, store } = await loadModules();
   const r = await home.setSettings({ set: { navGroups: [{ title: '系统', views: ['home'] }] }, 'dry-run': true });
   assert.equal(r.status, 'skipped');
-  assert.deepEqual((await store.loadStore()).settings.navGroups, []);
+  assert.deepEqual((await store.load()).settings.navGroups, []);
 });
 
 test('navOrder：可排序；坏 JSON 拒绝', async () => {
@@ -131,14 +132,14 @@ test('navOrder：可排序；坏 JSON 拒绝', async () => {
     home.setSettings({ set: { navOrder: '[bad json' } }),
     (e) => e.code === 'INVALID_INPUT',
   );
-  assert.deepEqual((await store.loadStore()).settings.navOrder, ['home'], '校验失败不得落盘');
+  assert.deepEqual((await store.load()).settings.navOrder, ['home'], '校验失败不得落盘');
 });
 
 test('renderSettings：打印摆法，且说明页面清单来自前端', async () => {
   withStore();
-  const { home } = await loadModules();
+  const { home, mod } = await loadModules();
   const d = await home.getSettings();
-  const text = home.renderSettings(d);
+  const text = mod.renderSettings(d);
   assert.match(text, /隐藏 \d+ 个/);
   assert.match(text, /前端路由树/, '要明确告诉人：页面清单不在后端');
 });

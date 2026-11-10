@@ -8,12 +8,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../../store.js';
 import { useNavPages } from '../../app/nav.js';
 import { useHomeApi } from './api.js';
-import { CliHints } from '../../components/CliHints.js';
-import { Copyable, useGuard, useToast } from '../../components/ui.jsx';
-import { ThemePicker } from '../../components/theme.jsx';
-import * as nav from '../../components/navModel.js';
-import type { NavConfig } from '../../components/navModel.js';
-import NavManager from './components/NavManager.js';
+import { CliHints } from '../../components/cli-hints/index.js';
+import { Copyable, useGuard, useToast } from '../../components/ui/index.js';
+import { ThemePicker } from '../../components/theme/index.js';
+import * as nav from '../../components/nav-model/index.js';
+import type { NavConfig } from '../../components/nav-model/index.js';
+import NavManager from './components/nav-manager/index.js';
 import type { GreetingResult } from '../../../../modules/home/service.js';
 
 // 面板里也把 CLI 等价写法亮出来（agent 与人都能照着敲）
@@ -132,7 +132,7 @@ export default function HomePage() {
             <dt>页面</dt>
             <dd>
               {pages.length} 个可导航页面 · 壳与页面由
-              <code className="mono">src/web/frontend/views/</code> 自动发现
+              <code className="mono">src/web/frontend/routes/</code> 自动发现
             </dd>
           </div>
         </dl>

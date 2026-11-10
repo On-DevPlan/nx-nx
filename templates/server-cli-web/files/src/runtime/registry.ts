@@ -8,8 +8,8 @@
 //   1. 写 src/modules/<name>/（index.ts 声明 actions，service.ts 写业务）—— **只有 Node 侧**
 //   2. 在下面 import 并加进 defineModules
 //
-// 面板页面**不在这里登记**。页面是纯前端事实，由 src/web/frontend/views/<名>/route.ts
-// 自动发现（见 app/pages.ts），与后端模块没有一一对应关系：一个模块可以对应零个、
+// 面板页面**不在这里登记**。页面是纯前端事实，由 src/web/frontend/routes/<名>.ts
+// 自动发现（页面本体在 pages/<名>/index.tsx，见 app/pages.ts），与后端模块没有一一对应关系：一个模块可以对应零个、
 // 一个或多个页面，多个模块也可以共用一个页面。把两者绑成「同名同数」是旧骨架
 // 最贵的一处耦合——它逼着每加一个页面都回来改后端。
 import { defineModules } from './types/module.js';

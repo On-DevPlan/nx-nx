@@ -14,35 +14,35 @@ function withStore() {
 
 test('greet: 计数递增，loud 时整句大写', async () => {
   withStore();
-  const { greet } = await import('../../src/modules/home/service.ts');
-  const a = await greet('甲');
+  const { homeService } = await import('../../src/modules/home/service.ts');
+  const a = await homeService.greet('甲');
   assert.equal(a.count, 1);
   assert.match(a.greeting, /甲/);
-  const b = await greet('乙', true);
+  const b = await homeService.greet('乙', true);
   assert.equal(b.count, 2);
   assert.equal(b.greeting, b.greeting.toUpperCase());
 });
 
 test('store: 读-改-写事务把字段持久化', async () => {
   withStore();
-  const store = await import('../../src/core/store.ts');
-  await store.mutateStore((s) => {
+  const { store } = await import('../../src/core/store.ts');
+  await store.mutate((s) => {
     s.foo = 'bar';
   });
-  const s = await store.loadStore();
+  const s = await store.load();
   assert.equal(s.foo, 'bar');
 });
 
 test('store: 事务函数抛错则不落盘', async () => {
   withStore();
-  const store = await import('../../src/core/store.ts');
+  const { store } = await import('../../src/core/store.ts');
   await assert.rejects(
-    store.mutateStore((s) => {
+    store.mutate((s) => {
       s.baz = 1;
       throw new Error('boom');
     }),
   );
-  const s = await store.loadStore();
+  const s = await store.load();
   assert.equal(s.baz, undefined);
 });
 

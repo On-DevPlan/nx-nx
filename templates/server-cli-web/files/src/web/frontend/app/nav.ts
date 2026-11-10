@@ -5,10 +5,10 @@
 import { useMemo } from 'react';
 import { useStore } from '../store.js';
 import { NAV_PAGES } from './pages.js';
-import { buildNav, configFromSettings } from '../components/navModel.js';
-import type { NavPage, NavSection, NavItem } from '../components/navModel.js';
+import { buildNav, configFromSettings } from '../components/nav-model/index.js';
+import type { NavPage, NavSection, NavItem } from '../components/nav-model/index.js';
 
-/** 能进导航的页面（= 声明了 nav 的那些），转成 navModel 需要的形状。 */
+/** 能进导航的页面（= 声明了 nav 的那些），转成 nav-model 需要的形状。 */
 export const NAV_ROUTE_PAGES: NavPage[] = NAV_PAGES.map((p) => ({
   id: p.id,
   path: p.def.path,

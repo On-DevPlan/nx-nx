@@ -13,13 +13,7 @@ import { APP_NAME, APP_DESC, APP_TITLE, STORE_ENV, storePathFromEnv } from '../.
 import { defineAction } from '../../runtime/types/action.js';
 import { defineModule } from '../../runtime/types/module.js';
 import { commandEntry } from '../../runtime/help.js';
-import {
-  greet,
-  getSettings,
-  setSettings,
-  renderSettings,
-  renderSettingSet,
-} from './service.js';
+import { homeService, renderSettings, renderSettingSet } from './service.js';
 
 const VERSION = (
   JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')) as { version: string }
@@ -95,20 +89,7 @@ export default defineModule({
       http: ['GET', '/api/health'],
       summary: '自检：存储目录是否可写',
     })(
-      async () => {
-        const { loadStore, saveStore } = await import('../../core/store.js');
-        let ok = true;
-        let reason = '';
-        try {
-          // 触碰一次存储：读出来原样写回，验证整条读写链路
-          const s = await loadStore();
-          await saveStore(s);
-        } catch (err) {
-          ok = false;
-          reason = String((err as { message?: string })?.message || err);
-        }
-        return { status: ok ? ('ok' as const) : ('blocked' as const), storePath: storePathFromEnv(), reason };
-      },
+      () => homeService.health(),
       (r) => (r.status === 'ok' ? `正常 · 存储 ${r.storePath}` : `异常 · ${r.reason}`),
     ),
 
@@ -120,7 +101,7 @@ export default defineModule({
       args: [{ name: 'name', required: true }],
       flags: { loud: { type: 'boolean' } },
     })(
-      (ctx) => greet(ctx.name, !!ctx.loud),
+      (ctx) => homeService.greet(ctx.name, !!ctx.loud),
       (r) => r.greeting,
     ),
 
@@ -129,7 +110,7 @@ export default defineModule({
       cli: ['setting', 'get'],
       http: ['GET', '/api/settings'],
       summary: '读取全部设置（含头部导航分组 / 隐藏 / 平铺顺序）',
-    })(() => getSettings(), (d) => renderSettings(d)),
+    })(() => homeService.getSettings(), (d) => renderSettings(d)),
 
     defineAction({
       id: 'setting.set',
@@ -143,7 +124,7 @@ export default defineModule({
         'dry-run': { type: 'boolean' },
       },
     })(
-      (ctx) => setSettings(ctx as { key?: string; value?: unknown; set?: Record<string, unknown>; 'dry-run'?: boolean }),
+      (ctx) => homeService.setSettings(ctx as { key?: string; value?: unknown; set?: Record<string, unknown>; 'dry-run'?: boolean }),
       (d) => renderSettingSet(d),
     ),
   ],

@@ -4,9 +4,9 @@
 // 与导航配置同源；App 负责把当前主题写到 <html data-theme>，CSS 只覆盖 token。
 // 图标用 SVG 描边（无 emoji，符合视觉规范）。
 import type { ReactNode } from 'react';
-import { api } from '../api/client.js';
-import { useStore } from '../store.jsx';
-import type { SettingsResponse } from '../store.jsx';
+import { api } from '../../api/client.js';
+import { useStore } from '../../store.js';
+import type { SettingsResponse } from '../../store.js';
 
 export interface ThemeOption {
   id: string;

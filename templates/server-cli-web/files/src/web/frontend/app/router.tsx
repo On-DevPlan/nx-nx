@@ -1,4 +1,4 @@
-// 路由树：由 views/*/route.ts 自动汇聚，按 layout 分组挂到各自的壳下。
+// 路由树：由 routes/*.ts 自动汇聚，按 layout 分组挂到各自的壳下。
 //
 // 用 HashRouter 而不是 BrowserRouter：server 只把 dist/web/public 当静态目录发，
 // 没有 SPA fallback（未命中的路径一律 404）。hash 路由的路径不经过服务端，
@@ -7,8 +7,8 @@ import { lazy } from 'react';
 import { createHashRouter, type RouteObject } from 'react-router-dom';
 import { PAGES } from './pages.js';
 import { layoutOf } from './layouts.js';
-import { PageError } from './shells/PageBoundary.js';
-import NotFound from './NotFound.js';
+import { PageError } from './shells/page-boundary/index.js';
+import NotFound from './not-found/index.js';
 
 /** 一个页面 → 一条路由。页面组件懒加载，错误边界挂在**页面这一层**（壳还在）。 */
 function toRoute(entry: (typeof PAGES)[number]): RouteObject {

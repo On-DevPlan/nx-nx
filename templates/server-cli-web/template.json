@@ -1,7 +1,7 @@
 {
   "id": "server-cli-web",
   "name": "server-cli-web TS 骨架",
-  "description": "TypeScript 版 serve 驱动骨架：CLI 与 API 同源、编译期类型安全（泛型 action builder / 注册表查重 / typed client）；前端是真实路由树 + 可插拔布局壳（加页面 = 新建 views 目录，零全局登记）",
+  "description": "TypeScript 版 serve 驱动骨架：CLI 与 API 同源、编译期类型安全（泛型 action builder / 注册表查重 / typed client）；前端是真实路由树 + 可插拔布局壳（路由声明集中在 routes/，一页一个 pages/<名>/index.tsx，零全局登记）",
   "namePrefix": "nx-",
   "nextSteps": [
     "cd {{name}} && pnpm install",

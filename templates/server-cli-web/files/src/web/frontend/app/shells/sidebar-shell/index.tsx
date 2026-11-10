@@ -2,16 +2,16 @@
 //
 // 它和 AppShell 除了都调 useNav() 之外没有任何共用逻辑：
 // 版式、分组呈现、当前项高亮全部自己决定。页面组件对此毫不知情——
-// 同一个 views/<页>/page.tsx 可以同时挂在两种壳下（见 router.ts 的 layout 字段）。
+// 同一个 pages/<名>/index.tsx 可以同时挂在两种壳下（见 router.ts 的 layout 字段）。
 //
 // 加第三/第四种壳（分栏、全屏画布、命令面板）的成本就是再加一个这样的文件 +
 // 在 layouts.ts 里加一行，既有页面零改动。
 import { useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { useStore } from '../../store.js';
-import { useNav } from '../nav.js';
-import { ThemeToggle, currentTheme } from '../../components/theme.jsx';
-import { PageBoundary } from './PageBoundary.js';
+import { useStore } from '../../../store.js';
+import { useNav } from '../../nav.js';
+import { ThemeToggle, currentTheme } from '../../../components/theme/index.js';
+import { PageBoundary } from '../page-boundary/index.js';
 
 export default function SidebarShell() {
   const { boot, settings } = useStore();

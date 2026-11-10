@@ -1,5 +1,11 @@
 // JSON 存储：用户目录下的单一数据文件，Web 表单与 agent CLI 共同读写。
 //
+// 服务层的 OOP 约定（本模板的 serve 风格）：**有状态的能力用类组织**——
+// 进程内缓存收在 JsonStore 实例里，而不是散在模块级变量上；
+// 依赖经构造函数注入（HomeService 拿到的 store 就是这里导出的单例），
+// 测试想换实现时传一个新实例即可。action 装配层（runtime/types 的 builder）
+// 保持声明式不变——那是类型系统的基础，不属于「业务服务」这一层。
+//
 // 设计要点：
 // - 原子写（临时文件 + rename），进程中断不会损坏数据
 // - 进程内缓存 + mtime 失效检测：外部进程（如 CLI）改写后，Web 服务侧能立刻看到
@@ -43,56 +49,8 @@ export function initialState(): StoreState {
   };
 }
 
-let cache: StoreState | null = null;
-let cacheMtime = -1;
-
 export function newId(prefix: string): string {
   return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
-
-export async function loadStore(explicitPath?: string): Promise<StoreState> {
-  const p = explicitPath || storePathFromEnv();
-  try {
-    const st = await fsp.stat(p);
-    if (cache && cacheMtime === st.mtimeMs) return cache;
-    const raw = await fsp.readFile(p, 'utf8');
-    cache = normalize(JSON.parse(raw));
-    cacheMtime = st.mtimeMs;
-    return cache;
-  } catch {
-    // 文件不存在或损坏：返回空结构（首次运行 / 允许外部修复后恢复）
-    cache = normalize(null);
-    cacheMtime = -1;
-    return cache;
-  }
-}
-
-export async function saveStore(next: StoreState, explicitPath?: string): Promise<StoreState> {
-  const p = explicitPath || storePathFromEnv();
-  const data = normalize(next);
-  await fsp.mkdir(dirname(p), { recursive: true });
-  const tmp = p + '.tmp';
-  await fsp.writeFile(tmp, JSON.stringify(data, null, 2), 'utf8');
-  await fsp.rename(tmp, p);
-  cache = data;
-  try {
-    cacheMtime = (await fsp.stat(p)).mtimeMs;
-  } catch {
-    cacheMtime = -1;
-  }
-  return data;
-}
-
-// 读-改-写事务：fn 直接修改传入的深拷贝 store；fn 抛错则不落盘。
-// 这条语义很重要——半个事务写进磁盘比不写更糟。
-export async function mutateStore<T>(
-  fn: (s: StoreState) => T,
-  explicitPath?: string,
-): Promise<T | StoreState> {
-  const cur = structuredClone(await loadStore(explicitPath));
-  const result = fn(cur);
-  await saveStore(cur, explicitPath);
-  return result === undefined ? cur : result;
 }
 
 // 归一化：以 initialState() 为底，把已有数据合并上去。
@@ -123,8 +81,67 @@ export function normalize(data: unknown): StoreState {
   return base;
 }
 
-// 测试与调试用：清掉进程内缓存，强制下次重读
-export function clearCache(): void {
-  cache = null;
-  cacheMtime = -1;
+/**
+ * JSON 存储的面向对象封装。
+ *
+ * 实例即边界：cache / cacheMtime 是私有状态，外部只能经由方法触达；
+ * 默认导出的 store 是全项目共享的单例（与 storePathFromEnv 的环境变量约定配套）。
+ */
+export class JsonStore {
+  private cache: StoreState | null = null;
+  private cacheMtime = -1;
+
+  /** 读存储。文件不存在或损坏时返回空结构（首次运行 / 允许外部修复后恢复）。 */
+  async load(explicitPath?: string): Promise<StoreState> {
+    const p = explicitPath || storePathFromEnv();
+    try {
+      const st = await fsp.stat(p);
+      if (this.cache && this.cacheMtime === st.mtimeMs) return this.cache;
+      const raw = await fsp.readFile(p, 'utf8');
+      this.cache = normalize(JSON.parse(raw));
+      this.cacheMtime = st.mtimeMs;
+      return this.cache;
+    } catch {
+      this.cache = normalize(null);
+      this.cacheMtime = -1;
+      return this.cache;
+    }
+  }
+
+  /** 原子写：先写临时文件再改名，进程中断不会留下半个文件。 */
+  async save(next: StoreState, explicitPath?: string): Promise<StoreState> {
+    const p = explicitPath || storePathFromEnv();
+    const data = normalize(next);
+    await fsp.mkdir(dirname(p), { recursive: true });
+    const tmp = p + '.tmp';
+    await fsp.writeFile(tmp, JSON.stringify(data, null, 2), 'utf8');
+    await fsp.rename(tmp, p);
+    this.cache = data;
+    try {
+      this.cacheMtime = (await fsp.stat(p)).mtimeMs;
+    } catch {
+      this.cacheMtime = -1;
+    }
+    return data;
+  }
+
+  /**
+   * 读-改-写事务：fn 直接修改传入的深拷贝 store；fn 抛错则不落盘。
+   * 这条语义很重要——半个事务写进磁盘比不写更糟。
+   */
+  async mutate<T>(fn: (s: StoreState) => T, explicitPath?: string): Promise<T | StoreState> {
+    const cur = structuredClone(await this.load(explicitPath));
+    const result = fn(cur);
+    await this.save(cur, explicitPath);
+    return result === undefined ? cur : result;
+  }
+
+  /** 测试与调试用：清掉进程内缓存，强制下次重读 */
+  clearCache(): void {
+    this.cache = null;
+    this.cacheMtime = -1;
+  }
 }
+
+/** 全项目共享的存储单例。业务服务（HomeService 等）经构造函数注入使用它。 */
+export const store = new JsonStore();

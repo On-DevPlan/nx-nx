@@ -7,8 +7,11 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
 import { router } from './app/router.js';
 import { StoreProvider } from './store.js';
-import { ToastProvider } from './components/ui.js';
-import './style.css';
+import { ToastProvider } from './components/ui/index.js';
+import './assets/tokens.css';
+import './assets/base.css';
+import './assets/shells.css';
+import './assets/features.css';
 
 const rootEl = document.getElementById('root');
 if (!rootEl) throw new Error('缺少 #root 挂载点');

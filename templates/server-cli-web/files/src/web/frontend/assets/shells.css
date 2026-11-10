@@ -1,0 +1,199 @@
+/* 版式（layout）：头部 / tab 栏 / 侧栏壳 / 栅格——**这一层随项目自由改**。
+ *
+ * 与其他 assets 文件的分工：
+ *   tokens.css  设计变量      base.css  原子类      features.css  页面专属样式
+ *
+ * 壳只负责「页面摆在哪」，不参与页面本身。这里放的是两种壳：
+ *   - 顶栏壳：复用 header / nav / .tab
+ *   - 侧栏壳：.shell / .side 一组
+ * 要加第三种壳（分栏 / 全屏画布），在 app/shells/ 加目录、
+ * 在 app/layouts.ts 加一行即可，不用碰这一段。
+ */
+
+header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--paper);
+  z-index: 5;
+}
+
+.brand { font-weight: 700; letter-spacing: 0.5px; display: inline-flex; align-items: center; gap: 8px; }
+.brand img { width: 22px; height: 22px; border-radius: 6px; display: block; }
+/* 版本徽章：紧跟品牌名，比右侧小 mono 文本更显眼（头部必须看得出当前版本） */
+.brand .ver-tag {
+  font-weight: 600;
+  font-size: var(--fs-small);
+  font-family: ui-monospace, Consolas, monospace;
+  color: var(--mid);
+  background: var(--soft);
+  border: 1px solid var(--soft-2);
+  border-radius: 5px;
+  padding: 1px 6px;
+  line-height: 1.4;
+}
+.brand .sub { font-weight: 400; color: var(--mid); margin-left: 8px; font-size: var(--fs-core); }
+
+/* 分段控件：整块浅底（大按钮）包裹 pill tab（小按钮），取代带边框的直角 tab——
+   视觉连贯、有质感，激活项是一块内嵌滑块，不再靠边框+阴影逐个描边。
+   刻意 overflow: visible——分组下拉菜单要能探出 nav 外，不能被裁掉；
+   放不下时让 nav 内部换行（见下方 flex-wrap）。 */
+header nav {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  background: var(--soft);
+  border-radius: 16px;
+  min-width: 0;
+}
+header .head-acts {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+header .meta {
+  min-width: 0;
+  max-width: 46vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mid);
+  font-size: var(--fs-core);
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+/* 主题切换按钮：头部的图标按钮（无 emoji，SVG 描边），与 tab 同高 */
+.theme-toggle {
+  height: var(--btn-h);
+  width: var(--btn-h);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--soft-2);
+  border-radius: var(--radius-sm);
+  background: var(--soft);
+  color: var(--ink);
+  cursor: pointer;
+  transition: box-shadow 0.12s;
+}
+.theme-toggle:hover { box-shadow: var(--shadow-relief); }
+.theme-toggle:active { box-shadow: var(--shadow-relief-press); }
+.theme-toggle svg { width: 16px; height: 16px; display: block; }
+
+/* 分段选择器（首页主题三选一）：当前项用内凹 + 深色底 */
+.seg { display: inline-flex; border: 1px solid var(--soft-2); border-radius: var(--radius-sm); overflow: hidden; }
+.seg button {
+  border: 0;
+  background: var(--paper);
+  color: var(--mid);
+  font: inherit;
+  font-size: var(--fs-core);
+  height: 26px;
+  padding: 0 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.seg button + button { border-left: 1px solid var(--soft-2); }
+.seg button:hover { background: var(--soft); }
+.seg button.active { background: var(--ink); color: var(--paper); font-weight: 600; }
+.seg button svg { width: 13px; height: 13px; }
+
+.tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  padding: 0 14px;
+  height: 28px;
+  border-radius: 999px;
+  cursor: pointer;
+  color: var(--mid);
+  font-size: 13px;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.tab:hover { color: var(--ink); background: transparent; }
+.tab.active {
+  color: var(--ink);
+  background: var(--paper);
+  font-weight: 600;
+  box-shadow: var(--shadow-relief);
+}
+
+main { padding: 16px; }
+
+/* 并排卡片用 .cols，避免每个视图各写一套 flex */
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; align-items: start; }
+
+/* ── 侧栏壳 ─────────────────────────────────────────────── */
+.shell { display: flex; min-height: 100vh; }
+.side {
+  flex: 0 0 208px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 10px;
+  background: var(--soft);
+  border-right: var(--border);
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+}
+.side-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px 10px;
+  font-weight: 600;
+  border-bottom: var(--border);
+}
+.side-brand img { width: 22px; height: 22px; border-radius: 6px; flex: 0 0 auto; }
+.side-nav { display: flex; flex-direction: column; gap: 2px; overflow: auto; }
+.side-group { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
+.side-group-title {
+  font-size: var(--fs-small);
+  color: var(--mid);
+  padding: 2px 8px;
+  letter-spacing: 0.04em;
+}
+.side-item {
+  display: block;
+  padding: 6px 8px;
+  border-radius: var(--radius-btn);
+  color: inherit;
+  text-decoration: none;
+  font-size: var(--fs-core);
+  line-height: 1.4;
+}
+.side-item:hover { background: var(--soft-2); }
+.side-item.active { background: var(--ink); color: var(--paper); }
+.side-item.nested { padding-left: 18px; }
+.side-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: var(--border);
+  font-size: var(--fs-small);
+}
+.side-main { flex: 1 1 auto; min-width: 0; }
+.side-main > .empty { padding: 24px; }
+@media (max-width: 720px) {
+  .shell { flex-direction: column; }
+  .side { flex-basis: auto; position: static; max-height: none; }
+}
