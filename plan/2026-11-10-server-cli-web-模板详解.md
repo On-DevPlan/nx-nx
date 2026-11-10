@@ -105,6 +105,8 @@ nx-xx/
 │  │  ├─ serve-port.ts          #   端口探测 / 复用判定（与生成器自身逐字节一致）
 │  │  └─ skills/                #   skill 平台能力（发现/导出/安装/hook 总线）
 │  ├─ runtime/                  # 装配层：CLI / HTTP / 注册表 / 契约
+│  │  ├─ container.ts           #   IoC 容器（依赖注册与解析）
+│  │  ├─ action-base.ts         #   action 抽象基类（持容器）
 │  │  ├─ action-decorator.ts    #   @action 装饰器 + zodActionsOf 收集器
 │  │  ├─ zod-bridge.ts          #   schema 拆解 + 文本归一化 + zod 校验
 │  │  ├─ registry.ts            #   Registry 类（装载 + 运行时自检）
@@ -115,10 +117,13 @@ nx-xx/
 │  │  ├─ help.ts                #   命令条目与 help 文本派生
 │  │  ├─ codegen.ts             #   apiclient 与命令树生成
 │  │  └─ types/module.ts        #   ModuleBase 基类
-│  ├─ modules/                  # 业务域（每域：index.ts 声明 + service.ts 业务 + schemas.ts 契约）
-│  │  ├─ platform/index.ts      #   serve / help / version（平台命令，也是 action）
-│  │  ├─ home/{index,service,schemas}.ts   #   启动聚合 / 演示业务 / 本机设置
-│  │  └─ skill/{index,schemas}.ts           #   随包 skill 的发现与安装
+│  ├─ modules/<域>/             # 业务域（一条 action 一个文件）
+│  │  ├─ actions/<名>.ts        #   声明（@action）+ 实现同文件，类继承 ActionBase
+│  │  ├─ actions/_manifest.generated.ts   # codegen 收进本目录所有 action 类
+│  │  ├─ schemas.ts             #   zod 契约（命名 <camelCase(actionId)>Input/Output）
+│  │  └─ index.ts               #   只做装配：模块元信息 + 容器建实例
+│  │  （platform = serve/help/version；home = 启动聚合/演示业务/本机设置；
+│  │    skill = 随包 skill 的发现与安装）
 │  └─ web/frontend/             # 浏览器侧
 │     ├─ routes/<名>.ts         #   路由声明（一条路由一个文件）+ contract.ts 公共契约
 │     ├─ pages/<名>/index.tsx   #   页面本体（+ 私有 api.ts 与 components/）
@@ -170,23 +175,43 @@ action.run(input)  ←── 同一个 handler ──→  action.run(input)
    └─ --json → 原始 data
 ```
 
-### 4.2 声明：一条 action 长什么样
+### 4.2 声明：一条 action 一个文件
 
 ```ts
-@action({
-  id: 'home.greet',                       // 全局唯一
-  cli: ['greet'],                         // CLI 命令路径
-  http: ['POST', '/api/greet'],           // HTTP 路由；**不写 = 纯 CLI**
-  args: ['name'],                         // 位置参数字段（顺序即消费顺序）
-  summary: '打个招呼（演示动作…）',
-  input: homeGreetInput,                  // zod 入参契约（CLI 与 HTTP 共用）
-  output: homeGreetOutput,                // zod 出参契约（apiclient 的返回类型来源）
-  render: (r) => r.greeting,              // CLI 人读渲染；面板不用（走 JSON）
-})
-greet(ctx: z.output<typeof homeGreetInput>) {
-  return this.svc.greet(ctx.name, ctx.loud === true);   // this 是实例（服务已注入）
+// src/modules/home/actions/greet.ts
+export class GreetAction extends ActionBase {
+  @action({
+    id: 'home.greet',                       // 全局唯一
+    cli: ['greet'],                         // CLI 命令路径
+    http: ['POST', '/api/greet'],           // HTTP 路由；**不写 = 纯 CLI**
+    args: ['name'],                         // 位置参数字段（顺序即消费顺序）
+    summary: '打个招呼（演示动作…）',
+    input: homeGreetInput,                  // zod 入参契约（CLI 与 HTTP 共用）
+    output: homeGreetOutput,                // zod 出参契约（apiclient 的返回类型来源）
+    render: (r) => r.greeting,              // CLI 人读渲染；面板不用（走 JSON）
+  })
+  async greet(ctx: z.output<typeof homeGreetInput>) {
+    const store = this.deps.get<JsonStore>('store');   // 依赖经 IoC 容器取
+    const count = await store.mutate((s) => { /* … */ });
+    return { greeting: `你好，${ctx.name}！`, count, … };
+  }
 }
 ```
+
+**IoC 自动注册**（加一条 action 零登记）：
+
+```
+新文件 actions/ping.ts（继承 ActionBase，方法标 @action）
+        │  pnpm gen:actions —— 扫 actions/ 目录，收进所有 ActionBase 子类
+        ▼
+actions/_manifest.generated.ts   ← 模块 index.ts 只读这份清单（不手工列举）
+        │  容器建实例（依赖注入）→ zodActionsOf 收集
+        ▼
+注册表 → CLI 命令表 / HTTP 路由表 / 前端 apiclient（pnpm gen:api）
+```
+
+于是「加一条 action」= **新建一个文件 + 跑一次 `pnpm gen`**，
+模块 `index.ts` 一行都不用改（已实测：新建 ping.ts → gen → `nx-zz ping` 直接可用）。
 
 - **契约文件**：每域一份 `schemas.ts`，命名约定 `<camelCase(actionId)>Input/Output`
   （`home.greet` → `homeGreetInput`）。约定破了，codegen 会生成指向不存在符号的
@@ -481,21 +506,23 @@ PNG（内置 5x7 点阵字模 + zlib）+ ICO 容器，7 套撞色方案。
 ### 13.1 加一个 action
 
 1. 在所属域的 `schemas.ts` 加一对契约常量（命名 `<camelCase(actionId)>Input/Output`）；
-2. 在 `index.ts` 的模块类上加一个装饰方法：
+2. 新建 `actions/<名>.ts`——类继承 `ActionBase`，方法标 `@action`，实现同文件：
    ```ts
-   @action({ id: 'home.ping', cli: ['ping'], http: ['GET', '/api/ping'],
-             input: homePingInput, output: homePingOutput, render: (r) => r.pong })
-   ping(ctx: z.output<typeof homePingInput>) { return { pong: 'pong' }; }
+   export class PingAction extends ActionBase {
+     @action({ id: 'home.ping', cli: ['ping'], http: ['GET', '/api/ping'],
+               input: homePingInput, output: homePingOutput, render: (r) => r.pong })
+     async ping(_ctx: z.output<typeof homePingInput>) { return { pong: 'pong' }; }
+   }
    ```
-   业务逻辑放 `service.ts`，handler 只做编排（`this.svc.ping()`）；
-3. `pnpm gen:api`（前端要用到的话）——**别忘**，新鲜度测试会红；
-4. 跑 `pnpm test`。
+   依赖经容器取：`this.deps.get<JsonStore>('store')`；
+3. `pnpm gen`（清单 + 前端 apiclient）——**别忘**，新鲜度测试会红；
+4. 跑 `pnpm test`。**模块 `index.ts` 不需要改**（清单自动收编）。
 
 ### 13.2 加一个业务域
 
-`src/modules/<域>/{index.ts,service.ts,schemas.ts}` → 在 `runtime/registry.ts` 的
-`Registry.create([...])` 里加一个实例 → `tests/unit/registry.test.mjs` 会要求
-模块目录与注册表一一对应（漏登记直接红）。
+`src/modules/<域>/{actions/,schemas.ts,index.ts}` → 在 `runtime/registry.ts` 的
+`Registry.create([...])` 里加一个模块实例 → `tests/unit/registry.test.mjs` 会要求
+模块目录与注册表一一对应（漏登记直接红）。域内再加 action 不用改这两个文件。
 
 ### 13.3 加一个页面
 
@@ -528,7 +555,8 @@ PNG（内置 5x7 点阵字模 + zlib）+ ICO 容器，7 套撞色方案。
 6. 路由唯一真相是文件系统；壳清单（layouts.ts）是唯一的全局版式登记点；
 7. core 是最底层；域之间互不依赖（由测试解析真实路径判定，不枚举）；
 8. 颜色一律引用 token；
-9. serve 端有状态的能力用类 + 构造注入（JsonStore / HomeService / SkillService）；
+9. serve 端用类组织：action 类继承 ActionBase，依赖经 IoC 容器取，模块只做装配；
+   **一条 action 一个文件**（`actions/<名>.ts`），加 action 零登记（`pnpm gen`）；
 10. 无状态纯函数保持模块级；模板文件里**不许出现裸 `{{ }}`**（连 eslint 消息都不行）。
 
 **已知债**（单通道放大的部分）：
@@ -570,8 +598,10 @@ node bin/nx-nx.mjs routes    # nx-nx 自己的命令表
 | 我想改… | 去改 |
 | --- | --- |
 | 命令/接口的契约 | `src/modules/<域>/schemas.ts` |
-| 声明一条 action | `src/modules/<域>/index.ts` |
-| 业务逻辑 | `src/modules/<域>/service.ts` |
+| 声明一条 action（声明+实现） | `src/modules/<域>/actions/<名>.ts` |
+| 域内共享规则（设置项校验等） | `src/modules/<域>/<规则>.ts` |
+| action 清单（自动注册产物） | `src/modules/<域>/actions/_manifest.generated.ts` |
+| IoC 容器与 action 基类 | `src/runtime/container.ts` · `src/runtime/action-base.ts` |
 | 参数归一化规则 | `src/runtime/zod-bridge.ts` |
 | CLI 解析/渲染 | `src/runtime/cli.ts` |
 | HTTP 路由/错误映射 | `src/runtime/api.ts` · `src/core/errors/index.ts` |

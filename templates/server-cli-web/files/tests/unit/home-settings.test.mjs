@@ -17,10 +17,18 @@ function withStore() {
 }
 
 async function loadModules() {
-  const svc = await import('../../src/modules/home/service.ts');
+  const { GetSettingsAction } = await import('../../src/modules/home/actions/get-settings.ts');
+  const { SetSettingsAction } = await import('../../src/modules/home/actions/set-settings.ts');
+  const { renderSettings } = await import('../../src/modules/home/settings.ts');
+  const { container } = await import('../../src/runtime/container.ts');
   const { store } = await import('../../src/core/store.ts');
-  // home = 服务实例（业务方法）；mod = 模块本身（renderSettings 这类无状态渲染函数在其上）
-  return { home: svc.homeService, mod: svc, store };
+  // 两条 action 各自一个类（依赖经 IoC 容器注入）；renderSettings 是共享的渲染函数
+  return {
+    home: new GetSettingsAction(container),
+    set: new SetSettingsAction(container),
+    mod: { renderSettings },
+    store,
+  };
 }
 
 test('默认设置：navGroups / navHidden 都是空数组（老 store 读一次自动补）', async () => {
@@ -35,16 +43,16 @@ test('默认设置：navGroups / navHidden 都是空数组（老 store 读一次
 
 test('navGroups：含 home 的分组原样落盘，不被 order / 字典序重排', async () => {
   withStore();
-  const { home, store } = await loadModules();
-  await home.setSettings({ set: { navGroups: [{ title: '系统', views: ['home'] }] } });
+  const { set, store } = await loadModules();
+  await set.setSettings({ set: { navGroups: [{ title: '系统', views: ['home'] }] } });
   assert.deepEqual((await store.load()).settings.navGroups, [{ title: '系统', views: ['home'] }]);
 });
 
 test('navGroups：PATCH 只改传入项（改主题不影响已存分组）', async () => {
   withStore();
-  const { home, store } = await loadModules();
-  await home.setSettings({ set: { navGroups: [{ title: '系统', views: ['home'] }] } });
-  await home.setSettings({ set: { theme: 'dark' } });
+  const { set, store } = await loadModules();
+  await set.setSettings({ set: { navGroups: [{ title: '系统', views: ['home'] }] } });
+  await set.setSettings({ set: { theme: 'dark' } });
   const s = await store.load();
   assert.deepEqual(s.settings.navGroups, [{ title: '系统', views: ['home'] }]);
   assert.equal(s.settings.theme, 'dark');
@@ -52,7 +60,7 @@ test('navGroups：PATCH 只改传入项（改主题不影响已存分组）', as
 
 test('navGroups 校验：坏形状 / 缺组名 / 跨组重复 —— 都拒绝且不落盘', async () => {
   withStore();
-  const { home, store } = await loadModules();
+  const { set, store } = await loadModules();
   const before = JSON.stringify((await store.load()).settings);
 
   const cases = [
@@ -62,7 +70,7 @@ test('navGroups 校验：坏形状 / 缺组名 / 跨组重复 —— 都拒绝�
   ];
   for (const [navGroups, re] of cases) {
     await assert.rejects(
-      home.setSettings({ set: { navGroups } }),
+      set.setSettings({ set: { navGroups } }),
       (e) => e.code === 'INVALID_INPUT' && re.test(e.message),
       `应拒绝: ${JSON.stringify(navGroups)}`,
     );
@@ -72,64 +80,64 @@ test('navGroups 校验：坏形状 / 缺组名 / 跨组重复 —— 都拒绝�
 
 test('后端不校验页面存在性：任意 id、空分组都接受（前端负责忽略/提示）', async () => {
   withStore();
-  const { home, store } = await loadModules();
+  const { set, store } = await loadModules();
 
-  await home.setSettings({ set: { navGroups: [{ title: 'A', views: ['no_such_page'] }] } });
+  await set.setSettings({ set: { navGroups: [{ title: 'A', views: ['no_such_page'] }] } });
   assert.deepEqual((await store.load()).settings.navGroups, [{ title: 'A', views: ['no_such_page'] }]);
 
-  await home.setSettings({ set: { navGroups: [{ title: 'B', views: [] }] } });
+  await set.setSettings({ set: { navGroups: [{ title: 'B', views: [] }] } });
   assert.deepEqual((await store.load()).settings.navGroups, [{ title: 'B', views: [] }], '空分组允许暂存');
 
-  await home.setSettings({ set: { navHidden: 'whatever' } });
+  await set.setSettings({ set: { navHidden: 'whatever' } });
   assert.deepEqual((await store.load()).settings.navHidden, ['whatever']);
 });
 
 test('navHidden：数组 / 逗号串 / JSON 串都认，并去重保序', async () => {
   withStore();
-  const { home, store } = await loadModules();
-  await home.setSettings({ set: { navHidden: 'home' } });
+  const { set, store } = await loadModules();
+  await set.setSettings({ set: { navHidden: 'home' } });
   assert.deepEqual((await store.load()).settings.navHidden, ['home']);
-  await home.setSettings({ set: { navHidden: 'a,b,a' } });
+  await set.setSettings({ set: { navHidden: 'a,b,a' } });
   assert.deepEqual((await store.load()).settings.navHidden, ['a', 'b'], '逗号串去重保序');
-  await home.setSettings({ set: { navHidden: '["x","y"]' } });
+  await set.setSettings({ set: { navHidden: '["x","y"]' } });
   assert.deepEqual((await store.load()).settings.navHidden, ['x', 'y'], 'JSON 串');
 });
 
 test('theme：只认 light / dark / auto，坏值拒绝', async () => {
   withStore();
-  const { home, store } = await loadModules();
-  await home.setSettings({ set: { theme: 'dark' } });
+  const { set, store } = await loadModules();
+  await set.setSettings({ set: { theme: 'dark' } });
   assert.equal((await store.load()).settings.theme, 'dark');
   await assert.rejects(
-    home.setSettings({ set: { theme: 'blue' } }),
+    set.setSettings({ set: { theme: 'blue' } }),
     (e) => e.code === 'INVALID_INPUT' && /light \/ dark \/ auto/.test(e.message),
   );
 });
 
 test('未知设置项 / 空 patch 都明确报错', async () => {
   withStore();
-  const { home } = await loadModules();
-  await assert.rejects(home.setSettings({ set: { 不存在的项: 1 } }), /未知设置项/);
-  await assert.rejects(home.setSettings({}), /至少要给一项/);
+  const { set } = await loadModules();
+  await assert.rejects(set.setSettings({ set: { 不存在的项: 1 } }), /未知设置项/);
+  await assert.rejects(set.setSettings({}), /至少要给一项/);
 });
 
 test('--dry-run 只演练不落盘', async () => {
   withStore();
-  const { home, store } = await loadModules();
-  const r = await home.setSettings({ set: { navGroups: [{ title: '系统', views: ['home'] }] }, 'dry-run': true });
+  const { set, store } = await loadModules();
+  const r = await set.setSettings({ set: { navGroups: [{ title: '系统', views: ['home'] }] }, 'dry-run': true });
   assert.equal(r.status, 'skipped');
   assert.deepEqual((await store.load()).settings.navGroups, []);
 });
 
 test('navOrder：可排序；坏 JSON 拒绝', async () => {
   withStore();
-  const { home, store } = await loadModules();
+  const { set, store } = await loadModules();
 
-  const a = await home.setSettings({ set: { navOrder: 'home' } });
+  const a = await set.setSettings({ set: { navOrder: 'home' } });
   assert.deepEqual(a.settings.navOrder, ['home']);
 
   await assert.rejects(
-    home.setSettings({ set: { navOrder: '[bad json' } }),
+    set.setSettings({ set: { navOrder: '[bad json' } }),
     (e) => e.code === 'INVALID_INPUT',
   );
   assert.deepEqual((await store.load()).settings.navOrder, ['home'], '校验失败不得落盘');

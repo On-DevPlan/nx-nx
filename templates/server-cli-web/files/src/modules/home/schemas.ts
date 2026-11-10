@@ -70,6 +70,9 @@ export const homeGreetOutput = z.object({
   at: z.string(),
 });
 
+/** 推断出的出参类型（handler 与前端 client 都用它）。 */
+export type GreetingResult = z.output<typeof homeGreetOutput>;
+
 // ---- setting.get ----
 export const settingGetInput = z.object({});
 export const settingGetOutput = z.object({

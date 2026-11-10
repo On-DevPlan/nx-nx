@@ -6,7 +6,7 @@
 import { api } from '../../api/client.js';
 import { createApiClient, type Transport } from '../../api/client.generated.js';
 import { useStore } from '../../store.js';
-import type { GreetingResult } from '../../../../modules/home/service.js';
+import type { GreetingResult } from '../../../../modules/home/schemas.js';
 
 export interface SettingsPatchResult {
   status: 'ok' | 'skipped';

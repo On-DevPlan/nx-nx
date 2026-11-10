@@ -25,12 +25,14 @@ description: {{name}} 的开发者 skill（项目级，.claude/skills/dev-{{lett
 ## 项目事实（改代码前先确认）
 
 - 架构：一条 action 同时派生 CLI 命令与 HTTP 路由；Web 上能做的，CLI 都能做
-- **action 单一声明通道：@action 装饰器（zod schema 即契约）**：模块是 ModuleBase
-  子类，方法上标 `@action`，契约常量放同域 `schemas.ts`（命名约定
-  `<camelCase(actionId)>Input/Output`，如 home.greet → homeGreetInput）。
-  `pnpm gen:api` 刷新 `src/web/frontend/api/client.generated.ts`（前端 apiclient，
-  新鲜度由 `tests/unit/api-client.test.mjs` 对账）。债：`:param ⊆ args` 检查在
-  收集期红；handler 入参手写 `z.output<typeof schema>`。
+- **action 单一声明通道：@action 装饰器（zod schema 即契约）**：一条 action 一个文件
+  `actions/<名>.ts`——类继承 `ActionBase`，方法上标 `@action`，声明与实现同文件；
+  契约常量放同域 `schemas.ts`（命名约定 `<camelCase(actionId)>Input/Output`）。
+  **IoC 自动注册**：依赖经容器取（`this.deps.get<JsonStore>('store')`），
+  action 类清单由 `pnpm gen:actions` 扫 `actions/` 目录生成，模块 `index.ts` 不手工
+  列举——**加一条 action = 新建一个文件 + 跑一次 `pnpm gen`，index.ts 零改动**。
+  `pnpm gen:api` 刷新前端 apiclient（新鲜度由 `tests/unit/api-client.test.mjs` 对账）。
+  债：`:param ⊆ args` 检查在收集期红；handler 入参手写 `z.output<typeof schema>`。
   前端 action 调用一律走生成的 apiclient（`createApiClient({ request })`，
   request 适配 `api()`）——typed client 已移除。
 - 命令（项目根执行）：
@@ -41,9 +43,11 @@ description: {{name}} 的开发者 skill（项目级，.claude/skills/dev-{{lett
 - 代码地图（**前后端是两条目录线，不是同一个模块目录里的两半**）：
   - `src/runtime/` —— CLI / HTTP / 路由注册与参数校验；`types/` 是 action 与模块的类型契约
   - `src/core/` —— 存储（JsonStore 类）、路径、端口等通用能力（Node 侧）
-  - `src/modules/` —— **后端**业务模块：`index.ts` 是 ModuleBase 子类（@action 装饰
-    方法声明 actions），`service.ts` 写业务（服务用类组织，store 经构造注入），
-    `schemas.ts` 放 zod 契约。**不包含任何 tsx**
+  - `src/modules/<域>/` —— **后端**业务模块：
+    `actions/<名>.ts`（**一条 action 一个文件**：@action 声明 + 实现同文件，
+    类继承 `ActionBase`）、`actions/_manifest.generated.ts`（codegen 收进本目录
+    所有 action 类）、`schemas.ts`（zod 契约）、`index.ts`（只做装配）。
+    **不包含任何 tsx**
   - `src/web/frontend/routes/` —— 路由声明：一条路由一个 `<名>.ts`（`contract.ts` 是公共契约，
     页面发现时被排除）
   - `src/web/frontend/pages/<名>/` —— 页面本体：`index.tsx`（组件，默认导出）+
@@ -75,9 +79,9 @@ description: {{name}} 的开发者 skill（项目级，.claude/skills/dev-{{lett
   纯函数 / 纯模型（如 nav-model），可单测。
 - **特殊版式 = 加一个壳目录**：`app/shells/<x>-shell/index.tsx` + `app/layouts.ts` 加一行，
   页面路由声明写 `layout: '<x>'`。既有页面零改动。
-- **serve 端业务服务用类组织（OOP）**：有状态的能力（store、服务）用类 + 构造注入，
-  模块 export 组装好的单例；无状态的纯函数（校验 coerce、渲染 render）保持模块级。
-  action 装配层保持 defineAction 声明式——那是类型系统的基础，不要类化。
+- **serve 端用类组织（OOP）**：action 类继承 `ActionBase`，依赖经 IoC 容器取
+  （`this.deps.get('store')`），模块 index.ts 只做装配；无状态的纯函数保持模块级。
+  action 装配层保持 @action 声明式——那是类型系统的基础，不要类化。
 - 新增 action 必须同时声明 `cli` 与 `http`；确属纯 CLI（`serve` / `server` / `skill` 前缀之外）要写 `http: null, web: false`——`local/action-parity` 与启动期注册表都会拦
 - **不要给"只是给面板拉个列表"的读接口硬凑 CLI 命令**：先想清楚它是不是该做成 action。
   纯展示数据（静态文案、前端路由推导出的清单）不需要 action。

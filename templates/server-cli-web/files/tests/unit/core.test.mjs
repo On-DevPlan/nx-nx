@@ -14,11 +14,14 @@ function withStore() {
 
 test('greet: 计数递增，loud 时整句大写', async () => {
   withStore();
-  const { homeService } = await import('../../src/modules/home/service.ts');
-  const a = await homeService.greet('甲');
+  // 直接实例化 action 类（依赖经 IoC 容器注入）——不必经注册表就能单测一条 action
+  const { GreetAction } = await import('../../src/modules/home/actions/greet.ts');
+  const { container } = await import('../../src/runtime/container.ts');
+  const act = new GreetAction(container);
+  const a = await act.greet({ name: '甲' });
   assert.equal(a.count, 1);
   assert.match(a.greeting, /甲/);
-  const b = await homeService.greet('乙', true);
+  const b = await act.greet({ name: '乙', loud: true });
   assert.equal(b.count, 2);
   assert.equal(b.greeting, b.greeting.toUpperCase());
 });
