@@ -25,6 +25,14 @@ description: {{name}} 的开发者 skill（项目级，.claude/skills/dev-{{lett
 ## 项目事实（改代码前先确认）
 
 - 架构：一条 action 同时派生 CLI 命令与 HTTP 路由；Web 上能做的，CLI 都能做
+- **action 有两条声明通道**（在同一张注册表汇合）：
+  - `@action` 装饰器（zod schema 即契约，试点=home 模块）：方法上标注解，
+    `src/modules/home/schemas.ts` 放契约常量（命名约定 `<camelCase(actionId)>Input/Output`），
+    `pnpm gen:api` 刷新 `src/web/frontend/api/client.generated.ts`（前端 apiclient，
+    新鲜度由 `tests/unit/api-client.test.mjs` 对账）。债：`:param ⊆ args` 检查降级为
+    运行期；handler 入参手写 `z.output<typeof schema>`
+  - `defineAction` builder（skill 模块在用）：编译期全检查（ParamsCovered / 装载查重）
+  - 完整评估见 nx-nx 仓库的 plan/2026-11-10-zod装饰器下沉-server-cli-web验证.md（生成项目不含）；新域二选一，不要混用
 - 命令（项目根执行）：
   - `pnpm dev` —— vite + 后端 tsx 直跑源码，改码即生效
   - `pnpm typecheck` —— 只跑类型检查

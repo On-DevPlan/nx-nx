@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { badInput } from '../core/errors/index.js';
 import { APP_NAME } from '../core/paths.js';
 import type { ActionShape, ArgEntry, FlagSpec, CtxOf } from './types/action.js';
+import type { FieldDesc } from './zod-bridge.js';
 
 const TYPES = new Set(['string', 'number', 'boolean', 'array', 'json', 'kv']);
 
@@ -170,6 +171,10 @@ export function compileRoute(action: ActionShape & { http: readonly [string, str
 // ---- 用法串生成：从声明反推，help 因此不可能与实际命令脱节 ----
 
 export function usageOf(action: ActionShape): string {
+  // zod 通道的 action（@action 装饰器产物）带逐字段说明：用法串从字段推导。
+  const zodFields = (action as { fields?: FieldDesc[] }).fields;
+  if (zodFields) return usageOfZod(action, zodFields);
+
   const [path] = cliPathsOf(action);
   const parts: string[] = [APP_NAME, ...(path || [])];
 
@@ -195,6 +200,27 @@ export function usageOf(action: ActionShape): string {
   // 声明期无法枚举。用一句提示代替逐个列出，读者才知道还有别的开关。
   if (action.openFlags) parts.push('[--<选项> <值> ...]');
 
+  return parts.join(' ');
+}
+
+// zod 通道的用法串：位置参数按 args 顺序、其余按字段种类给占位符。
+// 枚举字段展开成 <a|b>，布尔字段不带值占位（裸 --flag），与 FlagSpec 用法串同一套读法。
+function usageOfZod(action: ActionShape, fields: FieldDesc[]): string {
+  const [path] = cliPathsOf(action);
+  const parts: string[] = [APP_NAME, ...(path || [])];
+
+  for (const f of fields.filter((x) => x.positional)) {
+    parts.push(f.required ? `<${f.name}>` : `[${f.name}]`);
+  }
+  for (const f of fields.filter((x) => !x.positional)) {
+    if (f.kind === 'boolean') {
+      parts.push(f.required ? `--${f.name}` : `[--${f.name}]`);
+      continue;
+    }
+    const hint = f.enumValues?.length ? f.enumValues.join('|') : f.kind === 'json' ? f.name : f.kind;
+    const token = `--${f.name} <${hint}>`;
+    parts.push(f.required ? token : `[${token}]`);
+  }
   return parts.join(' ');
 }
 

@@ -178,6 +178,20 @@ serve 端的 OOP 分层（从外到内全是类，边界清晰）：
   commandTable → cliApp → registry → 本模块 actions → bootstrap 绕成循环推断，
   整类退化 any——TS7022）。
 
+### 4.3 zod 装饰器通道（home 模块试点，与 builder 共存）
+
+`@action` 装饰器把「声明与实现写进同一个方法」：zod schema 即契约
+（`src/modules/home/schemas.ts`，命名约定 `<camelCase(actionId)>Input/Output`），
+`ModuleBase` 子类的 actions 由 `zodActionsOf(this)` 从装饰过的方法收集。
+- CLI 侧：参数归一化与校验全部从 schema 推导（`runtime/zod-bridge.ts`，
+  `z.coerce` 的 'false'→true / ''→0 两个坑已绕开）；
+- 前端侧：`pnpm gen:api` 生成 `api/client.generated.ts`（类型安全 apiclient，
+  **import type 引 schema，zod 运行时不进浏览器包**）+ `cli-tree.json`（命令树快照）；
+  入库并由 `tests/unit/api-client.test.mjs` 逐字节对账新鲜度；
+- 接受的债务：`:param ⊆ args` 检查降级为运行期、handler 入参手写
+  `z.output<typeof schema>`、`RegistryChecks` 对装饰器模块失效（运行时自检兜底）。
+  完整评估与全量替换的触发条件见仓库 `plan/2026-11-10-zod装饰器下沉-server-cli-web验证.md`。
+
 ---
 
 ## 5. 编译期类型安全（这个模板的招牌）

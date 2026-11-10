@@ -23,7 +23,10 @@ import {
   flagSpecsOf,
   booleanFlagNames,
   applySpec,
+  usageOf,
 } from './spec.js';
+import { normalizeCliValue, parseInput, parseOutput } from './zod-bridge.js';
+import type { ZodBoundAction } from './action-decorator.js';
 import {
   commandEntry,
   helpEntries,
@@ -120,12 +123,22 @@ export class CliApp {
         return;
       }
 
-      const { positionals, flags } = this.parseRest(tail, cmd);
-      this.assertKnownFlags(flags, cmd);
-      const input = { ...this.mapPositionals(positionals, cmd), ...flags };
-      const ctx = applySpec(cmd as unknown as ActionShape, input);
-      const data = await cmd.run?.(ctx as Record<string, unknown>, { transport: 'cli' });
-      await this.emit(cmd, data, json, ctx as Record<string, unknown>);
+      // 双通道分叉：@action 装饰的 action 带 fields（zod 契约），走归一化 + zod
+      // 解析；defineAction builder 的走 FlagSpec/applySpec。两条通道共用解析器与
+      // 渲染器，只在「ctx 怎么来」上分叉。
+      const zod = cmd as Partial<ZodBoundAction>;
+      let ctx: Record<string, unknown>;
+      if (zod.fields) {
+        ctx = this.parseZodInput(zod as ZodBoundAction, tail) as Record<string, unknown>;
+      } else {
+        const { positionals, flags } = this.parseRest(tail, cmd);
+        this.assertKnownFlags(flags, cmd);
+        const input = { ...this.mapPositionals(positionals, cmd), ...flags };
+        ctx = applySpec(cmd as unknown as ActionShape, input) as Record<string, unknown>;
+      }
+      let data = await cmd.run?.(ctx, { transport: 'cli' });
+      if (zod.fields) data = parseOutput((zod as ZodBoundAction).output, data);
+      await this.emit(cmd, data, json, ctx);
     } catch (err) {
       this.fail(err, json);
     }
@@ -179,8 +192,9 @@ export class CliApp {
 
   // 解析剩余 token。布尔 flag 不吞下一个 token —— 否则 `skill install --force demo`
   // 会把 force 解析成字符串 'demo'，而 demo 本该是位置参数。
-  private parseRest(rest: string[], cmd: AnyCommand): { positionals: string[]; flags: Record<string, unknown> } {
-    const bools = booleanFlagNames(cmd);
+  // boolsOverride：zod 通道的布尔集合从 schema 字段推出（没有 flags 声明可查）。
+  private parseRest(rest: string[], cmd: AnyCommand, boolsOverride?: Set<string>): { positionals: string[]; flags: Record<string, unknown> } {
+    const bools = boolsOverride ?? booleanFlagNames(cmd);
     const positionals: string[] = [];
     const flags: Record<string, unknown> = {};
     for (let i = 0; i < rest.length; i++) {
@@ -232,6 +246,32 @@ export class CliApp {
       throw badInput(`多余的参数: ${positionals.slice(i).join(' ')}（用法见 ${APP_NAME} help）`);
     }
     return out;
+  }
+
+  // zod 通道的输入解析：位置参数按 fields 声明顺序消费 argv，其余是 --flag；
+  // 文本值经 normalizeCliValue 归一化成 schema 期待的形状，最后 zod 校验
+  // （错误带「用法:」前缀——对 agent 的分类契约）。未知 flag 当场报错。
+  private parseZodInput(cmd: ZodBoundAction, tail: string[]): unknown {
+    const bools = new Set(cmd.fields.filter((f) => !f.positional && f.kind === 'boolean').map((f) => f.name));
+    const { positionals, flags } = this.parseRest(tail, cmd, bools);
+    const usage = usageOf(cmd as unknown as ActionShape);
+
+    const positionalFields = cmd.fields.filter((f) => f.positional);
+    if (positionals.length > positionalFields.length) {
+      throw badInput(`多余的参数: ${positionals.slice(positionalFields.length).join(' ')}（用法见 ${APP_NAME} help）`);
+    }
+
+    const raw: Record<string, unknown> = {};
+    positionalFields.forEach((f, i) => {
+      const v = positionals[i];
+      if (v !== undefined) raw[f.name] = normalizeCliValue(f, v);
+    });
+    for (const [k, v] of Object.entries(flags)) {
+      const f = cmd.fields.find((x) => x.name === k);
+      if (!f) throw badInput(`未知参数 --${k}（用法: ${usage}）`);
+      raw[k] = normalizeCliValue(f, v);
+    }
+    return parseInput(cmd.input, raw, usage);
   }
 
   // 未知 flag 直接报错——`--fiile` 这类拼写错误应该立刻被指出来，而不是被静默忽略。

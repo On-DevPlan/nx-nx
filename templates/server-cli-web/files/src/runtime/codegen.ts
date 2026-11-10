@@ -1,0 +1,215 @@
+// codegen：从同一份 action 契约生成两样东西——
+//   1. client.generated.ts：给前端用的类型安全 apiclient
+//   2. cli-tree.json：CLI 命令树快照（面板 / 文档可消费的事实源）
+//
+// **「半自动化」的边界（0.10.0 spike 结论，量化过的）：**
+// 自动：每个 action 一个方法（名字、入参/返回类型来自 zod schema）、路由模式、
+//       路径参数抽取、query/body 分流。
+// 手写：传输层（本项目即 api/client.ts 的 api()——错误信封/超时已是现成的）、
+//       页面接线（哪个按钮调哪个 action）。
+//
+// 与 spike 的一处刻意偏差：生成的 client **不在前端做 zod 运行时校验**
+// （schema 只以 import type 出现，返回值 as 断言）——既有的 typed client 本来
+// 就没有运行时校验，行为等价且省掉浏览器包里整个 zod。服务端依旧在
+// zod-bridge 双端守 schema（CLI 与 HTTP 共用同一份）。
+//
+// schema 常量命名约定：<camelCase(actionId)>Input / Output（如 home.greet →
+// homeGreetInput）。约定破了会生成指向不存在符号的代码，api-client.test 钉住。
+import { describeInput } from './zod-bridge.js';
+import { routeParams, type ZodBoundAction } from './action-decorator.js';
+
+/** actionId → schema 常量名：home.greet → homeGreetInput（首段原样，其余段首字母大写） */
+export function schemaName(actionId: string, suffix: 'Input' | 'Output'): string {
+  const parts = actionId.split(/[.\-_]/).filter(Boolean);
+  const camel = parts
+    .map((seg, i) => (i === 0 ? seg : seg[0]!.toUpperCase() + seg.slice(1)))
+    .join('');
+  return camel + suffix;
+}
+
+/** 前端方法名：取 actionId 最后一段，撞名时加模块前缀（home.greet 与 x.greet → greet / xGreet）。 */
+export function clientMethodNames(actions: ZodBoundAction[]): Map<string, string> {
+  const used = new Set<string>();
+  const names = new Map<string, string>();
+  for (const a of actions) {
+    const parts = a.id.split('.');
+    const base = parts[parts.length - 1]!;
+    let candidate = base;
+    if (used.has(candidate)) {
+      const module = parts.length > 1 ? parts[parts.length - 2]! : 'action';
+      candidate = module + base[0]!.toUpperCase() + base.slice(1);
+      let n = 2;
+      while (used.has(candidate)) candidate = `${module}${base[0]!.toUpperCase()}${base.slice(1)}${n++}`;
+    }
+    used.add(candidate);
+    names.set(a.id, candidate);
+  }
+  return names;
+}
+
+export interface GenCtx {
+  /** schema 模块的相对导入路径（从生成文件算起） */
+  schemaImport: string;
+}
+
+/** 生成前端 apiclient 的 TS 源码（type-only 引 schema：zod 不进浏览器包）。 */
+export function generateClientSource(actions: ZodBoundAction[], ctx: GenCtx): string {
+  const withHttp = actions.filter((a) => a.http);
+  const methodNames = clientMethodNames(withHttp);
+
+  const imports = withHttp
+    .flatMap((a) => (describeInput(a.input, a.args ?? []).length ? [schemaName(a.id, 'Input')] : []))
+    .concat(withHttp.map((a) => schemaName(a.id, 'Output')))
+    .filter((v, i, arr) => arr.indexOf(v) === i)
+    .sort()
+    .map((n) => `  ${n},`)
+    .join('\n');
+
+  const iface = withHttp
+    .map((a) => {
+      const fields = describeInput(a.input, a.args ?? []);
+      const paramType = `z.input<typeof ${schemaName(a.id, 'Input')}>`;
+      const required = fields.some((f) => f.required);
+      const sig = fields.length === 0 ? '' : required ? `input: ${paramType}` : `input?: ${paramType}`;
+      const doc = a.summary ? `/** ${a.summary} */\n  ` : '';
+      return `${doc}${methodNames.get(a.id)}(${sig}): Promise<z.output<typeof ${schemaName(a.id, 'Output')}>>;`;
+    })
+    .join('\n');
+
+  const impl = withHttp
+    .map((a) => {
+      const inName = schemaName(a.id, 'Input');
+      const outName = schemaName(a.id, 'Output');
+      const methodName = methodNames.get(a.id)!;
+      const [method, pattern] = a.http!;
+      const params = routeParams(pattern);
+      const fields = describeInput(a.input, a.args ?? []);
+      const bodyFields = fields.filter((f) => !params.includes(f.name));
+      const required = fields.some((f) => f.required);
+      const isGet = method === 'GET' || method === 'HEAD';
+
+      const lines: string[] = [];
+      lines.push(`    // action: ${a.id}`);
+      const argSig =
+        fields.length === 0 ? '' : required ? `input: z.input<typeof ${inName}>` : `input?: z.input<typeof ${inName}>`;
+      lines.push(`    async ${methodName}(${argSig}) {`);
+      if (fields.length) {
+        // 可选入参统一兜底成对象：后面的索引访问不用再判 undefined
+        lines.push(`      const inp = input ?? ({} as z.input<typeof ${inName}>);`);
+      }
+
+      // 路径参数是位置参数（zodActionsOf 已校验 :param ⊆ args），编码后插进模板。
+      const pathTemplate = fields.length
+        ? pattern.replace(
+            /:([\w-]+)/g,
+            (_m, k: string) => '${encodeURIComponent(String(inp[' + JSON.stringify(k) + ']))}',
+          )
+        : pattern;
+      lines.push(`      ${isGet && bodyFields.length ? 'let' : 'const'} path = \`${pathTemplate}\`;`);
+
+      const ret = `return (await transport.request(${JSON.stringify(method)}, path${isGet ? '' : ', body'})) as z.output<typeof ${outName}>;`;
+
+      if (isGet) {
+        if (bodyFields.length) {
+          lines.push('      const q = new URLSearchParams();');
+          for (const f of bodyFields) {
+            lines.push(
+              `      if (inp[${JSON.stringify(f.name)}] !== undefined) q.set(${JSON.stringify(f.name)}, String(inp[${JSON.stringify(f.name)}]));`,
+            );
+          }
+          lines.push('      const query = q.toString();');
+          lines.push("      if (query) path += (path.includes('?')) ? '&' + query : '?' + query;");
+        }
+        lines.push('      ' + ret);
+      } else {
+        if (bodyFields.length) {
+          const body = bodyFields.map((f) => `${JSON.stringify(f.name)}: inp[${JSON.stringify(f.name)}]`);
+          lines.push(`      const body = { ${body.join(', ')} };`);
+        }
+        lines.push('      ' + ret);
+      }
+      lines.push('    },');
+      return lines.join('\n');
+    })
+    .join('\n');
+
+  return `// AUTO-GENERATED —— 由 scripts/gen-api-client.mjs（src/runtime/codegen.ts）生成，勿手改。
+//
+// 类型来自 zod schema（import type，zod 运行时不进浏览器包）；运行时校验在服务端
+// （runtime/zod-bridge.ts，CLI 与 HTTP 共用同一份 schema）。传输层是手写的那一半：
+// 调 createApiClient 时传入 api/client.ts 的 api() 即可。
+// 重新生成：pnpm gen:api。新鲜度由 tests/unit/api-client.test.mjs 对账。
+
+import type { z } from 'zod';
+import type {
+${imports}
+} from '${ctx.schemaImport}';
+
+/** 传输层契约（手写的那一半）：返回 data（错误信封由 api() 拆好，失败即 throw）。 */
+export interface Transport {
+  request(method: string, path: string, body?: unknown): Promise<unknown>;
+}
+
+export interface ApiClient {
+${iface}
+}
+
+export function createApiClient(transport: Transport): ApiClient {
+  return {
+${impl}
+  };
+}
+`;
+}
+
+/** CLI 树节点（序列化用）。 */
+export interface TreeNodeJson {
+  name: string;
+  path: string[];
+  action: {
+    id: string;
+    module: string;
+    summary: string;
+    usage: string;
+    http: string | null;
+  } | null;
+  children: TreeNodeJson[];
+}
+
+/** 从 action 声明派生层级命令树（无第二份手写清单——树是声明的产物）。 */
+export function buildTreeJson(actions: ZodBoundAction[]): TreeNodeJson {
+  type Node = { name: string; path: string[]; children: Node[]; action?: ZodBoundAction };
+  const root: Node = { name: '', path: [], children: [] };
+  for (const action of actions) {
+    let node = root;
+    action.cli.forEach((seg, i) => {
+      let next = node.children.find((c) => c.name === seg);
+      if (!next) {
+        next = { name: seg, path: action.cli.slice(0, i + 1), children: [] };
+        node.children.push(next);
+      }
+      node = next;
+    });
+    node.action = action;
+  }
+  const toJson = (node: Node): TreeNodeJson => ({
+    name: node.name,
+    path: node.path,
+    action: node.action
+      ? {
+          id: node.action.id,
+          module: node.action.module,
+          summary: node.action.summary ?? '',
+          usage: node.action.cli.join(' '),
+          http: node.action.http ? `${node.action.http[0]} ${node.action.http[1]}` : null,
+        }
+      : null,
+    children: node.children.map(toJson),
+  });
+  return toJson(root);
+}
+
+/** CLI 树快照 JSON（stable：字段序固定，适合入库对账）。 */
+export function generateTreeJson(actions: ZodBoundAction[]): string {
+  return JSON.stringify(buildTreeJson(actions), null, 2) + '\n';
+}
