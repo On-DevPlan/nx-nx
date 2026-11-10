@@ -1,33 +1,46 @@
-﻿// 模块与注册表的类型系统。
+// 模块与注册表的类型系统。
 //
-// defineModule：约束单个模块形状（id/title/actions）。
-// defineModules：模块汇总处的"编译期装载检查"，把 registry.js 运行时循环
-// （重复模块 id / action id / CLI 路径 / HTTP 路由 + 路由歧义）前移成编译错误。
+// 编译期装载检查：Registry.create 的泛型约束（RegistryChecks）把注册表运行时循环
+// （重复模块 id / action id / CLI 路径 / HTTP 路由 + 路由歧义）前移成编译错误——
+// 声明处当场红，不等启动。
+//
+// serve 端的 OOP 约定：模块是 **ModuleBase 的子类**（id/title/actions 是只读成员，
+// 业务编排调服务类的方法），注册表是 **Registry 类**（create 静态工厂做装载检查），
+// CLI 与 HTTP 各自是 CliApp / ApiRouter / PanelServer 的实例方法。
 
 import type { Assert, Err } from './action.js';
 import type { AmbiguousPairs } from './http.js';
 
-export interface ModuleShape<A extends readonly unknown[]> {
-  id: string;
-  title: string;
-  order?: number;
-  actions: A;
-}
-
-// 约束用的结构类型（defineModules 的泛型约束）
+/** 模块的运行时形状：ModuleBase 子类都满足它；Registry 与 help 只认这个。 */
 export interface AnyModule {
-  id: string;
-  title: string;
-  order?: number;
-  actions: readonly unknown[];
+  readonly id: string;
+  readonly title: string;
+  readonly order?: number;
+  readonly actions: readonly unknown[];
 }
 
-// 用裸泛型 M 承接整个字面量：id/actions 的字面量形状原样保留，
-// 同时交叉类型保证必填字段存在。
-export function defineModule<const M>(
-  m: M & { id: string; title: string; actions: readonly unknown[] },
-): M {
-  return m;
+/**
+ * 模块基类。子类用只读字段声明 id / title / actions：
+ *
+ *   export class HomeModule extends ModuleBase {
+ *     readonly id = 'home';
+ *     readonly title = '首页';
+ *     readonly order = 1;
+ *     readonly actions = [ defineAction({...})(...) , ... ] as const;
+ *   }
+ *
+ * - 业务逻辑不写在模块里：模块只做「声明 + 装配」，编排调服务类（HomeService 等）；
+ * - actions 数组**必须 as const**：装载检查的类型机器（AllActions 等）靠只读元组
+ *   逐元素析构每条 action 的字面量声明，普通数组会让查重悄悄退化成空操作；
+ * - readonly 字段保住字面量类型（`readonly id = 'home'` 的类型就是 'home'），
+ *   模块 id / CLI 路径 / HTTP 路由的查重全部依赖这一点。
+ */
+export abstract class ModuleBase {
+  abstract readonly id: string;
+  abstract readonly title: string;
+  /** 排序权重，小的在前；缺省按 100。 */
+  readonly order?: number;
+  abstract readonly actions: readonly unknown[];
 }
 
 // ---- 元组工具：查重 ----
@@ -128,7 +141,7 @@ export type ActionPatterns<AA> = FilterNever<
     : []
 >;
 
-// ---- 注册表级校验（每条对应 registry.js 运行时循环的一项）----
+// ---- 注册表级校验（每条对应 Registry.create 运行时自检的一项）----
 
 export type RegistryChecks<M extends readonly unknown[]> = unknown & Assert<
     [Dup<ModuleIds<M>>] extends [never] ? true : false,
@@ -151,14 +164,7 @@ export type RegistryChecks<M extends readonly unknown[]> = unknown & Assert<
     '存在结构性歧义的路由（不同模式匹配同一批 URL，任何排序都无法区分）'
   >;
 
-// 汇总入口：运行时按 order 排序；类型层执行全部装载检查。
-export function defineModules<const M extends readonly AnyModule[]>(
-  modules: M & RegistryChecks<M>,
-): M {
-  return [...modules].sort((a, b) => (a.order ?? 100) - (b.order ?? 100)) as unknown as M;
-}
-
-// 让"校验未通过"在返回类型层也可见（防止有人绕过 defineModules 直接用数组）。
+/** 校验通过的模块元组类型；Registry.create 的实现内部用它标注返回值。 */
 export type CheckedModules<M extends readonly unknown[]> = M & RegistryChecks<M>;
 
 // 工具重导出，便于业务侧只从 types 入口取类型

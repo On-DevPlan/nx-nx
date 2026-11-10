@@ -1,11 +1,12 @@
-// skill 域：管理随包分发的多 skill（主 skill 与可选配套 skill）。
-// 平台级能力，action 只做 I/O 编排；发现/分组/安装/导出的真相在 core/skills*.ts。
+// skill 模块：管理随包分发的多 skill（主 skill 与可选配套 skill）。
+// 平台级能力；发现/分组/安装/导出的真相在 core/skills*.ts。
 //
-// serve 端的 OOP 约定：业务编排收进 SkillService 类，action 装配层只调方法。
-// 这个域没有自身状态（构造无依赖），类的价值在于**给编排一个名字**——
-// install 的互斥校验、list 的并行聚合，都是「服务的方法」而不是散在 action 里的内联函数。
+// serve 端的 OOP 约定：模块是 ModuleBase 子类，业务编排收进 SkillService 类
+// （见下方），装配层只调服务实例的方法。这个域没有自身状态（服务构造无依赖），
+// 类的价值在于**给编排一个名字**——install 的互斥校验、list 的并行聚合，
+// 都是「服务的方法」而不是散在 action 里的内联函数。
 import { defineAction } from '../../runtime/types/action.js';
-import { defineModule } from '../../runtime/types/module.js';
+import { ModuleBase } from '../../runtime/types/module.js';
 import * as skills from '../../core/skills/index.js';
 import * as skillsGet from '../../core/skills/get.js';
 import { badInput } from '../../core/errors/index.js';
@@ -73,18 +74,23 @@ export class SkillService {
 
 export const skillService = new SkillService();
 
-export default defineModule({
-  id: 'skill',
-  title: 'Skill',
-  order: 20,
-  actions: [
+export class SkillModule extends ModuleBase {
+  override readonly id = 'skill';
+  override readonly title = 'Skill';
+  override readonly order = 20;
+
+  constructor(private svc: SkillService = skillService) {
+    super();
+  }
+
+  override readonly actions = [
     defineAction({
       id: 'skill.list',
       cli: ['skill', 'list'],
       http: ['GET', '/api/skills'],
       summary: '列出可装的 skill 与 group',
     })(
-      () => skillService.list(),
+      () => this.svc.list(),
       (r) => {
         const lines = ['可装的 skill:'];
         for (const n of r.skills) lines.push('  ' + n + (n === r.defaultGroup ? '  （默认 install）' : ''));
@@ -100,7 +106,7 @@ export default defineModule({
       http: ['GET', '/api/skill-groups'],
       summary: '列出每个 group 含哪些 skill',
     })(
-      () => skillService.groups(),
+      () => this.svc.groups(),
       (r) => {
         const lines = [];
         for (const [key, g] of Object.entries(r.groups)) {
@@ -125,7 +131,7 @@ export default defineModule({
         force: { type: 'boolean' },
       },
     })(
-      (ctx) => skillService.get(ctx.name, { ref: ctx.ref, to: ctx.to, force: ctx.force }),
+      (ctx) => this.svc.get(ctx.name, { ref: ctx.ref, to: ctx.to, force: ctx.force }),
       // 人读模式：前缀 → 全文 → 安装状态，三段拼接。
       (r) => [r.prefix, r.content, '', r.installStatus].join('\n'),
     ),
@@ -143,7 +149,7 @@ export default defineModule({
         force: { type: 'boolean' },
       },
     })(
-      (ctx) => skillService.install({ name: ctx.name, all: ctx.all, group: ctx.group, to: ctx.to, force: ctx.force }),
+      (ctx) => this.svc.install({ name: ctx.name, all: ctx.all, group: ctx.group, to: ctx.to, force: ctx.force }),
       (r) => {
         if ('group' in r && Array.isArray((r as skills.GroupInstallResult).skills)) {
           const g = r as skills.GroupInstallResult;
@@ -164,5 +170,7 @@ export default defineModule({
         return `${x.replaced ? '已替换' : '已安装'}: ${x.path}（${x.files} 个文件）`;
       },
     ),
-  ],
-});
+  ] as const;
+}
+
+export const skillModule = new SkillModule();

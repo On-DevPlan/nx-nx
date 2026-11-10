@@ -1,11 +1,12 @@
-// Web 服务器：node:http 零依赖。
-// 职责只有两件：发静态面板文件 + 把 /api/* 交给路由层（见 api.ts）。
+// Web 服务器（OOP：PanelServer 类）：node:http 零依赖。
+// 职责只有两件：发静态面板文件 + 把 /api/* 交给 ApiRouter。
 import http from 'node:http';
 import type { IncomingMessage, ServerResponse, Server as HttpServer } from 'node:http';
 import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fsp from 'node:fs/promises';
-import { handleApi, sendJson } from './api.js';
+import { ApiRouter, sendJson } from './api.js';
+import { registry } from './registry.js';
 import { DEFAULT_PORT } from '../core/paths.js';
 import { asAbsolutePath, type AbsolutePath } from '../core/brand.js';
 
@@ -31,28 +32,62 @@ const MIME: Record<string, string> = {
   '.map': 'application/json; charset=utf-8',
 };
 
-async function serveStatic(pathname: string, res: ServerResponse): Promise<void> {
-  const rel = pathname === '/' ? 'index.html' : decodeURIComponent(pathname).replace(/^\/+/, '');
-  const file = resolve(PUBLIC_DIR, rel);
+export class PanelServer {
+  constructor(private api: ApiRouter) {}
 
-  // 越界校验：解析成绝对路径后必须仍落在 PUBLIC_DIR 内。
-  // 比对解析结果，而不是剥离 '..' 字面量——后者挡不住编码变形。
-  if (file !== PUBLIC_DIR && !file.startsWith(PUBLIC_DIR + sep)) {
-    res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
-    res.end('Forbidden');
-    return;
+  /** 起服务并返回底层 http.Server（调用方要读 address() 与 close()）。 */
+  start({ port = DEFAULT_PORT, host = '127.0.0.1' }: { port?: number; host?: string } = {}): Promise<
+    HttpServer<typeof IncomingMessage, typeof ServerResponse>
+  > {
+    const server = http.createServer((req, res) => {
+      void this.dispatch(req, res);
+    });
+    return new Promise((resolve_, reject) => {
+      server.once('error', reject);
+      server.listen(port, host, () => resolve_(server));
+    });
   }
 
-  try {
-    const buf = await fsp.readFile(file);
-    res.writeHead(200, {
-      'content-type': MIME[extname(file).toLowerCase()] || 'application/octet-stream',
-      'cache-control': 'no-store',
-    });
-    res.end(buf);
-  } catch {
-    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
-    res.end('Not Found');
+  private async dispatch(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    try {
+      const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+      if (url.pathname.startsWith('/api/')) {
+        await this.api.handle(req, res, url);
+        return;
+      }
+      await this.serveStatic(url.pathname, res);
+    } catch (err) {
+      sendJson(res, 500, {
+        ok: false,
+        error: String((err as { message?: string })?.message || err),
+        code: 'INTERNAL',
+      });
+    }
+  }
+
+  private async serveStatic(pathname: string, res: ServerResponse): Promise<void> {
+    const rel = pathname === '/' ? 'index.html' : decodeURIComponent(pathname).replace(/^\/+/, '');
+    const file = resolve(PUBLIC_DIR, rel);
+
+    // 越界校验：解析成绝对路径后必须仍落在 PUBLIC_DIR 内。
+    // 比对解析结果，而不是剥离 '..' 字面量——后者挡不住编码变形。
+    if (file !== PUBLIC_DIR && !file.startsWith(PUBLIC_DIR + sep)) {
+      res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('Forbidden');
+      return;
+    }
+
+    try {
+      const buf = await fsp.readFile(file);
+      res.writeHead(200, {
+        'content-type': MIME[extname(file).toLowerCase()] || 'application/octet-stream',
+        'cache-control': 'no-store',
+      });
+      res.end(buf);
+    } catch {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('Not Found');
+    }
   }
 }
 
@@ -61,27 +96,10 @@ export interface StartServerOptions {
   host?: string;
 }
 
-export function startServer({ port = DEFAULT_PORT, host = '127.0.0.1' }: StartServerOptions = {}): Promise<
+// 兼容入口：cmdServe（CliApp.serve）与编程调用方都用它。
+// 每次调用都用当前注册表新建 ApiRouter——路由表是构造期产物，注册表变了要重编译。
+export function startServer({ port, host }: StartServerOptions = {}): Promise<
   HttpServer<typeof IncomingMessage, typeof ServerResponse>
 > {
-  const server = http.createServer(async (req, res) => {
-    try {
-      const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
-      if (url.pathname.startsWith('/api/')) {
-        await handleApi(req, res, url);
-        return;
-      }
-      await serveStatic(url.pathname, res);
-    } catch (err) {
-      sendJson(res, 500, {
-        ok: false,
-        error: String((err as { message?: string })?.message || err),
-        code: 'INTERNAL',
-      });
-    }
-  });
-  return new Promise((resolve_, reject) => {
-    server.once('error', reject);
-    server.listen(port, host, () => resolve_(server));
-  });
+  return new PanelServer(new ApiRouter(registry.actions)).start({ port, host });
 }

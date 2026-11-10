@@ -116,30 +116,43 @@ nx-xx/
 ### 4.1 全局数据流
 
 ```
-                    action 声明（src/modules/<域>/index.ts）
-                     defineAction({ id, cli, http, args, flags })(run, render?)
+        ModuleBase 子类（src/modules/<域>/index.ts，如 HomeModule）
+         readonly actions = [ defineAction({ id, cli, http, args, flags })(run, render?) ] as const
                       │                │                │
           ┌───────────┘                │                └───────────┐
           ▼                            ▼                            ▼
    runtime/registry.ts          runtime/spec.ts              runtime/help.ts
-   模块汇合 + 装载期查重     flag 强转/校验/默认值        help 文本/用法串派生
+   Registry.create（装载查重）  flag 强转/校验/默认值        help 文本/用法串派生
           │                            │                            │
           ▼                            ▼                            ▼
    ┌─────────────┐            ┌─────────────┐              面板 CliHints 组件
-   │ runtime/cli │            │ runtime/api │              （每个按钮亮出 CLI 等价）
-   │ argv→ctx    │            │ HTTP→ctx    │
+   │ CliApp      │            │ ApiRouter   │              （每个按钮亮出 CLI 等价）
+   │ .run(argv)  │            │ .handle()   │
    └──────┬──────┘            └──────┬──────┘
           │  {transport:'cli'}       │  {transport:'http'}
           └────────────┬─────────────┘
                        ▼
-              service（业务真相，src/modules/<域>/service.ts）
+              服务类（业务真相，src/modules/<域>/service.ts，构造注入 store）
                        ▼
-              core/store（JSON 原子写 + mtime 缓存失效）
+              JsonStore（JSON 原子写 + mtime 缓存失效）
 ```
 
-- **registry 装载期自检**（运行时）：action id / CLI 路径 / HTTP 路由查重、
-  每条 action 必有 cli——「面板上有按钮、CLI 里没命令」结构上不可能发生。
-- **cli.ts / api.ts 是同一 run 的两个壳**：CLI 端失败 exit 1 + 可解析文本；
+serve 端的 OOP 分层（从外到内全是类，边界清晰）：
+- `Registry`（runtime/registry.ts）：`Registry.create(MODULES)` 静态工厂——编译期执行
+  RegistryChecks 装载检查，运行时排序 + 自检；`registry` 单例被 CliApp / ApiRouter 共享。
+  `MODULES` 是 as const 模块元组（typed client 与编译期查重靠它的字面量形状）。
+- `CliApp`（runtime/cli.ts）：平台命令（serve/help/version）+ 命令匹配/解析/派发/渲染
+  都是实例成员，`run(argv)` 是唯一对外入口；`runCli(argv)` 是兼容函数。
+- `ApiRouter`（runtime/api.ts）：构造期把 actions 编译成排序路由表，`handle()` 是
+  PanelServer 的 /api/* 入口；一次编译常驻复用。
+- `PanelServer`（runtime/server.ts）：静态文件 + /api 分发；`startServer()` 兼容函数
+  每次用当前注册表新建 ApiRouter。
+- spec.ts / help.ts 保持纯函数——无状态的派生工具不装进类里（OOP 不当教条）。
+
+- **Registry 装载期自检**（create 工厂内，与编译期 RegistryChecks 互为备份）：
+  action id / CLI 路径 / HTTP 路由查重、每条 action 必有 cli——
+  「面板上有按钮、CLI 里没命令」结构上不可能发生。
+- **CliApp 与 ApiRouter 是同一批 action 的两个出口**：CLI 端失败 exit 1 + 可解析文本；
   HTTP 端错误码映射 4xx/5xx（INVALID_INPUT→400、NOT_FOUND→404、CONFLICT/BLOCKED→409）。
 - **错误契约**：失败 throw `NxError`（带 code）；业务结果 `return {status}`。
   message 里「用法:」「未设置」「不存在」是对 agent 的分类契约，不得删。
@@ -151,12 +164,19 @@ nx-xx/
   演示「面板操作 → 状态落盘」闭环）、本机设置（`setting get|set`，PATCH 语义）。
 - **skill**：`skill list / get / install`（含 `--all` 直接覆盖、`--group`），
   把 `assets/` 里的 skill 装到本机 skill 目录。
-- **服务层的 OOP 约定（serve 端风格）**：有状态的业务能力用**类 + 构造注入**组织——
-  `core/store.ts` 是 `JsonStore` 类（缓存收在私有字段，`store` 单例被注入），
-  `HomeService(store)` / `SkillService` 各域一个类，模块 export 组装好的实例给
-  action 装配层调方法；无状态的纯函数（设置项校验 coerce、人读渲染 render）保持
-  模块级——没有状态的东西不装进类里。action 装配层保持 defineAction 声明式：
-  那是类型系统的基础，不类化。测试想换实现时 `new HomeService(otherStore)` 即可。
+- **全链路 OOP（serve 端风格）**：有状态的能力一律**类 + 构造注入**——
+  `JsonStore`（缓存私有字段，`store` 单例被注入）、服务类 `HomeService(store)` /
+  `SkillService`、模块 `HomeModule` / `SkillModule`（ModuleBase 子类：只读字段声明
+  id/title/actions，actions 数组 **as const** 保住字面量元组——装载检查的类型机器
+  靠它逐元素析构声明；readonly 字段保住 `id = 'home'` 的字面量类型），
+  装配层 `Registry` / `CliApp` / `ApiRouter` / `PanelServer`。
+  无状态的纯函数（spec 的强转、help 派生、设置项校验 coerce、人读渲染 render）
+  保持模块级——没有状态的东西不装进类里，OOP 不当教条。
+  测试想换实现时 `new HomeModule(new HomeService(otherStore))` 即可。
+  两个已钉住的坑（注释里都有）：模块 actions 必须 as const（普通数组会让查重类型
+  退化成空操作）；模块私有方法的返回类型必须显式标注（不标会沿
+  commandTable → cliApp → registry → 本模块 actions → bootstrap 绕成循环推断，
+  整类退化 any——TS7022）。
 
 ---
 
@@ -425,5 +445,6 @@ src/web/frontend/pages/<名>/components/<组件名>/index.tsx  # 可选：页面
 9. 存储走 `mutateStore` 事务，不裸读裸写 store.json；
 10. 单文件 400 行 / 15000 有效字符上限——逼近上限先拆分；
 11. 前端颜色一律引用 assets/tokens.css 的 token，不写字面色值；
-12. serve 端有状态的业务能力用类 + 构造注入（JsonStore / HomeService / SkillService），
-    无状态纯函数保持模块级；action 装配层保持 defineAction 声明式。
+12. serve 端全链路 OOP：模块 = ModuleBase 子类（actions as const）、装配层 =
+    Registry / CliApp / ApiRouter / PanelServer 类，服务 = 构造注入的类
+    （JsonStore / HomeService / SkillService）；无状态纯函数保持模块级。
