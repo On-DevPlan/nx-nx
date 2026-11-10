@@ -1,6 +1,6 @@
 ---
 name: nx-nx
-description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「列出/预览/创建项目模板」「起一个本机脚手架项目」「跑内置脚本（带内置全局函数的 .mjs）」「起一个长驻服务并做活性自愈」「写 client 请求脚本 / 调客户 API 并留全量请求日志」「用共享函数面板管理 token 与 API 封装」时使用。触发词：生成项目、脚手架、模板、create、template、server-cli-web、起项目、npx nx-nx、CLI 加面板、内置脚本、script run、js 脚本、服务组、sg、dispatch、长驻服务、活性检测、自愈、共享面板、shared、send 请求、一请求一日志。不适用：纯 Web 应用、多用户远程部署。
+description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「列出/预览/创建项目模板」「起一个本机脚手架项目」「跑内置脚本（带内置全局函数的 .mjs）」「起一个长驻服务并做活性自愈」「写 client 请求脚本 / 调客户 API 并留全量请求日志」「用共享函数面板管理 token 与 API 封装」时使用。触发词：生成项目、脚手架、模板、create、template、server-cli-web-ts、起项目、npx nx-nx、CLI 加面板、内置脚本、script run、js 脚本、服务组、sg、dispatch、长驻服务、活性检测、自愈、共享面板、shared、send 请求、一请求一日志。不适用：纯 Web 应用、多用户远程部署。
 ---
 
 # nx-nx
@@ -8,7 +8,7 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 > 本 skill 面向**使用者**（客户 / agent），随包分发：`nx-nx skill install` 一步装好。
 > 只讲「解决什么问题、怎么用」；源码结构与如何新增模板属于开发 skill `nx-dev`。
 
-一句话：nx-nx 是项目生成器——从内置模板（JavaScript / TypeScript 两套 server-cli-web
+一句话：nx-nx 是项目生成器——从内置模板（TypeScript 版 server-cli-web-ts
 骨架）一键物化一个开箱可用的「CLI + Web 面板」项目；顺带提供**内置脚本**能力：
 写一段 .mjs，用内置全局函数直接跑。
 
@@ -62,9 +62,9 @@ Web 面板顶部有「新建项目 / 模板 / 脚本 / 服务」四个 tab；「
 里对齐本项目的灰阶视觉规范（黑主色 / 12px 字号 / 28px 行高 / 1px 底线分隔 / 无阴影堆叠），
 换肤只需改 `style.css` 的 `:root` 变量 + 该文件。
 
-模板 id（共 4 套）：
+模板 id（共 3 套）：
 
-- `server-cli-web` / `server-cli-web-ts` — CLI + Web 面板同源（JS / TS），本机工具通用基线
+- `server-cli-web-ts` — CLI + Web 面板同源（TypeScript，带编译期类型安全），本机工具通用基线
 - `mono-gf` — GoFrame v2 + React + PostgreSQL 全栈 mono-repo
 - `std-a-lang` — 只铺 `a_<lang>/{sdk, proj, res, doc}` 四象限的目录骨架，不生成可运行项目（参考 `D:\code\` 的命名空间布局）
 
@@ -353,7 +353,7 @@ RESPONSE 段（状态/耗时/全部响应头/body）、META 段（ok/error）。
 ## 关键约束（避免踩坑）
 
 - 目标目录**非空即拒**，绝不覆盖——要重新生成就换新目录或清空目录
-- **必填项因模板而异**：`server-cli-web` 家族是 `--letters`（1~5 位小写字母，与 namePrefix 拼出项目名，如 `nx-xx`），
+- **必填项因模板而异**：`server-cli-web-ts` 是 `--letters`（1~5 位小写字母，与 namePrefix 拼出项目名，如 `nx-xx`），
   `mono-gf` 是 `--name`，`std-a-lang` 是 `--lang`。动手前先 `template describe <id>` 看清楚，别照抄别的模板的参数
 - 生成项目的端口由模板钩子在创建时探测并写死，面板与 Vite 各一个
 - `serve` 遇到端口被占不会报错：上面已经是本面板就**直接打开它**（不重复启动），
@@ -374,4 +374,4 @@ RESPONSE 段（状态/耗时/全部响应头/body）、META 段（ok/error）。
 
 | 代号 | 内容 | 文件 |
 | --- | --- | --- |
-| A01 | 解决什么问题 / 使用背景 / 四套模板对比 / 完整使用流程 | `A01-product.md` |
+| A01 | 解决什么问题 / 使用背景 / 三套模板对比 / 完整使用流程 | `A01-product.md` |

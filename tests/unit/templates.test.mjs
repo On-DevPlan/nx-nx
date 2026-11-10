@@ -38,7 +38,7 @@ test('renderString: 键含连字符也能识别（\\w 不含 -，字符类必须
 });
 
 test('resolveVars: letters 派生 name / envPrefix', () => {
-  const meta = { id: 'server-cli-web', namePrefix: 'nx-', options: [{ name: 'letters', type: 'letters', required: true }] };
+  const meta = { id: 'server-cli-web-ts', namePrefix: 'nx-', options: [{ name: 'letters', type: 'letters', required: true }] };
   const vars = resolveVars(meta, { letters: 'AB' });
   assert.equal(vars.name, 'nx-ab');
   assert.equal(vars.envPrefix, 'NX_AB');
@@ -127,9 +127,9 @@ test('resolveVars: 模板库里的 pattern 全部编译得过（readTemplateMeta
 
 test('listTemplates: 真实模板库至少有一个合法模板', async () => {
   const { templates, errors } = await listTemplates();
-  assert.ok(templates.length >= 1, '至少应有 server-cli-web');
-  const scw = templates.find((t) => t.id === 'server-cli-web');
-  assert.ok(scw, 'server-cli-web 存在');
+  assert.ok(templates.length >= 1, '至少应有 server-cli-web-ts');
+  const scw = templates.find((t) => t.id === 'server-cli-web-ts');
+  assert.ok(scw, 'server-cli-web-ts 存在');
   assert.equal(scw.namePrefix, 'nx-');
   assert.deepEqual(errors, []);
 });
@@ -274,28 +274,18 @@ test('模板库全部文本文件都能渲染（占位符写错只会在生成�
   }
 });
 
-test('serve-port 助手：两套模板都带，TS 版与生成器自身逐字节一致', () => {
-  // 口径统一的前提是「只有一份」：生成器自身与 TS 模板的 serve-port.ts 必须逐字节相同，
-  // JS 版与 TS 版导出的名字也必须一一对应（否则两套模板的行为会悄悄分叉）。
+test('serve-port 助手：TS 模板与生成器自身逐字节一致', () => {
+  // 口径统一的前提是「只有一份」：生成器自身与 TS 模板的 serve-port.ts 必须逐字节相同。
+  // JS 版模板已下线，不再有第二份需要对账的来源。
   const master = readFileSync(join(TPL_ROOT, '..', 'src', 'core', 'serve-port.ts'));
   const tsTpl = readFileSync(join(TPL_ROOT, 'server-cli-web-ts', 'files', 'src', 'core', 'serve-port.ts'));
   assert.deepEqual(tsTpl, master, 'TS 模板的 serve-port.ts 必须与生成器自身逐字节一致');
-
-  const jsTpl = readFileSync(join(TPL_ROOT, 'server-cli-web', 'files', 'src', 'core', 'serve-port.js'));
-  const exportedNames = (src) =>
-    [...src.toString('utf8').matchAll(/export (?:async )?(?:function|const) (\w+)/g)].map((m) => m[1]);
-  assert.deepEqual(
-    exportedNames(jsTpl).sort(),
-    exportedNames(master).sort(),
-    'JS 与 TS 的 serve-port 导出必须一一对应',
-  );
 });
 
 test('serve-port 助手：模板里只有一份来源（runtime 不再自带探测/找空闲端口）', () => {
   // 两个来源 = 两套口径 = 这批改造要消灭的东西：
   // 端口探测与找空闲端口只允许存在于 core/serve-port，runtime/server 不再导出它们。
   for (const [id, cliRel, serverRel] of [
-    ['server-cli-web', 'src/runtime/cli.js', 'src/runtime/server.js'],
     ['server-cli-web-ts', 'src/runtime/cli.ts', 'src/runtime/server.ts'],
   ]) {
     const filesDir = join(TPL_ROOT, id, 'files');
