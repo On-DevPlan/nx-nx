@@ -2,7 +2,6 @@
 
 ### Added
 
-<<<<<<< HEAD
 - **管理空间成为常驻实体**：新增 `src/core/service/space-session.ts` 与 `_runner.mjs` 的
   `NX_NS_SESSION=1` 会话模式——空间面板**只装载一次**，之后所有 introspect / call / check
   都在同一个空间实例上执行（stdin/stdout 走 NDJSON 协议）。此前每次动作都新起子进程重新装载，
@@ -40,26 +39,6 @@
   `~/.nx-nx/services/logs/clients-<组>.log` 追加一条（脚本名 / 退出码 / 耗时 / 输出尾部），
   `sg logs` 与日志抽屉新增「client 执行」段 —— client 是业务验证的主体，
   此前它却是唯一「跑完就没」、查不到执行现场的一段。
-=======
-### Added
-
-- **仓库内新增 `spike/zod-decorator/`**（不随包发布，`files` 白名单不含它）：
-  **zod + 装饰器** action 模型的验证 spike，29 条断言 + 独立 tsconfig，已纳入 `pnpm test`
-  闸门（`test:spike` 与 `typecheck:spike`）。结论：模型成立（CLI 完全自动化、
-  前端 apiclient 半自动化且可量化），但**建议分两步下沉**——第一步只加 zod、保持
-  `defineAction` 的 builder 形态；第二步（换注解形态 + codegen 前端 client）暂缓。
-  完整评估见仓库内 `plan/2026-11-10-zod-装饰器模型验证.md`。
-
-### Removed
-
-- **删除 JS 版模板 `server-cli-web`**：nx-nx 不再维护 JavaScript 版骨架，
-  `templates/server-cli-web/` 整棵目录下线，只保留 TypeScript 版 `server-cli-web-ts`。
-  理由：两套模板是同一骨架的两个语言副本，每加一个能力（类型系统、路由树、
-  共享面板……）都要写两遍；JS 版没有编译期检查，能被 TS 版覆盖的能力一律覆盖。
-  影响：`template create server-cli-web` 不再可用（会报「模板不存在」并给出可用列表），
-  模板总数 4 → 3（`server-cli-web-ts` / `mono-gf` / `std-a-lang`）。
-  已在用 JS 版模板的存量项目不受影响——模板是复制出去的产物，生成后与生成器无关。
->>>>>>> 5c64914 (feat(spike): zod + 装饰器 action 模型验证（可跑的 spike + 评估报告）)
 
 ### Changed
 
@@ -96,6 +75,229 @@
 - 「服务」页状态卡拆到 `status-card.tsx`，视图文件回到 300 行上限内。
 - `style.css` 里重复了两遍的「服务工作台」「脚本参数表单」样式块已合并去重。
 - `serviceGroup.set` 里遗留的调试输出 `console.error("DBG ...")` 已清除。
+
+## [0.16.0] - 2026-11-11
+
+### Changed
+
+- **`server-cli-web` 模板的模块结构改为「一条 action 一个文件 + 抽象基类 + IoC 自动注册」**
+  （发布方决策：业务逻辑不该都塞在一个 service.ts 里）。
+
+  - **一条 action 一个文件**：`src/modules/<域>/actions/<名>.ts`——`@action` 声明与
+    业务实现同文件；契约常量仍在同域 `schemas.ts`；域内确实被多条 action 共用的规则
+    单独成文件（如 home 的 `settings.ts`：设置项校验与渲染）；
+  - **抽象基类**：`runtime/action-base.ts` 的 `ActionBase`——所有 action 类继承它，
+    构造函数统一只接容器；
+  - **IoC 容器**：`runtime/container.ts`——依赖按 key 注册与解析
+    （`this.deps.get<JsonStore>('store')`），缺失依赖在取用时点名报错；
+    默认容器已注册共享依赖（store），测试可换一整个容器；
+  - **自动注册**：`pnpm gen:actions` 扫各域 `actions/` 目录，把继承 ActionBase 的类
+    收进 `actions/_manifest.generated.ts`；模块 `index.ts` 只做装配（不手工列举）——
+    **加一条 action = 新建一个文件 + 跑一次 `pnpm gen`，index.ts 零改动**（已实测：
+    新建 ping.ts → gen → `nx-zz ping` 直接可用，routes --json 含 home.ping）；
+    `pnpm gen` 同时刷新前端 apiclient（`pnpm gen:api`）；清单新鲜度由
+    `tests/unit/action-registry.test.mjs` 对账（忘了生成 → 当场红）；
+  - **service.ts 解散**：home/skill 的服务类被 action 类取代（业务在各自文件里，
+    依赖经容器注入）；`src/index.ts` 改导出模块类、容器与基类。
+
+  验证：真实生成项目 `pnpm test` 全绿（52/52：lint 分层 + typecheck + vite build +
+  smoke 11 + unit 41，含新增的清单对账 2 条）。
+
+## [0.15.1] - 2026-11-11
+
+### Fixed
+
+- **`server-cli-web`：`help <模块>` 的 topic 恢复为位置参数**——单通道改造时漏写
+  `args: ['topic']`，zod 通道的位置性由 args 声明决定，于是 `{{name}} help home`
+  报「多余的参数: home」（`help --topic home` 仍可用）。补上 args，并加一条
+  smoke 用例钉住这条命令形态。
+
+## [0.15.0] - 2026-11-11
+
+### Changed
+
+- **`server-cli-web` 模板收敛为**单一 action 通道**（发布方决策：不要共存要单一）——
+  全部 action（业务 10 条 + 平台 3 条 = 13 条）一律 `@action` 装饰器 + zod 契约，
+  defineAction builder 及其整套编译期机器整体移除。
+
+  - **skill 域装饰器化**：`src/modules/skill/schemas.ts` 契约常量 + 4 条装饰方法
+    （list / groups / get / install），互斥校验与安装结果渲染原样保留；
+  - **平台命令也成了 action**：`serve` / `help` / `version` 收进
+    `src/modules/platform/`（`ModuleBase` 子类）——CliApp 因此没有「平台命令特判」，
+    不写 http 即纯 CLI（serve 天然无面板入口）；
+  - **删除**：defineAction builder、`runtime/types/action.ts`（两段式泛型 + Assert）、
+    `runtime/types/http.ts`（ParamsCovered / AmbiguousPairs）、
+    `runtime/types/module.ts` 的元组查重机器（RegistryChecks 等）、
+    `runtime/spec.ts` 的 FlagSpec 强转通道、前端 typed client
+    （`web/frontend/api/typed-client.ts` + store 的 client）、
+    eslint 的 `action-parity` 规则（扫对象字面量，扫不到装饰器声明）；
+  - `runtime/spec.ts` 只剩三件无状态的活：cliPathsOf / usageOf(fields) / compileRoute；
+    `runtime/registry.ts` 去掉编译期约束，只保留运行时装载自检；
+  - 前端 action 调用**一律走生成的 apiclient**（`createApiClient({ request })`），
+    schema 按模块分组 import type（`../../../modules/<域>/schemas.js`）——
+    zod 运行时不进浏览器包；产物入库 + 逐字节新鲜度对账（`pnpm gen:api`）。
+
+  随之而来的口径变化（写文档/排查时先看这里）：
+  - 编译期装载查重**不再存在**（此前只在 builder 通道有）：装载正确性由
+    `Registry.create` 运行时自检 + 「非 GET 操作必须有面板入口」测试兜底；
+  - `:param ⊆ args` 一致性在收集期红（`zodActionsOf`）；
+  - handler 入参类型手写 `z.output<typeof schema>`；`_zod.def` 内部 API 集中在
+    `runtime/zod-bridge.ts`；
+  - 每个 action 都要写一对 output schema（换来 apiclient 的返回类型）。
+
+  验证：真实生成项目 typecheck 0 错 + `pnpm test` 50/50（lint + typecheck + vite
+  build + smoke 11 + unit 39）；实测 CLI 13 条命令（help 用法串由 zod 字段派生）、
+  HTTP 面板 /api/health、/api/greet、/api/settings（GET+PATCH）与面板首页均正常；
+  nx-nx 自身闸门全绿（smoke 11 + unit 96 + spike 29）。
+
+  评估报告（含 2026-11-11 单通道决策附录）见仓库内
+  plan/2026-11-10-zod装饰器下沉-server-cli-web验证.md。
+
+## [0.14.0] - 2026-11-10
+
+### Added
+
+- **`server-cli-web` 模板落地 zod + @action 装饰器通道（0.10.0 spike 暂缓的第二步下沉验证），
+  与 defineAction builder 双通道共存**——结论：能进，以共存进，不替换 builder
+  （完整评估见仓库内 plan/2026-11-10-zod装饰器下沉-server-cli-web验证.md）。
+
+  新增基建：
+  - `src/runtime/action-decorator.ts`：`@action` 装饰器（WeakMap 元数据，不碰
+    `Symbol.metadata`——tsx 与 tsc 产物行为不一致的坑）+ `zodActionsOf(instance)`
+    收集器（ModuleBase 子类的装饰方法 → actions，含路由 `:param ⊆ args` 运行期检查）
+  - `src/runtime/zod-bridge.ts`：schema 拆解与 CLI/HTTP 文本归一化（读 `_zod.def`
+    内部 API；`z.coerce` 的 'false'→true / ''→0 两个坑已绕开）；输入校验错误带
+    「用法:」前缀（对 agent 的分类契约）
+  - `src/runtime/codegen.ts` + `pnpm gen:api`：从同一份契约生成前端 apiclient
+    （`client.generated.ts`，类型安全方法 + query/body 分流 + 路径参数编码）与
+    CLI 命令树快照（`cli-tree.json`）；**import type 引 schema，zod 运行时不进
+    浏览器包**（与 spike 的刻意偏差：既有 typed client 本无运行时校验，行为等价更省）
+  - `tests/unit/api-client.test.mjs`：生成物入库 + 与 registry 逐字节新鲜度对账 +
+    覆盖对账 + 布尔归一化对账
+
+  试点接线：home 模块 6 条 action 全部 `@action` 装饰器化（`schemas.ts` 契约常量 +
+  方法即 handler，`this.svc.*` 直调服务类）；首页问候/栏目管理保存切到生成的
+  apiclient；skill 模块保持 builder——两条通道在 `Registry.create` 汇合。
+
+  接受的债务（均有兜底，详见评估报告）：`:param` 检查降级运行期；
+  `RegistryChecks` 对装饰器模块失效（运行时自检兜底）；handler 入参手写
+  `z.output<typeof schema>`；`_zod.def` 内部 API 集中在 bridge 单文件；
+  render 参数 any；codegen 手动触发（新鲜度测试兜底）。
+
+  验证：真实生成项目 typecheck 0 错、`pnpm test` 52/52（含 4 条新增对账）；
+  实测 `greet`（zod 通道 CLI 落盘）/ `health` / `routes --json`（13 条命令）；
+  nx-nx 自身闸门全绿。
+
+## [0.13.0] - 2026-11-10
+
+### Changed
+
+- **`server-cli-web` 模板 serve 端全链路 OOP 化（modules + runtime 装配层类化）**，
+  接续 0.12.0 的服务层类化（JsonStore / HomeService / SkillService），这次把
+  「声明 + 装配」也收进类：
+  - **模块 = ModuleBase 子类**：`HomeModule` / `SkillModule` 用只读字段声明
+    id / title / actions，业务编排调服务实例；actions 数组 **必须 as const**——
+    装载检查的类型机器靠只读元组逐元素析构字面量声明，普通数组会让查重悄悄退化
+    成空操作（注释已钉住）；readonly 字段保住 `id = 'home'` 的字面量类型。
+  - **Registry 类**（runtime/registry.ts）：`Registry.create(MODULES)` 静态工厂——
+    编译期执行 RegistryChecks 装载检查（const 泛型只有函数/方法能提供，构造函数
+    不行，所以工厂模式），运行时排序 + 装载自检；`MODULES` 是 as const 模块元组
+    （typed client 与编译期查重靠它的字面量形状——之前从 registry.modules 取会
+    退化成 AnyModule[]，前端 typed client 直接失效，这是本轮抓到的最深的坑）。
+  - **CliApp 类**（runtime/cli.ts）：平台命令（serve/help/version）与解析/派发/渲染
+    收为实例成员，`run(argv)` 唯一入口，`runCli()` 留作兼容函数。
+  - **ApiRouter 类**（runtime/api.ts）：构造期编译排序路由表，`handle()` 常驻复用。
+  - **PanelServer 类**（runtime/server.ts）：静态文件 + /api 分发；
+    `startServer()` 兼容函数保留。
+  - 边界不变：无状态纯函数（spec 强转、help 派生、coerce、render）保持模块级；
+    defineAction 的两段式 builder 保留——它是类型推断的载体，模块类内部继续用它。
+  - 两个新钉住的坑写进注释：模块私有方法返回类型必须显式标注（不标会沿
+    commandTable → cliApp → registry → 本模块 actions → bootstrap 绕成循环推断，
+    整类退化 any，TS7022）；子类字段要写 override（noImplicitOverride）。
+  - 同步更新：仓库内 plan/2026-11-10-server-cli-web-模板详解.md §4 架构章节。
+
+  验证：真实生成项目 `pnpm install && pnpm typecheck && pnpm test` 全绿（48/48，
+  lint 分层 + typecheck + vite build + smoke 11 条真实进程 + unit 37 条）；
+  实测 `greet`（落盘）/ `health` / `routes --json`（13 条命令表）端到端可用。
+
+## [0.12.0] - 2026-11-10
+
+### Changed
+
+- **`server-cli-web` 模板前端目录规范化 + serve 端服务层 OOP 化**：
+
+  前端（src/web/frontend/）：
+  - **路由声明集中到 `routes/`**：一条路由一个 `routes/<名>.ts`（`contract.ts` 是公共
+    契约，页面发现用负模式排除），路由 id = 文件名；页面本体独立到
+    `pages/<名>/index.tsx`，页面私有 `api.ts` 与 `components/<名>/` 跟着页面走。
+    「加一个页面」从新建一个目录变成新建两个文件，仍然零全局登记
+    （`import.meta.glob` 扫 `routes/*.ts` 自动发现）。
+  - **组件一律 `<名>/index.tsx` 目录形式**：共享组件 `components/<名>/`
+    （ui / theme / cli-hints / nav-model），纯模型同形式（nav-model 零 React 零 IO，
+    可单测），复用优先抽纯函数。
+  - **样式集中到 `assets/`**，四层：`tokens.css`（设计变量，颜色一律引用 token
+    不写字面色值）、`base.css`（原子类）、`shells.css`（版式）、`features.css`
+    （页面专属，分段注释标页面名）；顺带清掉模板里混入的 nx-nx 面板专属死样式，
+    补 `--shadow-float` / `--fs-small` / `--radius-sm` 三个 token。
+
+  serve 端 OOP：
+  - `core/store.ts` 改为 **JsonStore 类**（进程内缓存收进私有字段，`store` 单例）；
+  - 业务服务用**类 + 构造注入**组织：`HomeService(store)`（greet / settings / health）、
+    `SkillService`（list / groups / get / install，互斥校验收进类），
+    模块 export 组装好的单例给 action 装配层调方法；
+  - **action 装配层保持 defineAction 声明式不变**——那是类型系统的基础，
+    与 zod spike 第一阶段结论一致；无状态纯函数（coerce / render）保持模块级。
+
+  同步更新：模板自带 dev skill（SKILL.md 代码地图与约束、A01-加一个页面 全文重写）、
+  自测 `views.test.mjs` 重写为 `routes.test.mjs`（对账 routes/ 与 pages/ 一一对应）、
+  `template.json` description、仓库内 plan/2026-11-10-server-cli-web-模板详解.md。
+
+  验证：真实生成项目跑 `pnpm install && pnpm test` 全绿（48/48——lint 分层 + typecheck +
+  vite build + smoke + unit；模板改动只有生成后才被编译，这是唯一的完整验证路径）。
+
+## [0.11.0] - 2026-11-10
+
+### Changed
+
+- **模板 `server-cli-web-ts` 更名为 `server-cli-web`**：JS 版已在 0.10.0 下线，
+  `-ts` 后缀失去了区分对象，TS 版收编干净名。`templates/` 下整棵目录改名，
+  `template.json` 的 `id` 同步改为 `server-cli-web`（「目录名 = id」的加载期校验不变）。
+  影响：`template create server-cli-web-ts` 不再可用——会报「模板不存在」并给出
+  可用列表，照提示改用 `server-cli-web` 即可。已在用旧 id 生成的存量项目不受影响
+  （模板是复制出去的产物，生成后与生成器无关）。
+  同步更新：`README.md`、`package.json` description、`assets/nx-nx/*` 与
+  `assets/nx-dev/*` skill 文档、`mono-gf` 模板注释、
+  `tests/smoke.mjs` 与 `tests/unit/{templates,option-form,lint-enumeration}.test.mjs`。
+
+## [0.10.0] - 2026-11-10
+
+### Added
+
+- **仓库内新增 `spike/zod-decorator/`**（不随包发布，`files` 白名单不含它）：
+  **zod + 装饰器** action 模型的验证 spike，29 条断言 + 独立 tsconfig，已纳入 `pnpm test`
+  闸门（`test:spike` 与 `typecheck:spike`）。结论：模型成立（CLI 完全自动化、
+  前端 apiclient 半自动化且可量化），但**建议分两步下沉**——第一步只加 zod、保持
+  `defineAction` 的 builder 形态；第二步（换注解形态 + codegen 前端 client）暂缓。
+  完整评估见仓库内 `plan/2026-11-10-zod-装饰器模型验证.md`。
+
+### Removed
+
+- **删除 JS 版模板 `server-cli-web`**：nx-nx 不再维护 JavaScript 版骨架，
+  `templates/server-cli-web/` 整棵目录下线，只保留 TypeScript 版 `server-cli-web-ts`。
+  理由：两套模板是同一骨架的两个语言副本，每加一个能力（类型系统、路由树、
+  共享面板……）都要写两遍；JS 版没有编译期检查，能被 TS 版覆盖的能力一律覆盖。
+  影响：`template create server-cli-web` 不再可用（会报「模板不存在」并给出可用列表），
+  模板总数 4 → 3（`server-cli-web-ts` / `mono-gf` / `std-a-lang`）。
+  已在用 JS 版模板的存量项目不受影响——模板是复制出去的产物，生成后与生成器无关。
+
+### Changed
+
+- 文档与 skill 同步收敛到 TS 版：`README.md`、`assets/nx-nx/SKILL.md`（模板 id 清单
+  由 4 套改 3 套）、`assets/nx-nx/references/A01-product.md`（模板对照表由四套改三套）、
+  `assets/nx-dev/*`、`package.json` description。
+- 测试对账同步：JS/TS 双份 `serve-port` 导出一致性用例删除（只剩一份来源，无需对账），
+  `tests/smoke.mjs` 与 `tests/unit/{templates,option-form,lint-enumeration}.test.mjs`
+  改指 TS 模板。
 
 ## [0.9.2] - 2026-11-05
 
