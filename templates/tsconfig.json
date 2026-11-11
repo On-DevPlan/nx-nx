@@ -1,0 +1,28 @@
+// 编辑器专用（不参与任何构建）。
+//
+// 为什么需要：模板源文件里的 {{var}} 占位符只在**渲染后**才变成合法代码，
+// 而渲染发生在生成项目里（那边有自己的 node_modules 与 tsconfig）。
+// 没有这个文件时，VSCode 的 TS server 会为 templates/** 回退到「隐式项目」，
+// 解析不到仓库根的 @types/node，于是 `process` / `Buffer` 等满屏红（TS2591）。
+//
+// 有这个文件后，TS server 以它为准：types 指向仓库根的 @types/node，
+// `process` 一类报红消失。仍会红的只剩少数在**代码位置**放占位符的文件
+// （如 core/paths.ts 的 `= {{port}}`、scripts/dev.mjs）——渲染前必然非法，
+// 属于模板本质，编辑器里忽略即可。
+//
+// 对构建零影响：仓库根与生成项目的 tsconfig 都不引用本文件；
+// eslint 用自己的配置解析，也不读它。
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "ESNext.Decorators"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "typeRoots": ["../node_modules/@types"]
+  },
+  "include": ["server-cli-web/files/src/**/*.ts", "server-cli-web/files/src/**/*.tsx"]
+}
