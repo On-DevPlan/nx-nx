@@ -403,8 +403,9 @@ await generated.greet({ name: '世界', loud: false });   // 类型来自 zod sc
   重新生成，当场红；
 - 方法名取 action id 末段，撞名自动加模块前缀（`setting.get` → `get`，
   `skill.get` 撞名 → `skillGet`）；
-- schema 以 `import type` 引入：**zod 运行时不进浏览器包**；运行时校验在服务端
-  （CLI 与 HTTP 共用同一份 schema）。
+- **返回类型 = 实现类型**：`Awaited<ReturnType<InstanceType<typeof GreetAction>['greet']>>`，
+  从 action 类 type-only 引用（zod 运行时不进浏览器包；运行时校验只有服务端入参这一道）。
+  实现即契约——handler 改返回值，前端类型跟着变，不存在两份声明漂移；
 
 > 对应文件：`src/web/frontend/api/client.generated.ts` · `src/runtime/codegen.ts` · `scripts/gen-api-client.mjs`
 
@@ -566,9 +567,9 @@ PNG（内置 5x7 点阵字模 + zlib）+ ICO 容器，7 套撞色方案。
 | 编译期装载查重不存在（曾有 RegistryChecks / ParamsCovered） | `Registry.create` 运行时自检 + 「非 GET 必须有面板入口」测试 |
 | handler 入参手写 `z.output<typeof schema>` | 无——装饰器改不了方法签名 |
 | zod `_zod.def` 内部 API | 集中在 `runtime/zod-bridge.ts` 一个文件 |
-| 每个 action 都要写一对 output schema（纯样板） | 换来 apiclient 的返回类型 |
 | eslint `action-parity` 已删（扫不到装饰器声明） | 运行时 parity + 面板入口测试 |
 | `render` 回调参数是 `any` | eslint 对 any 仅警告 |
+| IoC 依赖按 key 取（`deps.get('store')`） | `DependencyMap` 接口约束 key 与值类型，拼错编译期红 |
 
 > 完整评估与决策记录：仓库内 `plan/2026-11-10-zod装饰器下沉-server-cli-web验证.md`
 

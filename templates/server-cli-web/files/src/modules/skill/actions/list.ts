@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { action } from '../../../runtime/action-decorator.js';
 import { ActionBase } from '../../../runtime/action-base.js';
 import * as skills from '../../../core/skills/index.js';
-import { skillListInput, skillListOutput } from '../schemas.js';
+import { skillListInput } from '../schemas.js';
 
 export class SkillListAction extends ActionBase {
   @action({
@@ -12,7 +12,6 @@ export class SkillListAction extends ActionBase {
     http: ['GET', '/api/skills'],
     summary: '列出可装的 skill 与 group',
     input: skillListInput,
-    output: skillListOutput,
     render: (r) => {
       const lines = ['可装的 skill:'];
       for (const n of r.skills) lines.push('  ' + n + (n === r.defaultGroup ? '  （默认 install）' : ''));

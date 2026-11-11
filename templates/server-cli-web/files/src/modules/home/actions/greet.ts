@@ -5,9 +5,7 @@
 import { z } from 'zod';
 import { action } from '../../../runtime/action-decorator.js';
 import { ActionBase } from '../../../runtime/action-base.js';
-import type { JsonStore } from '../../../core/store.js';
-import { homeGreetInput, homeGreetOutput } from '../schemas.js';
-import type { GreetingResult } from '../schemas.js';
+import { homeGreetInput } from '../schemas.js';
 
 export class GreetAction extends ActionBase {
   @action({
@@ -17,11 +15,10 @@ export class GreetAction extends ActionBase {
     summary: '打个招呼（演示动作：问候次数累计进本机存储）',
     args: ['name'],
     input: homeGreetInput,
-    output: homeGreetOutput,
     render: (r) => r.greeting,
   })
-  async greet(ctx: z.output<typeof homeGreetInput>): Promise<GreetingResult> {
-    const store = this.deps.get<JsonStore>('store');
+  async greet(ctx: z.output<typeof homeGreetInput>) {
+    const store = this.deps.get('store');
     // 走 mutate 读-改-写事务：计数 +1 与落盘是一个原子动作，
     // 两个并发请求不会丢计数，函数抛错则半个事务不会写进磁盘。
     const t = await store.mutate((s) => {

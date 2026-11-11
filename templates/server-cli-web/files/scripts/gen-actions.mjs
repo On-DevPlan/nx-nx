@@ -59,6 +59,7 @@ for (const moduleDir of readdirSync(MODULES_DIR, { withFileTypes: true })) {
   }
 
   const imports = classes.map((c) => `import { ${c.name} } from './${c.file}.js';`).join('\n');
+  const reexports = classes.map((c) => `export { ${c.name} };`).join('\n');
   const list = classes.map((c) => `  ${c.name},`).join('\n');
   const body = `${HEADER}import type { ActionBase } from '../../../runtime/action-base.js';
 import type { Container } from '../../../runtime/container.js';
@@ -68,6 +69,9 @@ ${imports}
 export const ACTIONS: readonly (new (deps: Container) => ActionBase)[] = [
 ${list}
 ];
+
+// 再导出类本身：前端 apiclient 的返回类型从这里 type-only 引用（实现即契约）。
+${reexports}
 `;
   writeFileSync(join(actionsDir, '_manifest.generated.ts'), body, 'utf8');
   total += classes.length;

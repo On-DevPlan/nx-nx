@@ -14,6 +14,10 @@
 //     `z.coerce.number()` 把空串变成 0。两个都与既有 CLI 语义冲突，必须自己写。
 //
 // 来源：spike/zod-decorator/src/schema.ts（0.10.0 的验证结论），原样移植。
+//
+// 出参没有 schema——**实现即契约**：前端 apiclient 的返回类型直接从 action 类的
+// 方法签名推断（codegen 用 type-only import 引 ActionBase 子类）。
+// 同一信息只声明一次，「两份声明漂移」无从发生，也就不需要出参校验。
 import { badInput } from '../core/errors/index.js';
 import type { ZodType } from 'zod';
 
@@ -194,14 +198,4 @@ export function parseInput(input: ZodType, values: Record<string, unknown>, usag
     .map((i) => `${i.path.join('.') || '(根)'} ${i.message}`)
     .join('；');
   throw badInput(`用法: ${usage} —— 参数不合法: ${issues}`);
-}
-
-/** 用 zod 校验输出（服务端出参也守一道；校验失败是声明问题，不是用户输入问题）。 */
-export function parseOutput(output: ZodType, value: unknown): unknown {
-  const result = output.safeParse(value);
-  if (result.success) return result.data;
-  const issues = result.error.issues
-    .map((i) => `${i.path.join('.') || '(根)'} ${i.message}`)
-    .join('；');
-  throw new Error(`返回值不符合 output schema: ${issues}`);
 }

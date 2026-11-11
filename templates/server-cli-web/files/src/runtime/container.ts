@@ -1,31 +1,39 @@
 // IoC 容器：依赖的**注册与解析**都在这里，业务代码只声明「我需要什么」。
 //
 // 为什么需要它（而不是模块手工 new 每个 action 类）：
-//   - **加一条 action 零登记**——新文件 → codegen 收进 manifest → 模块自动装配；
-//   - 依赖不在 action 的构造函数里点名（`new GreetAction(store)`），而是运行时
-//     按 key 取（`this.deps.get('store')`）——于是测试可以换一整个容器，
-//     而不是逐个改构造参数；
-//   - 依赖缺失在**取用时**报错并点名 key，不会变成 undefined 传导到深处。
+//   - **加一条 action 零登记**——新文件 → gen:actions 收进 manifest → 模块自动装配；
+//   - 依赖不在 action 的构造函数里点名，而是运行时按 key 取（`this.deps.get('store')`）
+//     ——于是测试可以换一整个容器，而不是逐个改构造参数。
 //
-// 容器是进程级单例（默认容器已注册 core 的共享依赖）；模块也可以传自己的容器
-// （测试里造一个只带临时 store 的容器即可）。
-import { store as defaultStore } from '../core/store.js';
+// 类型安全：key 与值类型由 **DependencyMap** 接口约束——
+//   - `get('store')` 的返回类型自动推导（不需要手写泛型）；
+//   - key 拼错 / register 的值类型不匹配，**编译期红**；
+//   - 新依赖类型 = 给 DependencyMap 加字段（本文件，或各域用 declare module 合并）。
+//
+// 容器是进程级单例（默认容器已注册 core 的共享依赖）；测试可 new 一个自己的容器。
+import { store as defaultStore, type JsonStore } from '../core/store.js';
+
+/** 项目级依赖清单：key → 类型。新依赖在此加字段（或各域 declare module 合并）。 */
+export interface DependencyMap {
+  /** JSON 存储（默认容器注册；测试用 new Container().register('store', 临时实例)）。 */
+  store: JsonStore;
+}
 
 export class Container {
-  private readonly providers = new Map<string, unknown>();
+  private readonly providers = new Map<keyof DependencyMap, unknown>();
 
   /** 注册一个依赖（后注册覆盖先注册）。链式返回自己，便于一行装配。 */
-  register<T>(key: string, value: T): this {
+  register<K extends keyof DependencyMap>(key: K, value: DependencyMap[K]): this {
     this.providers.set(key, value);
     return this;
   }
 
-  /** 取依赖；没注册就报错并点名 key（早失败，且信息可用）。 */
-  get<T>(key: string): T {
+  /** 取依赖；key 拼错编译期即红，没注册就运行时报错并点名 key。 */
+  get<K extends keyof DependencyMap>(key: K): DependencyMap[K] {
     if (!this.providers.has(key)) {
-      throw new Error(`依赖未注册: ${key}（已注册: ${[...this.providers.keys()].join(', ') || '无'}）`);
+      throw new Error(`依赖未注册: ${String(key)}（已注册: ${[...this.providers.keys()].join(', ') || '无'}）`);
     }
-    return this.providers.get(key) as T;
+    return this.providers.get(key) as DependencyMap[K];
   }
 
   /** 用容器建实例：action 类的构造函数统一只接容器本身。 */

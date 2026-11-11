@@ -13,18 +13,19 @@
 // 就没有运行时校验，行为等价且省掉浏览器包里整个 zod。服务端依旧在
 // zod-bridge 双端守 schema（CLI 与 HTTP 共用同一份）。
 //
-// schema 常量命名约定：<camelCase(actionId)>Input / Output（如 home.greet →
-// homeGreetInput）。约定破了会生成指向不存在符号的代码，api-client.test 钉住。
+// 入参 schema 常量命名约定：<camelCase(actionId)>Input（如 home.greet →
+// homeGreetInput）。约定破了会生成指向不存在符号的 import，api-client.test 钉住。
+// （出参没有 schema：返回类型直接从 action 类的实现推断，见 generateClientSource。）
 import { describeInput } from './zod-bridge.js';
 import { routeParams, type ZodBoundAction } from './action-decorator.js';
 
-/** actionId → schema 常量名：home.greet → homeGreetInput（首段原样，其余段首字母大写） */
-export function schemaName(actionId: string, suffix: 'Input' | 'Output'): string {
+/** actionId → 入参 schema 常量名：home.greet → homeGreetInput（首段原样，其余段首字母大写） */
+export function schemaName(actionId: string): string {
   const parts = actionId.split(/[.\-_]/).filter(Boolean);
   const camel = parts
     .map((seg, i) => (i === 0 ? seg : seg[0]!.toUpperCase() + seg.slice(1)))
     .join('');
-  return camel + suffix;
+  return camel + 'Input';
 }
 
 /** 前端方法名：取 actionId 最后一段，撞名时加模块前缀（home.greet 与 x.greet → greet / xGreet）。 */
@@ -61,40 +62,51 @@ export function generateClientSource(actions: ZodBoundAction[]): string {
   const withHttp = actions.filter((a) => a.http);
   const methodNames = clientMethodNames(withHttp);
 
-  // 按模块分组收集 schema 常量名，逐模块出一条 import type
-  const byModule = new Map<string, Set<string>>();
-  const add = (module: string, name: string) => {
-    const set = byModule.get(module) || new Set<string>();
-    set.add(name);
-    byModule.set(module, set);
-  };
+  // 按模块分组收集两类类型锚点：入参 schema 常量（schemas.ts）+ action 类（清单）。
+  // 返回类型不引 schema——**实现即契约**：从 action 类的方法签名直接推断，
+  // 同一信息只声明一次，不存在「schema 与实现漂移」。
+  const inputTypes = new Map<string, Set<string>>();
+  const actionClasses = new Map<string, Set<string>>();
   for (const a of withHttp) {
-    if (describeInput(a.input, a.args ?? []).length) add(a.module, schemaName(a.id, 'Input'));
-    add(a.module, schemaName(a.id, 'Output'));
+    if (describeInput(a.input, a.args ?? []).length) {
+      const set = inputTypes.get(a.module) || new Set<string>();
+      set.add(schemaName(a.id));
+      inputTypes.set(a.module, set);
+    }
+    const classes = actionClasses.get(a.module) || new Set<string>();
+    classes.add(a.className);
+    actionClasses.set(a.module, classes);
   }
-  const imports = [...byModule.entries()]
+  const imports = [...inputTypes.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([module, names]) => {
       const list = [...names].sort().map((n) => `  ${n},`).join('\n');
       return `import type {\n${list}\n} from '${schemaModuleOf(module)}';`;
     })
+    .concat(
+      [...actionClasses.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([module, names]) => {
+          const list = [...names].sort().map((n) => `  ${n},`).join('\n');
+          return `import type {\n${list}\n} from '../../../modules/${module}/actions/_manifest.generated.js';`;
+        }),
+    )
     .join('\n');
 
   const iface = withHttp
     .map((a) => {
       const fields = describeInput(a.input, a.args ?? []);
-      const paramType = `z.input<typeof ${schemaName(a.id, 'Input')}>`;
+      const paramType = `z.input<typeof ${schemaName(a.id)}>`;
       const required = fields.some((f) => f.required);
       const sig = fields.length === 0 ? '' : required ? `input: ${paramType}` : `input?: ${paramType}`;
       const doc = a.summary ? `/** ${a.summary} */\n  ` : '';
-      return `${doc}${methodNames.get(a.id)}(${sig}): Promise<z.output<typeof ${schemaName(a.id, 'Output')}>>;`;
+      return `${doc}${methodNames.get(a.id)}(${sig}): Promise<Awaited<ReturnType<InstanceType<typeof ${a.className}>['${a.method}']>>>;`;
     })
     .join('\n');
 
   const impl = withHttp
     .map((a) => {
-      const inName = schemaName(a.id, 'Input');
-      const outName = schemaName(a.id, 'Output');
+      const inName = schemaName(a.id);
       const methodName = methodNames.get(a.id)!;
       const [method, pattern] = a.http!;
       const params = routeParams(pattern);
@@ -122,7 +134,7 @@ export function generateClientSource(actions: ZodBoundAction[]): string {
         : pattern;
       lines.push(`      ${isGet && bodyFields.length ? 'let' : 'const'} path = \`${pathTemplate}\`;`);
 
-      const ret = `return (await transport.request(${JSON.stringify(method)}, path${isGet ? '' : ', body'})) as z.output<typeof ${outName}>;`;
+      const ret = `return (await transport.request(${JSON.stringify(method)}, path${isGet ? '' : ', body'})) as Awaited<ReturnType<InstanceType<typeof ${a.className}>['${a.method}']>>;`
 
       if (isGet) {
         if (bodyFields.length) {

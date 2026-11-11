@@ -8,7 +8,7 @@ import { action } from '../../../runtime/action-decorator.js';
 import { ActionBase } from '../../../runtime/action-base.js';
 import { APP_NAME, APP_DESC, APP_TITLE, STORE_ENV, storePathFromEnv } from '../../../core/paths.js';
 import { commandEntry, type CommandEntry } from '../../../runtime/help.js';
-import { homeBootstrapInput, homeBootstrapOutput } from '../schemas.js';
+import { homeBootstrapInput } from '../schemas.js';
 
 const VERSION = (
   JSON.parse(readFileSync(new URL('../../../../package.json', import.meta.url), 'utf8')) as { version: string }
@@ -21,7 +21,6 @@ export class BootstrapAction extends ActionBase {
     http: ['GET', '/api/bootstrap'],
     summary: '一次取齐面板启动所需的全部上下文',
     input: homeBootstrapInput,
-    output: homeBootstrapOutput,
   })
   async bootstrap(_ctx: z.output<typeof homeBootstrapInput>): Promise<{
     app: { name: string; title: string; description: string; version: string };

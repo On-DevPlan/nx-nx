@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { action } from '../../../runtime/action-decorator.js';
 import { ActionBase } from '../../../runtime/action-base.js';
 import { commandEntry } from '../../../runtime/help.js';
-import { homeRoutesInput, homeRoutesOutput } from '../schemas.js';
+import { homeRoutesInput } from '../schemas.js';
 
 export class RoutesAction extends ActionBase {
   @action({
@@ -15,7 +15,6 @@ export class RoutesAction extends ActionBase {
     http: ['GET', '/api/routes'],
     summary: '列出 CLI 命令与 HTTP 路由的对照表',
     input: homeRoutesInput,
-    output: homeRoutesOutput,
     render: (r) => {
       const lines = [`共 ${r.count} 条命令（CLI ↔ HTTP 对照）`, ''];
       const width = Math.max(...r.routes.map((x: { cli: string }) => x.cli.length));

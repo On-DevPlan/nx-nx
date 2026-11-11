@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { action } from '../../../runtime/action-decorator.js';
 import { ActionBase } from '../../../runtime/action-base.js';
 import * as skills from '../../../core/skills/index.js';
-import { skillGroupsInput, skillGroupsOutput } from '../schemas.js';
+import { skillGroupsInput } from '../schemas.js';
 
 export class SkillGroupsAction extends ActionBase {
   @action({
@@ -12,7 +12,6 @@ export class SkillGroupsAction extends ActionBase {
     http: ['GET', '/api/skill-groups'],
     summary: '列出每个 group 含哪些 skill',
     input: skillGroupsInput,
-    output: skillGroupsOutput,
     render: (r) => {
       const lines = [];
       for (const [key, g] of Object.entries<{ skills: string[]; summary?: string }>(r.groups)) {

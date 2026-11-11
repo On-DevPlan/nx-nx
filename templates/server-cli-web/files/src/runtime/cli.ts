@@ -11,7 +11,7 @@ import { toErrorPayload, exitCodeOf, badInput } from '../core/errors/index.js';
 import { registry } from './registry.js';
 import type { Registry } from './registry.js';
 import { cliPathsOf, usageOf } from './spec.js';
-import { normalizeCliValue, parseInput, parseOutput, type FieldDesc } from './zod-bridge.js';
+import { normalizeCliValue, parseInput, type FieldDesc } from './zod-bridge.js';
 import type { ZodBoundAction } from './action-decorator.js';
 import {
   commandEntry,
@@ -56,8 +56,7 @@ export class CliApp {
       }
 
       const input = this.parseInput(cmd, tail);
-      let data = await cmd.run(input);
-      if (cmd.output) data = parseOutput(cmd.output, data);
+      const data = await cmd.run(input);
       await this.emit(cmd, data, json, input as Record<string, unknown>);
     } catch (err) {
       this.fail(err, json);

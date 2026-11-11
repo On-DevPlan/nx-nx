@@ -15,7 +15,8 @@
 //     只能手写 `z.output<typeof schema>`。z.input（调用方形状，.default 字段可选）
 //     与 z.output（解析后形状，.default 字段必填）别混：handler 拿的是 z.output。
 //
-// (c) 一个 action 必须同时声明 input 与 output schema——装饰器拿不到 handler
+// (c) 出参没有 schema——**实现即契约**：apiclient 的返回类型从 action 类的方法
+//     签名直接推断（codegen type-only 引类），同一信息只声明一次。
 //     的返回值类型，输出类型只能显式声明。这是 codegen apiclient 的类型来源。
 import { describeInput, type FieldDesc } from './zod-bridge.js';
 import type { ZodType } from 'zod';
@@ -43,10 +44,10 @@ export interface ActionMeta {
   summary?: string;
   /** 位置参数：字段名按声明顺序消费 argv */
   args?: readonly string[];
-  /** 输入 schema：CLI 与 HTTP 共用的真相源 */
+  /** 输入 schema：CLI 与 HTTP 共用的真相源（运行时校验 + 归一化的依据）。 */
   input: ZodType;
-  /** 输出 schema：codegen apiclient 的返回类型来源。缺省 = 不守出参（平台命令）。 */
-  output?: ZodType;
+  // 出参没有 schema：**实现即契约**——apiclient 的返回类型从 action 类的方法签名
+  // 推断（codegen type-only 引类），同一信息只声明一次。
   /** CLI 人读渲染（面板不用——面板拿 data 走 JSON）。 */
   /** 参数用 any：上下文类型若给 never，r.greeting 这类属性访问会整片红； */
   /** ctx 是 CLI 解析产物（help 的 render 要读 ctx.topic）。 */
@@ -63,7 +64,7 @@ const META = new WeakMap<object, ActionMeta>();
  * ```ts
  * export class HomeModule extends ModuleBase {
  *   @action({ id: 'home.greet', cli: ['greet'], http: ['POST', '/api/greet'],
- *             args: ['name'], input: homeGreetInput, output: homeGreetOutput,
+ *             args: ['name'], input: homeGreetInput,
  *             render: (r) => r.greeting })
  *   greet(ctx: z.output<typeof homeGreetInput>) { return this.svc.greet(ctx.name, ctx.loud === true); }
  * }
@@ -99,7 +100,10 @@ export interface ZodBoundAction extends BoundAction {
   /** 逐字段说明（收集时用 describeInput 算好一次，CLI/HTTP/usage/codegen 共用） */
   fields: FieldDesc[];
   input: ZodType;
-  output?: ZodType;
+  /** 绑定的 action 类名（codegen 按它从清单 type-only 引类）；tsc 编译后类名不变形（无压缩）。 */
+  className: string;
+  /** 类上的方法名（= 装饰的属性名）。 */
+  method: string;
   render?: (result: any, ctx?: any) => string;
 }
 
@@ -145,9 +149,10 @@ export function zodActionsOf(instance: object): ZodBoundAction[] {
       http: meta.http,
       summary: meta.summary,
       module: moduleId,
+      className: instance.constructor.name,
+      method: name,
       fields,
       input: meta.input,
-      output: meta.output,
       render: meta.render,
       run: (ctx: unknown) => (method as (i: unknown) => unknown).call(instance, ctx),
     });

@@ -4,9 +4,8 @@
 import { z } from 'zod';
 import { action } from '../../../runtime/action-decorator.js';
 import { ActionBase } from '../../../runtime/action-base.js';
-import type { JsonStore } from '../../../core/store.js';
 import { badInput, notFound } from '../../../core/errors/index.js';
-import { settingSetInput, settingSetOutput } from '../schemas.js';
+import { settingSetInput } from '../schemas.js';
 import { SETTINGS_SCHEMA, renderSettingSet } from '../settings.js';
 import type { Settings } from '../../../core/store.js';
 
@@ -17,7 +16,6 @@ export class SetSettingsAction extends ActionBase {
     http: ['PATCH', '/api/settings'],
     summary: '修改设置（PATCH 语义：只改传入的项）',
     input: settingSetInput,
-    output: settingSetOutput,
     render: (r) => renderSettingSet(r),
   })
   async setSettings(ctx: z.output<typeof settingSetInput>) {
@@ -36,7 +34,7 @@ export class SetSettingsAction extends ActionBase {
 
     if (ctx['dry-run'] === true) return { status: 'skipped' as const, dryRun: true as const, wouldSet: resolved };
 
-    const store = this.deps.get<JsonStore>('store');
+    const store = this.deps.get('store');
     const after = (await store.mutate((s) => {
       const settings = s.settings as Settings;
       for (const [k, v] of Object.entries(resolved)) (settings as Record<string, unknown>)[k] = v;

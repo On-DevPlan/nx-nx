@@ -6,7 +6,7 @@
 // handle() 是 PanelServer 的 /api/* 入口——一次编译，常驻复用。
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { compileRoute, usageOf } from './spec.js';
-import { normalizeCliValue, parseInput, parseOutput } from './zod-bridge.js';
+import { normalizeCliValue, parseInput } from './zod-bridge.js';
 import type { ZodBoundAction } from './action-decorator.js';
 import { toErrorPayload, httpStatusOf, CODES } from '../core/errors/index.js';
 import type { ErrorCode } from '../core/errors/index.js';
@@ -87,7 +87,7 @@ export class ApiRouter {
       try {
         // 单一通道：路由参数 / query / body 里的值统一过 normalizeCliValue
         // （route 与 query 天然是字符串；body 的 JSON 值归一化是幂等的），
-        // 再 zod 校验。有 output schema 的 action 出参也守一道。
+        // 再 zod 校验。出参不守 schema——实现即契约（前端类型从实现推断）。
         const fields = action.fields;
         const usage = usageOf(action);
         const raw: Record<string, unknown> = {};
@@ -110,8 +110,7 @@ export class ApiRouter {
           }
         }
         const parsed = parseInput(action.input, raw, usage);
-        let data = await action.run(parsed);
-        if (action.output) data = parseOutput(action.output, data);
+        const data = await action.run(parsed);
         sendJson(res, 200, { ok: true, data });
       } catch (err) {
         // 错误码 → HTTP 状态只在这一处映射（core/errors 提供表）

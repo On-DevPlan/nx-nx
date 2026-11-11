@@ -14,7 +14,7 @@ import { ThemePicker } from '../../components/theme/index.js';
 import * as nav from '../../components/nav-model/index.js';
 import type { NavConfig } from '../../components/nav-model/index.js';
 import NavManager from './components/nav-manager/index.js';
-import type { GreetingResult } from '../../../../modules/home/schemas.js';
+import type { GreetingResult } from './api.js';
 
 // 面板里也把 CLI 等价写法亮出来（agent 与人都能照着敲）
 const NAV_CLI_HINT = `{{name}} setting set --set 'navGroups=[{"title":"求职","views":["home"]}]'`

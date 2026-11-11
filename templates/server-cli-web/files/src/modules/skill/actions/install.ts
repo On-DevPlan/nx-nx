@@ -6,7 +6,7 @@ import { action } from '../../../runtime/action-decorator.js';
 import { ActionBase } from '../../../runtime/action-base.js';
 import * as skills from '../../../core/skills/index.js';
 import { badInput } from '../../../core/errors/index.js';
-import { skillInstallInput, skillInstallOutput } from '../schemas.js';
+import { skillInstallInput } from '../schemas.js';
 
 export class InstallAction extends ActionBase {
   @action({
@@ -16,7 +16,6 @@ export class InstallAction extends ActionBase {
     summary: '安装 skill、整组 skill 或全部 skill',
     args: ['name'],
     input: skillInstallInput,
-    output: skillInstallOutput,
     render: (r) => {
       if ('group' in r && Array.isArray(r.skills)) {
         const label = r.group === '*' ? '全部 skill' : `group ${r.group}`;

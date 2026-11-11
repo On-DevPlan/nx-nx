@@ -4,9 +4,10 @@
 // 于是「这个页面依赖哪些 action」在一个文件里就能看全，改契约时也只改这里。
 // 调用本身仍走类型安全 client——action id、参数名、返回类型全由后端注册表推出。
 import { api } from '../../api/client.js';
-import { createApiClient, type Transport } from '../../api/client.generated.js';
+import { createApiClient, type ApiClient, type Transport } from '../../api/client.generated.js';
 import { useStore } from '../../store.js';
-import type { GreetingResult } from '../../../../modules/home/schemas.js';
+// 出参类型即契约：从生成的 apiclient（其类型从 action 实现推断）拿到
+export type GreetingResult = Awaited<ReturnType<ApiClient['greet']>>;
 
 export interface SettingsPatchResult {
   status: 'ok' | 'skipped';
