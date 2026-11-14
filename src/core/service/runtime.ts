@@ -7,7 +7,7 @@
 // 自愈边界：
 //   watcher 定时器活在 serve 进程里 —— `nx-nx serve` 不在跑时只做检测不自动重启
 //   （CLI 的 sg start/stop 随时可手动用）。
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { existsSync, appendFileSync, mkdirSync, openSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -20,9 +20,13 @@ import {
   loadRuntime,
   loadRuntimeAll,
   patchRuntime,
+  saveGroups,
+  updateRuntime,
   DEFAULT_CHECK_METHOD,
   type ServiceGroupConfig,
 } from './store.js';
+import { appendEvent } from './logs.js';
+import { pidAlive, stopGroup as stopProcesses, type StopResult } from './stop.js';
 import { serviceHttpLogsDir, serviceLogsDir } from './paths.js';
 import { checkSpace, resolvePanelPath } from './namespace.js';
 import { runnerPath, scriptsDir } from '../script/paths.js';
@@ -31,14 +35,6 @@ import { runnerPath, scriptsDir } from '../script/paths.js';
 const watchers = new Map<string, ReturnType<typeof setInterval>>();
 
 // ---- 日志 ----
-
-function appendEvent(id: string, event: string): void {
-  const dir = serviceLogsDir();
-  mkdirSync(dir, { recursive: true });
-  const line = `[${new Date().toISOString()}] ${event}\n`;
-  appendFileSync(join(dir, `events-${id}.log`), line, 'utf8');
-  patchRuntime(id, { lastEvent: event });
-}
 
 function appendMainLog(logFile: string, line: string): void {
   try {
@@ -60,13 +56,6 @@ export function runtimeSnapshot(id?: string) {
   const all = loadRuntimeAll();
   if (id) return { [id]: all[id] ?? { status: 'stopped' } };
   return all;
-}
-
-// pid 是否真的还活着（Windows 上 tasklist 过滤；检测失败视为存活，避免误重启）
-function pidAlive(pid: number): boolean {
-  const r = spawnSync('tasklist', ['/FI', `PID eq ${pid}`, '/NH'], { encoding: 'utf8' });
-  if (r.status !== 0) return true;
-  return String(r.stdout || '').includes(String(pid));
 }
 
 // ---- 启动 ----
@@ -129,7 +118,7 @@ export async function startGroup(
     }
   }
 
-  if (rt.status === 'running' && rt.pid && pidAlive(rt.pid)) {
+  if (rt.status === 'running' && rt.pid && (await pidAlive(rt.pid))) {
     return { started: false, pid: rt.pid, logFile: rt.logFile ?? '', detail: '已在运行' };
   }
   if (g.health) {
@@ -171,7 +160,8 @@ export async function startGroup(
     logFile,
     failStreak: 0,
   });
-  startWatcher(g.id);
+  // 刚 spawn：宽限一个 interval 再检测（端口还没 bind 就报失活是假警报）
+  startWatcher(g.id, { immediate: false });
   appendEvent(id, `启动主脚本 ${g.main.script}（pid ${child.pid}）→ 日志 ${logFile}`);
   return { started: true, pid: child.pid, logFile, detail: '已启动（日志见 ' + logFile + '）' };
 }
@@ -201,61 +191,28 @@ function sharedEnv(g: ServiceGroupConfig): NodeJS.ProcessEnv {
 }
 
 // ---- 停止 ----
-
-export function stopGroup(id: string, { silent = false }: { silent?: boolean } = {}): { stopped: boolean; detail: string } {
-  const g = getGroup(id);
-  const rt = loadRuntime(id);
+//
+// 「怎么停」的策略在 stop.ts（stopMode 四选一 + 三重兜底 + 非阻塞执行）；
+// 这里只负责 watcher 生命周期——停服前先摘掉定时器，否则下一次 tick 会
+// 读到「刚被我们标记为 stopped」的状态再做一次无意义的检测。
+export async function stopGroup(
+  id: string,
+  opts: { mode?: string; silent?: boolean } = {},
+): Promise<StopResult> {
   stopWatcher(id);
-  const notes: string[] = [];
-
-  // 1) 优雅关停脚本
-  if (g.stop) {
-    const r = spawnSync(process.execPath, [runnerPath(), resolveMainScript(g.stop.script), ...g.stop.args], {
-      encoding: 'utf8',
-      timeout: 15000,
-    });
-    notes.push(`关停脚本退出码 ${r.status}`);
-  }
-
-  // 2) 杀端口占用进程
-  if (g.killPort) {
-    const pid = pidOfPort(g.killPort);
-    if (pid) {
-      spawnSync('taskkill', ['/F', '/T', '/PID', String(pid)], { encoding: 'utf8' });
-      notes.push(`已杀端口 ${g.killPort} 占用进程 (pid ${pid})`);
-    } else {
-      notes.push(`端口 ${g.killPort} 无占用进程`);
-    }
-  }
-
-  // 3) 兜底：直接杀记录的 pid
-  if (rt.pid && pidAlive(rt.pid)) {
-    spawnSync('taskkill', ['/F', '/T', '/PID', String(rt.pid)], { encoding: 'utf8' });
-    notes.push(`已杀主进程 (pid ${rt.pid})`);
-  }
-
-  patchRuntime(id, { status: 'stopped', pid: undefined, failStreak: 0 });
-  if (!silent) appendEvent(id, `停止：${notes.join('；') || '无动作'}`);
-  return { stopped: true, detail: notes.join('；') || '已停止' };
-}
-
-// netstat 找出占用 TCP 端口的 PID（Windows）
-function pidOfPort(port: number): number | null {
-  const r = spawnSync('netstat', ['-ano', '-p', 'tcp'], { encoding: 'utf8' });
-  if (r.status !== 0) return null;
-  for (const line of String(r.stdout || '').split('\n')) {
-    if (!line.includes(`:${port} `)) continue;
-    if (!/LISTENING/i.test(line)) continue;
-    const parts = line.trim().split(/\s+/);
-    const pid = Number(parts[parts.length - 1]);
-    if (Number.isInteger(pid) && pid > 0) return pid;
-  }
-  return null;
+  return stopProcesses(id, opts);
 }
 
 // ---- 活性 watcher（serve 进程内） ----
 
-export function startWatcher(id: string): void {
+/**
+ * 挂上活性监控。
+ *
+ * immediate=false 用于「刚刚启动」的场景：主脚本起来到下一条 tick 之前
+ * 端口可能还没 bind，立刻检测会先报一次假的「检测失败」，把人吓一跳。
+ * 等一个 interval 再检，宽限期就是这个 tick。
+ */
+export function startWatcher(id: string, opts: { immediate?: boolean } = {}): void {
   const g = getGroup(id);
   if (!g.health) return; // 没配检测就没有 watcher
   stopWatcher(id);
@@ -267,7 +224,7 @@ export function startWatcher(id: string): void {
   }, h.intervalMs);
   timer.unref(); // 不阻止 serve 退出
   watchers.set(id, timer);
-  void tickWatch(g.id).catch(() => {});
+  if (opts.immediate !== false) void tickWatch(g.id).catch(() => {});
 }
 
 export function stopWatcher(id: string): void {
@@ -306,18 +263,41 @@ async function tickWatch(id: string): Promise<void> {
   if (result.alive) return;
 
   appendEvent(id, `检测失败（连续 ${failStreak}/${g.health.failThreshold}）：${result.detail}`);
-    if (failStreak >= g.health.failThreshold && g.health.onDead === 'restart') {
+  // 自愈开关就是 health.onDead：none = 只记录不处理（监控照跑，日志照写）
+  if (failStreak >= g.health.failThreshold && g.health.onDead === 'restart') {
     appendEvent(id, `判定失活 → 自愈：重启主脚本`);
     if (rt.logFile) appendMainLog(rt.logFile, `失活自愈触发（连续 ${failStreak} 次检测失败）`);
     try {
-      stopGroup(id, { silent: true });
+      await stopGroup(id, { silent: true });
       // skipGate：自愈是恢复动作，不能被「起飞闸门」拦死——
       // 否则上游依赖抖动会造成「永不重启」。
       await startGroup(id, { skipGate: true });
+      // 用 updateRuntime 做 +1：与面板按钮并发时不会互相覆盖
+      updateRuntime(id, (cur) => ({ restarts: cur.restarts + 1 }));
       appendEvent(id, `自愈完成（restarts +1）`);
-      patchRuntime(id, { restarts: loadRuntime(id).restarts + 1 });
     } catch (err) {
       appendEvent(id, `自愈失败: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
+}
+
+// ---- 自愈开关 ----
+//
+// 「是否启动自愈」是长脚本三个日常动作之一，所以给它一条独立入口，
+// 而不是让用户去 health 的 JSON 里改 onDead。
+//
+// 单一事实源仍然是 health.onDead（restart / none）——这个函数只是它的动作化投影。
+// 关自愈 ≠ 停监控：watcher 继续跑（只记录不处理），否则「先关自愈观察一阵」
+// 这个最常见的用法就没法用（连检测痕迹都没了）。
+export function setAutoHeal(id: string, on: boolean): { id: string; autoHeal: boolean; watching: boolean } {
+  const g = getGroup(id);
+  if (!g.health) {
+    throw new Error(`服务组 ${id} 未配置探活（health）：没有检测就没有自愈可开关`);
+  }
+  const health = { ...g.health, onDead: on ? ('restart' as const) : ('none' as const) };
+  saveGroups(loadGroups().map((x) => (x.id === id ? { ...x, health } : x)));
+  const running = loadRuntime(id).status === 'running';
+  if (running) startWatcher(id);
+  appendEvent(id, `自愈${on ? '开启（失活即重启）' : '关闭（只记录不处理）'}`);
+  return { id, autoHeal: on, watching: running };
 }

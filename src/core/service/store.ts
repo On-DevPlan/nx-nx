@@ -18,6 +18,14 @@ export interface StepConfig {
   args: string[];
 }
 
+// 停止策略（stopMode）——「关闭」这一个动作的四种走法：
+//   auto   依次兜底：关停脚本 → 杀端口占用进程 → 杀记录的 pid（默认，向后兼容旧行为）
+//   script 只跑组内关停脚本（服务自己有优雅退出协议时用）
+//   port   直接杀占用端口的进程（用户点名的默认选项：「直接关闭端口所在进程」）
+//   pid    只杀运行态记录的 pid（端口被别的进程占用时，避免误杀）
+export type StopMode = 'auto' | 'script' | 'port' | 'pid';
+export const STOP_MODES: readonly StopMode[] = ['auto', 'script', 'port', 'pid'];
+
 // 活性检测：端口可连 / HTTP 可响应
 export interface HealthConfig {
   kind: 'port' | 'http';
@@ -26,6 +34,7 @@ export interface HealthConfig {
   path: string; // http 检测路径，默认 /
   intervalMs: number; // 检测间隔，默认 5000
   failThreshold: number; // 连续失败 N 次判定失活，默认 3
+  readyTimeoutMs: number; // 启动后等就绪的上限，默认 20000（java -jar 冷启动要放宽）
   onDead: 'restart' | 'none'; // 失活处理，默认 restart（自愈：stop → start）
 }
 
@@ -35,6 +44,7 @@ export interface ServiceGroupConfig {
   main?: StepConfig; // 主脚本（长驻服务）
   stop?: StepConfig; // 优雅关停脚本（可选；没有则直接杀进程/端口）
   killPort?: number; // stop 兜底：杀掉占用该端口的进程
+  stopMode: StopMode; // 关闭动作的走法，默认 auto
   health?: HealthConfig;
   shared?: string; // 共享函数面板脚本名（如 demo.shared），组内脚本执行时自动装载
   space?: SpaceConfig; // 管理空间：面板 + 启动前的 bool check 方法
@@ -125,8 +135,18 @@ export function normalizeGroup(raw: unknown, id: string): ServiceGroupConfig {
       path: typeof s.path === 'string' && s.path ? s.path : '/',
       intervalMs: clamp(Number(s.intervalMs) || 5000, 1000, 600000),
       failThreshold: clamp(Number(s.failThreshold) || 3, 1, 100),
+      readyTimeoutMs: clamp(Number(s.readyTimeoutMs) || 20000, 1000, 600000),
       onDead: s.onDead === 'none' ? 'none' : 'restart',
     };
+  };
+
+  const stopMode = (v: unknown): StopMode => {
+    if (v === undefined || v === null || v === '') return 'auto';
+    const m = String(v) as StopMode;
+    if (!STOP_MODES.includes(m)) {
+      throw new Error(`stopMode 非法: ${String(v)}（可选 ${STOP_MODES.join(' / ')}）`);
+    }
+    return m;
   };
 
   const space = (v: unknown): SpaceConfig | undefined => {
@@ -144,6 +164,7 @@ export function normalizeGroup(raw: unknown, id: string): ServiceGroupConfig {
     main: step(r.main),
     stop: step(r.stop),
     killPort: Number.isInteger(r.killPort) ? (r.killPort as number) : undefined,
+    stopMode: stopMode(r.stopMode),
     health: h(r.health),
     shared: typeof r.shared === 'string' && r.shared.trim() ? r.shared.trim() : undefined,
     space: space(r.space),
@@ -180,6 +201,25 @@ export function loadRuntime(id: string): GroupRuntime {
 export function patchRuntime(id: string, patch: Partial<GroupRuntime>): GroupRuntime {
   const all = loadRuntimeAll();
   const next = { ...defaultRuntime(), ...all[id], ...patch };
+  all[id] = next;
+  saveRuntimeAll(all);
+  return next;
+}
+
+/**
+ * 读改写一气呵成（不跨 await）。
+ *
+ * 「先 loadRuntime()、算个新值、再 patchRuntime()」这种写法，两步之间只要有 await
+ * （watcher 的检测、HTTP 请求都在这条路上），就会读到旧值把别人的更新覆盖掉——
+ * 典型的丢更新。Node 单线程内同步块是原子的，所以把计算塞进 updater 里就干净了。
+ *
+ * 边界：只治**同进程**并发（watcher tick 与面板按钮同时动同一组）。
+ * 两个 serve 进程同时改同一份 runtime.json 不在保证范围内。
+ */
+export function updateRuntime(id: string, updater: (cur: GroupRuntime) => Partial<GroupRuntime>): GroupRuntime {
+  const all = loadRuntimeAll();
+  const cur = { ...defaultRuntime(), ...all[id] };
+  const next = { ...cur, ...updater(cur) };
   all[id] = next;
   saveRuntimeAll(all);
   return next;

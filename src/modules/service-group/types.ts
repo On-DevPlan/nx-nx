@@ -1,11 +1,14 @@
 // 服务组的视图类型（与 core/service/store.ts 的配置形状对齐）。
 
+export type StopMode = 'auto' | 'script' | 'port' | 'pid';
+
 export interface GroupConfig {
   id: string;
   name: string;
   main?: { script: string; args: string[] };
   stop?: { script: string; args: string[] };
   killPort?: number;
+  stopMode: StopMode;
   health?: {
     kind: 'port' | 'http';
     port: number;
@@ -13,6 +16,7 @@ export interface GroupConfig {
     path: string;
     intervalMs: number;
     failThreshold: number;
+    readyTimeoutMs: number;
     onDead: 'restart' | 'none';
   };
   shared?: string;

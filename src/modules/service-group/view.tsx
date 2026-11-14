@@ -112,8 +112,25 @@ export default function ServiceView() {
       const r = await client[action]({ id });
       toast(String(JSON.stringify(r).slice(0, 220)));
       await load();
+      // 关闭会改写运行态（含 stopMode 走过的路径），选中态的表单跟着刷一次
+      if (selected === id) await select(id);
     } catch (e: unknown) {
       toast('失败: ' + String((e as { message?: string })?.message || e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // 自愈开关：唯一入口（表单里只留一句「去哪开」的说明）
+  const toggleAutoHeal = async (id: string, on: boolean) => {
+    setBusy('autoheal' + id);
+    try {
+      await client['serviceGroup.autoheal']({ id, state: on ? 'on' : 'off' });
+      toast(`自愈已${on ? '开启' : '关闭（仍监控，只记录）'}`);
+      await load();
+      if (selected === id) await select(id);
+    } catch (e: unknown) {
+      toast('切换失败: ' + String((e as { message?: string })?.message || e));
     } finally {
       setBusy(null);
     }
@@ -208,6 +225,7 @@ export default function ServiceView() {
               group={current}
               working={working}
               onAction={act}
+              onAutoHeal={toggleAutoHeal}
               onShowLogs={() => setLogsOpen(true)}
             />
 

@@ -8,11 +8,13 @@
 // 只读、不删、不改：日志是排查问题的现场，不是可以随手清理的缓存。
 // 读取有上限（尾部若干行），避免把几 MB 的日志灌进面板。
 //
-// 写只有一处：client 脚本的执行记录（appendClientRecord）——
-// client 是业务验证的主体，却是唯一「跑完就没」的一段，得落盘才查得到。
+// 写只有两处：事件（appendEvent —— 启动/停止/检测失败/自愈的流水账）
+// 与 client 执行记录（appendClientRecord —— client 是业务验证的主体，
+// 却是唯一「跑完就没」的一段，得落盘才查得到）。
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { serviceClientsLogPath, serviceHttpLogsDir, serviceLogsDir } from './paths.js';
+import { patchRuntime } from './store.js';
 
 const MAX_LINES = 200;
 const MAX_BYTES = 256 * 1024;
@@ -73,6 +75,25 @@ export interface GroupLogs {
   http: HttpLogEntry[];
   /** client 脚本的执行记录（脚本名 / 退出码 / 耗时 / 输出尾部） */
   clients: string;
+}
+
+/**
+ * 追加一条事件：启动 / 停止 / 检测失败 / 自愈。
+ * 事件是「这个组刚才发生了什么」的唯一流水账——面板的最近事件与 sg logs 都读它。
+ * 同时把一句话写进运行态的 lastEvent：列表页不必展开日志就能看到最新动静。
+ */
+export function appendEvent(groupId: string, event: string): void {
+  try {
+    mkdirSync(serviceLogsDir(), { recursive: true });
+    appendFileSync(
+      join(serviceLogsDir(), `events-${groupId}.log`),
+      `[${new Date().toISOString()}] ${event}\n`,
+      'utf8',
+    );
+  } catch {
+    // 写日志失败不该让服务管理本身失败
+  }
+  patchRuntime(groupId, { lastEvent: event });
 }
 
 export interface ClientRecord {

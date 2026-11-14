@@ -12,10 +12,12 @@ import {
 import { assertGroupId } from '../../core/service/paths.js';
 import {
   runtimeSnapshot,
+  setAutoHeal,
   startGroup,
   startWatcher,
   stopGroup,
 } from '../../core/service/runtime.js';
+import type { StopResult } from '../../core/service/stop.js';
 import { runPipeline } from '../../core/service/pipeline.js';
 import { groupLogs } from '../../core/service/logs.js';
 import {
@@ -101,11 +103,11 @@ export function setGroup(id: unknown, configJson: unknown): ServiceGroupConfig {
   return cfg;
 }
 
-export function deleteGroup(id: unknown): { id: string; stopped: string } {
+export async function deleteGroup(id: unknown): Promise<{ id: string; stopped: string }> {
   const gid = assertGroupId(id);
   const existing = loadGroups().some((g) => g.id === gid);
   if (!existing) throw new Error(`服务组不存在: ${gid}`);
-  const stopResult = stopGroup(gid, { silent: true });
+  const stopResult = await stopGroup(gid, { silent: true });
   saveGroups(loadGroups().filter((g) => g.id !== gid));
   return { id: gid, stopped: stopResult.detail };
 }
@@ -114,8 +116,18 @@ export function start(id: unknown): Promise<{ started: boolean; pid?: number; lo
   return startGroup(assertGroupId(id));
 }
 
-export function stop(id: unknown): { stopped: boolean; detail: string } {
-  return stopGroup(assertGroupId(id));
+export function stop(id: unknown, mode?: unknown): Promise<StopResult> {
+  const m = typeof mode === 'string' && mode.trim() ? mode.trim() : undefined;
+  return stopGroup(assertGroupId(id), { mode: m });
+}
+
+// 「是否启动自愈」——长脚本日常三动作之一（启动 / 关闭 / 自愈开关）
+export function autoheal(id: unknown, state: unknown): { id: string; autoHeal: boolean; watching: boolean } {
+  const s = String(state ?? '').trim().toLowerCase();
+  if (s !== 'on' && s !== 'off') {
+    throw new Error(`--state 只能是 on / off（收到 ${JSON.stringify(state)}）`);
+  }
+  return setAutoHeal(assertGroupId(id), s === 'on');
 }
 
 export function status(id?: unknown): unknown {
@@ -241,7 +253,7 @@ export async function hubOverview(id: unknown): Promise<HubOverview> {
         }
       : null,
     clients: g.clients,
-    stop: g.stop ? g.stop.script : g.killPort ? `杀端口 ${g.killPort}` : '（无）',
+    stop: g.stop ? `${g.stop.script} · mode=${g.stopMode}` : `mode=${g.stopMode}${g.killPort ? ` · 杀端口 ${g.killPort}` : ''}`,
     health: g.health ? `${g.health.kind} ${g.health.host}:${g.health.port}` : '（无）',
     space: s ? { panel: s.panel, check: s.check, methods } : null,
     nextCommand: `nx-nx sg run ${g.id}`,

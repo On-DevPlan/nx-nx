@@ -11,26 +11,41 @@ export interface CheckResult {
   detail: string;
 }
 
+export interface PortProbe {
+  open: boolean;
+  detail: string;
+}
+
+/**
+ * 探一次端口：TCP 握手成功即 open（不发送任何数据）。
+ * 独立导出是因为「活性检测」与「杀端口前先确认端口还被占着」要的是同一件事，
+ * 各写一份 socket 逻辑迟早会两边口径不一致。
+ */
+export function probePort(port: number, host = '127.0.0.1', timeoutMs = 2000): Promise<PortProbe> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    let settled = false;
+    const done = (open: boolean, detail: string) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve({ open, detail });
+    };
+    socket.setTimeout(timeoutMs);
+    socket.once('connect', () => done(true, `端口 ${host}:${port} 可连`));
+    socket.once('timeout', () => done(false, `端口 ${host}:${port} 连接超时`));
+    socket.once('error', (err: Error) => done(false, `端口 ${host}:${port} 不可连: ${err.message}`));
+    socket.connect(port, host);
+  });
+}
+
 export function checkHealth(h: HealthConfig): Promise<CheckResult> {
   return h.kind === 'http' ? checkHttp(h) : checkPort(h);
 }
 
-function checkPort(h: HealthConfig): Promise<CheckResult> {
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-    let settled = false;
-    const done = (alive: boolean, detail: string) => {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      resolve({ alive, detail });
-    };
-    socket.setTimeout(2000);
-    socket.once('connect', () => done(true, `端口 ${h.host}:${h.port} 可连`));
-    socket.once('timeout', () => done(false, `端口 ${h.host}:${h.port} 连接超时`));
-    socket.once('error', (err: Error) => done(false, `端口 ${h.host}:${h.port} 不可连: ${err.message}`));
-    socket.connect(h.port, h.host);
-  });
+async function checkPort(h: HealthConfig): Promise<CheckResult> {
+  const p = await probePort(h.port, h.host, 2000);
+  return { alive: p.open, detail: p.detail };
 }
 
 async function checkHttp(h: HealthConfig): Promise<CheckResult> {

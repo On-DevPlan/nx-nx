@@ -4,10 +4,10 @@
 // 组件库：antd Form 家族（token 见 components/theme.tsx）。
 // 客户端脚本区用「可排序步骤」而不是多选框——流水线的执行顺序就是配置顺序，
 // 多选框表达不了顺序，用户只能靠勾选先后猜，那就等于没有流水线。
-import { Form, Input, InputNumber, Select, Switch, Button, Space, Tag, Empty } from 'antd';
-import { ArrowDownOutlined, ArrowUpOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Form, Input, InputNumber, Select, Switch, Space } from 'antd';
 import { SpaceField } from './space-field.js';
-import type { GroupConfig } from './types.js';
+import { StepsField } from './form-steps.js';
+import type { GroupConfig, StopMode } from './types.js';
 
 export interface FormState {
   name: string;
@@ -15,6 +15,7 @@ export interface FormState {
   mainArgs: string;
   stopScript: string;
   killPort: string;
+  stopMode: StopMode;
   healthEnabled: boolean;
   healthKind: 'port' | 'http';
   healthHost: string;
@@ -22,6 +23,7 @@ export interface FormState {
   healthPath: string;
   healthIntervalMs: string;
   healthFailThreshold: string;
+  healthReadyTimeoutMs: string;
   onDead: 'restart' | 'none';
   shared: string;
   spaceEnabled: boolean;
@@ -37,6 +39,7 @@ export function emptyForm(): FormState {
     mainArgs: '',
     stopScript: '',
     killPort: '',
+    stopMode: 'auto',
     healthEnabled: false,
     healthKind: 'port',
     healthHost: '127.0.0.1',
@@ -44,6 +47,7 @@ export function emptyForm(): FormState {
     healthPath: '/health',
     healthIntervalMs: '5000',
     healthFailThreshold: '3',
+    healthReadyTimeoutMs: '20000',
     onDead: 'restart',
     shared: '',
     spaceEnabled: false,
@@ -60,6 +64,7 @@ export function formFromConfig(c: GroupConfig): FormState {
     mainArgs: (c.main?.args ?? []).join(' '),
     stopScript: c.stop?.script ?? '',
     killPort: c.killPort ? String(c.killPort) : '',
+    stopMode: c.stopMode ?? 'auto',
     healthEnabled: !!c.health,
     healthKind: c.health?.kind ?? 'port',
     healthHost: c.health?.host ?? '127.0.0.1',
@@ -67,6 +72,7 @@ export function formFromConfig(c: GroupConfig): FormState {
     healthPath: c.health?.path ?? '/health',
     healthIntervalMs: String(c.health?.intervalMs ?? 5000),
     healthFailThreshold: String(c.health?.failThreshold ?? 3),
+    healthReadyTimeoutMs: String(c.health?.readyTimeoutMs ?? 20000),
     onDead: c.health?.onDead ?? 'restart',
     shared: c.shared ?? '',
     spaceEnabled: !!c.space,
@@ -83,6 +89,7 @@ export function configFromForm(id: string, f: FormState): Record<string, unknown
     main: f.mainScript ? { script: f.mainScript, args: f.mainArgs.split(/\s+/).filter(Boolean) } : undefined,
     stop: f.stopScript ? { script: f.stopScript, args: [] } : undefined,
     killPort: num(f.killPort),
+    stopMode: f.stopMode,
     health: f.healthEnabled
       ? {
           kind: f.healthKind,
@@ -91,6 +98,7 @@ export function configFromForm(id: string, f: FormState): Record<string, unknown
           path: f.healthPath || '/health',
           intervalMs: Number(f.healthIntervalMs) || 5000,
           failThreshold: Number(f.healthFailThreshold) || 3,
+          readyTimeoutMs: Number(f.healthReadyTimeoutMs) || 20000,
           onDead: f.onDead,
         }
       : undefined,
@@ -109,18 +117,6 @@ interface Props {
 }
 
 export function SgForm({ form, set, toggleClient, entryScripts, panelScripts }: Props) {
-  const move = (index: number, delta: number) => {
-    const next = [...form.clients];
-    const target = index + delta;
-    const cur = next[index];
-    const other = next[target];
-    // 越界或元素缺失（理论上不会发生）时直接不动——数组里没有的项不该被搬动
-    if (cur === undefined || other === undefined || target < 0 || target >= next.length) return;
-    next[index] = other;
-    next[target] = cur;
-    set('clients', next);
-  };
-
   return (
     <Form layout="vertical" size="small" className="sg-form-body">
       <Form.Item label="显示名">
@@ -206,39 +202,61 @@ export function SgForm({ form, set, toggleClient, entryScripts, panelScripts }: 
                   style={{ width: '50%' }}
                 />
               </Space.Compact>
-              <Space.Compact style={{ width: '100%' }}>
-                <Select
-                  value={form.onDead}
-                  onChange={(v) => set('onDead', v)}
-                  options={[
-                    { value: 'restart', label: '失活后自愈重启' },
-                    { value: 'none', label: '仅记录，不处理' },
-                  ]}
-                />
-              </Space.Compact>
+              <InputNumber
+                value={Number(form.healthReadyTimeoutMs) || undefined}
+                onChange={(v) => set('healthReadyTimeoutMs', v === null ? '' : String(v))}
+                min={1000}
+                max={600000}
+                step={1000}
+                addonBefore="启动就绪上限(ms)"
+                addonAfter="冷启动慢就调大（java -jar / go build）"
+                style={{ width: '100%' }}
+              />
+              {/* 自愈不再是表单字段：它是长脚本三动作之一，入口在状态卡的开关上。
+                  这里只说明「去哪开」，避免同一件事有两个开关互相打架。 */}
+              <span className="muted">
+                失活后是否重启 → 由状态卡的「自愈」开关控制（当前：{form.onDead === 'restart' ? '开' : '关'}）
+              </span>
             </>
           )}
         </Space>
       </Form.Item>
 
-      <Form.Item label="停止策略">
-        <Space.Compact style={{ width: '100%' }}>
+      <Form.Item
+        label="关闭策略（stopMode）"
+        extra="auto=依次兜底；port=直接杀掉占用端口的进程（最省事）；script=只跑关停脚本；pid=只杀记录的进程。"
+      >
+        <Space direction="vertical" size={6} style={{ width: '100%' }}>
           <Select
-            value={form.stopScript || undefined}
-            placeholder="（无）"
-            style={{ width: '50%' }}
-            onChange={(v) => set('stopScript', v ?? '')}
+            value={form.stopMode}
+            onChange={(v) => set('stopMode', v)}
             options={[
-              { value: '', label: '（无）' },
-              ...entryScripts.map((s) => ({ value: s.name, label: s.name })),
+              { value: 'auto', label: 'auto · 关停脚本 → 杀端口 → 杀 pid（推荐）' },
+              { value: 'script', label: 'script · 只跑关停脚本（优雅退出）' },
+              { value: 'port', label: 'port · 直接杀端口占用进程' },
+              { value: 'pid', label: 'pid · 只杀运行态记录的 pid' },
             ]}
           />
-          <Input
-            value={form.killPort}
-            onChange={(e) => set('killPort', e.target.value)}
-            placeholder="兜底杀端口（如 18999，留空不启用）"
-          />
-        </Space.Compact>
+          {form.stopMode !== 'pid' && (
+            <Space.Compact style={{ width: '100%' }}>
+              <Select
+                value={form.stopScript || undefined}
+                placeholder="关停脚本（可选）"
+                style={{ width: '50%' }}
+                onChange={(v) => set('stopScript', v ?? '')}
+                options={[
+                  { value: '', label: '（无）' },
+                  ...entryScripts.map((s) => ({ value: s.name, label: s.name })),
+                ]}
+              />
+              <Input
+                value={form.killPort}
+                onChange={(e) => set('killPort', e.target.value)}
+                placeholder="杀哪个端口（留空则用探活端口）"
+              />
+            </Space.Compact>
+          )}
+        </Space>
       </Form.Item>
 
       <Form.Item label="共享面板（常量 = 函数 = {}，组内脚本执行前自动装载）">
@@ -255,59 +273,12 @@ export function SgForm({ form, set, toggleClient, entryScripts, panelScripts }: 
 
       <SpaceField form={form} set={set} panelScripts={panelScripts} shared={form.shared} />
 
-      <Form.Item
-        label="流水线步骤（client 脚本，按顺序依次执行）"
-        extra="顺序即执行顺序：先跑上面的，再跑下面的。可用箭头调整。"
-      >
-        {form.clients.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未选择 client 脚本" style={{ margin: '8px 0' }} />
-        ) : (
-          <div className="sg-steps">
-            {form.clients.map((c, i) => (
-              <div key={c} className="sg-step">
-                <Tag color="#8b9096">{i + 1}</Tag>
-                <span className="mono sg-step-name">{c}</span>
-                <Space size={2} style={{ marginLeft: 'auto' }}>
-                  <Button
-                    size="small"
-                    type="text"
-                    icon={<ArrowUpOutlined />}
-                    disabled={i === 0}
-                    onClick={() => move(i, -1)}
-                    aria-label={`上移 ${c}`}
-                  />
-                  <Button
-                    size="small"
-                    type="text"
-                    icon={<ArrowDownOutlined />}
-                    disabled={i === form.clients.length - 1}
-                    onClick={() => move(i, 1)}
-                    aria-label={`下移 ${c}`}
-                  />
-                  <Button
-                    size="small"
-                    type="text"
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={() => toggleClient(c)}
-                    aria-label={`移除 ${c}`}
-                  />
-                </Space>
-              </div>
-            ))}
-          </div>
-        )}
-        <Select
-          mode="multiple"
-          placeholder="添加 client 脚本…"
-          value={[]}
-          onChange={(v) => v.forEach((n) => toggleClient(n))}
-          style={{ width: '100%', marginTop: 6 }}
-          options={entryScripts
-            .filter((s) => !form.clients.includes(s.name))
-            .map((s) => ({ value: s.name, label: s.name }))}
-        />
-      </Form.Item>
+      <StepsField
+        clients={form.clients}
+        entryScripts={entryScripts}
+        setClients={(next) => set('clients', next)}
+        toggleClient={toggleClient}
+      />
     </Form>
   );
 }

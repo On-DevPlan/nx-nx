@@ -43,7 +43,8 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 | `nx-nx sg hub <id>` | **hub 概览**：一组看清 server / client / 空间方法 / 当前状态 |
 | `nx-nx sg set <id> --config <JSON>` | 创建或整组更新服务组配置（Web「服务」页是表单，手写 JSON 只在脚本/CI 里用） |
 | `nx-nx sg run <id>` | **流水线**：空间 check → 启动主脚本 → 等活性就绪 → client 脚本依次执行 |
-| `nx-nx sg start <id>` / `sg stop <id>` | 只启 / 只停主脚本（stop = 关停脚本 → 杀端口 → 杀 pid 三重兜底）；start 同样要过空间闸门 |
+| `nx-nx sg start <id>` / `sg stop <id> [--mode auto\|script\|port\|pid]` | 只启 / 只关主脚本。关闭按 `stopMode` 走：`auto` 依次兜底（关停脚本 → 杀端口 → 杀 pid，每步复核）、`port` 直接杀端口占用进程、`script` 只跑优雅关停脚本、`pid` 只杀记录的进程 |
+| `nx-nx sg autoheal <id> --state on\|off` | **自愈开关**（长脚本三动作之一）：on = 失活即重启；off = 只记录不处理，**监控不停** |
 | `nx-nx sg status [id]` / `sg check <id>` | 运行态快照 / 立即活性检测（返回 `{ alive, detail }`） |
 | `nx-nx sg logs <id>` | 查看日志：事件（启动/停止/检测失败/自愈）/ 主脚本 IO 尾部 / HTTP 请求日志清单 |
 | `nx-nx sg space <id>` | 管理空间的方法清单 + 状态堆快照 + 调用记录 |
@@ -53,10 +54,10 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 
 Web 面板顶部有「新建项目 / 模板 / 脚本 / 服务」四个 tab；「脚本」页可直接编辑并运行脚本
 （共享面板 `⛭` 也可编辑，运行按钮禁用），「服务」页用**表单**管理服务组：状态卡（活性/自愈/日志）、
-启动/停止/跑流水线按钮、主脚本与活性检测字段全部下拉与输入，不需要手写 JSON。
+**只有三个操作——启动 / 关闭 / 自愈开关**、主脚本与活性检测字段全部下拉与输入，不需要手写 JSON。
 「流水线步骤」区可以**上下移动**client 脚本——列表顺序就是执行顺序。
-「管理空间」卡列出空间的方法与状态；**按钮刻意少**——活性检测、日志、空间方法调用都给出了等价命令
-（`sg check` / `sg logs` / `sg space-call`），界面上不铺按钮，自动化时照抄命令即可。
+「管理空间」卡列出空间的方法与状态；活性检测、日志、流水线跑一次都给出了等价命令
+（`sg check` / `sg logs` / `sg run`），界面上只留文本链接，自动化时照抄命令即可。
 
 面板前端基于 **Ant Design 6**（`@ant-design/icons`），token 在 `src/web/frontend/components/theme.tsx`
 里对齐本项目的灰阶视觉规范（黑主色 / 12px 字号 / 28px 行高 / 1px 底线分隔 / 无阴影堆叠），

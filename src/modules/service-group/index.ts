@@ -13,13 +13,14 @@ import { defineModule } from '../../runtime/types/module.js';
 import * as service from './service.js';
 import { formatSpace, formatSpaceCall } from './space-text.js';
 
-const CONFIG_HINT = `--json '{
+const CONFIG_HINT = `--config '{
   "name": "示例服务",
   "main": { "script": "demo-server", "args": ["--port", "8080"] },
   "stop": { "script": "demo-stop" },
   "killPort": 8080,
+  "stopMode": "auto",
   "health": { "kind": "http", "port": 8080, "host": "127.0.0.1", "path": "/health",
-              "intervalMs": 5000, "failThreshold": 3, "onDead": "restart" },
+              "intervalMs": 5000, "failThreshold": 3, "readyTimeoutMs": 20000, "onDead": "restart" },
   "shared": "demo.shared",
   "space": { "panel": "demo.shared", "check": "checkUp" },
   "clients": ["demo-client"]
@@ -39,7 +40,7 @@ export default defineModule({
       () => ({ groups: service.listGroups() }),
       (r) => {
         if (!r.groups.length) {
-          return '（暂无服务组）nx-nx sg set <id> --json \'{ "name": "…", "main": { "script": "…" } }\' 创建';
+          return '（暂无服务组）nx-nx sg set <id> --config \'{ "name": "…", "main": { "script": "…" } }\' 创建';
         }
         const lines = ['服务组:'];
         for (const g of r.groups) {
@@ -48,7 +49,8 @@ export default defineModule({
             rt.status === 'running' ? (rt.alive === false ? '· 活性 FAIL' : rt.alive === true ? '· 活性 OK' : '· 未检测') : '';
           lines.push(
             `  ${g.config.id}  ${g.config.name}  [${rt.status}]${aliveMark}` +
-              (rt.restarts ? ` 自愈${rt.restarts}次` : ''),
+              (rt.restarts ? ` 自愈${rt.restarts}次` : '') +
+              (g.config.health?.onDead === 'none' ? ' · 自愈OFF' : ''),
           );
         }
         lines.push('', '详情: nx-nx sg show <id> · 流水线: nx-nx sg run <id>');
@@ -71,8 +73,9 @@ export default defineModule({
           `服务组 ${c.id} · ${c.name}`,
           `  状态: ${rt.status}${rt.pid ? ` (pid ${rt.pid})` : ''}${rt.alive === undefined ? '' : rt.alive ? ' · 活性 OK' : ' · 活性 FAIL'}`,
           `  main: ${c.main ? c.main.script + ' ' + c.main.args.join(' ') : '(未配置)'}`,
-          `  stop: ${c.stop ? c.stop.script : '(无)'}${c.killPort ? ` · 杀端口 ${c.killPort}` : ''}`,
-          `  health: ${c.health ? JSON.stringify(c.health) : '(未配置)'}`,
+          `  stop: ${c.stop ? c.stop.script : '(无关停脚本)'}${c.killPort ? ` · 杀端口 ${c.killPort}` : ''} · mode=${c.stopMode}`,
+          `  health: ${c.health ? `${c.health.kind} ${c.health.host}:${c.health.port}${c.health.path} · 每 ${c.health.intervalMs}ms · 阈值 ${c.health.failThreshold} · 就绪上限 ${c.health.readyTimeoutMs}ms` : '(未配置)'}`,
+          `  自愈: ${c.health ? (c.health.onDead === 'restart' ? '开启（失活即重启）' : '关闭（只记录）') : '(无检测，不可用)'}`,
           `  shared: ${c.shared ?? '(无)'}`,
           `  clients: ${c.clients.length ? c.clients.join(', ') : '(无)'}`,
           `  自愈次数: ${rt.restarts} · 连续失败: ${rt.failStreak}`,
@@ -95,7 +98,8 @@ export default defineModule({
       },
     })(
       (ctx) => service.setGroup(ctx.id, ctx.config),
-      (r) => `已保存服务组 ${r.id}（${r.name}）\n  main: ${r.main?.script ?? '(未配置)'} · health: ${r.health ? r.health.kind + ':' + r.health.port : '无'} · clients: ${r.clients.join(', ') || '无'}\n  示例配置: ${CONFIG_HINT}`,
+      (r) =>
+        `已保存服务组 ${r.id}（${r.name}）\n  main: ${r.main?.script ?? '(未配置)'} · health: ${r.health ? r.health.kind + ':' + r.health.port : '无'} · 关闭: mode=${r.stopMode} · clients: ${r.clients.join(', ') || '无'}\n  示例配置: ${CONFIG_HINT}`,
     ),
 
     defineAction({
@@ -124,11 +128,30 @@ export default defineModule({
       id: 'serviceGroup.stop',
       cli: ['sg', 'stop'],
       http: ['POST', '/api/service-groups/:id/stop'],
-      summary: '停止服务：关停脚本 → 杀端口 → 杀 pid（依次兜底）',
+      summary: '关闭服务：按 stopMode 走（auto=关停脚本→杀端口→杀 pid；script/port/pid 只走单条）',
       args: ['id'],
+      flags: {
+        mode: { type: 'string', hint: '本次覆盖 stopMode: auto | script | port | pid' },
+      },
     })(
-      (ctx) => service.stop(ctx.id),
-      (r) => `已停止：${r.detail}`,
+      (ctx) => service.stop(ctx.id, ctx.mode),
+      (r) => `已关闭（mode=${r.mode}）：${r.detail}`,
+    ),
+
+    defineAction({
+      id: 'serviceGroup.autoheal',
+      cli: ['sg', 'autoheal'],
+      http: ['POST', '/api/service-groups/:id/autoheal'],
+      summary: '自愈开关：state=on 失活即重启 / state=off 只记录不处理（监控不停）',
+      args: ['id'],
+      flags: {
+        state: { type: 'string', required: true, hint: 'on | off' },
+      },
+    })(
+      (ctx) => service.autoheal(ctx.id, ctx.state),
+      (r) =>
+        `服务组 ${r.id} 自愈已${r.autoHeal ? '开启（失活即重启）' : '关闭（只记录，监控不停）'}` +
+        (r.watching ? '\n  当前在运行：监控已按新设置重建' : '\n  当前未运行：下次启动时生效'),
     ),
 
     defineAction({

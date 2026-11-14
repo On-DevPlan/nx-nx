@@ -182,13 +182,15 @@ web/      React 壳
 一个服务组 = 1 个主脚本（长驻服务，IO 重定向到日志）+ N 个 client 脚本（依次执行的请求方）+ 可选共享函数面板。
 
 ```bash
-# 创建（配置整组 JSON：main / stop / killPort / health / shared / clients）
+# 创建（配置整组 JSON：main / stop / killPort / stopMode / health / shared / clients）
 nx-nx sg set demo-group --config '{
   "name": "演示服务",
   "main":  { "script": "demo-server", "args": ["--port", "18999"] },
   "stop":  { "script": "demo-stop" },
+  "killPort": 18999,
+  "stopMode": "auto",
   "health": { "kind": "http", "port": 18999, "host": "127.0.0.1", "path": "/health",
-              "intervalMs": 3000, "failThreshold": 2, "onDead": "restart" },
+              "intervalMs": 3000, "failThreshold": 2, "readyTimeoutMs": 20000, "onDead": "restart" },
   "shared": "demo.shared",
   "clients": ["demo-client"]
 }'
@@ -196,11 +198,17 @@ nx-nx sg set demo-group --config '{
 nx-nx sg run demo-group    # 流水线：启动 main → 等活性就绪 → clients 依次执行
 nx-nx sg status demo-group # 运行态（pid / 活性 / 自愈计数）
 nx-nx sg check demo-group  # 立即活性检测 → { alive, detail }
-nx-nx sg stop demo-group   # 关停脚本 → 杀端口 → 杀 pid（依次兜底）
+nx-nx sg autoheal demo-group --state off  # 关自愈（仍监控，只记录不处理）
+nx-nx sg stop demo-group   # 按 stopMode 关闭（默认 auto：关停脚本 → 杀端口 → 杀 pid）
+nx-nx sg stop demo-group --mode port      # 本次直接杀端口占用进程
 nx-nx sg list / show / delete
 ```
 
-- **活性自愈**：`nx-nx serve` 运行时内置 watcher 按间隔检测（端口/HTTP），连续失败达阈值自动重启主脚本并记入事件日志（`~/.nx-nx/services/logs/events-<id>.log`）；serve 不在跑时可随时手动 `sg stop/start`。
+- **日常只有三个动作**：启动 / 关闭 / 自愈开关。关闭的走法由 `stopMode` 决定：
+  `auto`（依次兜底，每步之后复核，清干净就收工）、`script`（只跑优雅关停脚本）、
+  `port`（直接杀掉占用端口的进程）、`pid`（只杀运行态记录的进程）。`sg stop --mode` 可临时覆盖本次。
+- **活性自愈**：`nx-nx serve` 运行时内置 watcher 按间隔检测（端口/HTTP），连续失败达阈值自动重启主脚本并记入事件日志（`~/.nx-nx/services/logs/events-<id>.log`）；自愈是**开关**（`sg autoheal`），关掉只是不乱重启，检测照跑。serve 不在跑时可随时手动 `sg stop/start`。
+- **启动就绪上限**：`health.readyTimeoutMs`（默认 20s）——`java -jar` / `go build` 这类冷启动慢的服务调大即可，流水线不再固定等 20 秒就判失败。
 - **共享函数面板**：`<name>.shared.mjs`（如 `demo.shared`）——「常量 = 函数 = {}」整体优先执行，不可作为入口直接运行；组内脚本执行前自动装载并输出**堆快照**（只显示可 JSON 表示的数据确认，函数报签名，Map/循环引用等只报类型，不泄露内部表示）。面板里可以定义 API token、随机数据工厂、以及 `serviceAlive(id)` 这类活性 check 函数。
 - **client-base 思想**：基础设施（send 封装、token、常量）放共享面板，业务请求单独一个 client 脚本文件。
 - 随包演示：`demo-server` / `demo-client` / `demo-stop` / `demo.shared`（`nx-nx sg run demo-group` 一键体验）。

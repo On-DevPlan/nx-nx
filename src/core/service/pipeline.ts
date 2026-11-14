@@ -31,7 +31,6 @@ export interface PipelineReport {
   steps: PipelineStepReport[];
 }
 
-const ALIVE_TIMEOUT_MS = 20000;
 const ALIVE_POLL_MS = 500;
 
 export async function runPipeline(groupId: string): Promise<PipelineReport> {
@@ -61,9 +60,9 @@ export async function runPipeline(groupId: string): Promise<PipelineReport> {
     }
   }
 
-  // 2) 等活性就绪
+  // 2) 等活性就绪（上限按组配置：java -jar / go build 冷启动常常超过 20s）
   if (g.health) {
-    const deadline = Date.now() + ALIVE_TIMEOUT_MS;
+    const deadline = Date.now() + g.health.readyTimeoutMs;
     let alive = false;
     let detail = '';
     while (Date.now() < deadline) {
@@ -77,7 +76,7 @@ export async function runPipeline(groupId: string): Promise<PipelineReport> {
     }
     steps.push({ step: 'main.alive', script: g.main?.script ?? '', ok: alive, detail });
     if (!alive) {
-      stopGroup(groupId, { silent: true });
+      await stopGroup(groupId, { silent: true });
       return { groupId, ok: false, steps };
     }
     // 挂上 watcher：流水线启动后进入持续监控

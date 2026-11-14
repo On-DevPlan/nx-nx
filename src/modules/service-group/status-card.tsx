@@ -1,9 +1,11 @@
-// 服务组状态卡：活性徽标 / 统计条 / 启停动作。
+// 服务组状态卡：活性徽标 / 三个操作 / 运行态数字。
 //
-// 从 view.tsx 拆出来（单文件 300 行上限）：状态卡自成一体——
-// 「现在这个服务是活的还是死的、自愈过几次、下一步按哪个钮」都在这一张卡里。
-import { Badge, Button, Card, Space, Statistic, Tooltip, Typography } from 'antd';
-import { CaretRightOutlined, ThunderboltOutlined } from '@ant-design/icons';
+// 操作面刻意只有三个（这是第 1 轮验收反馈的硬要求）：
+//   启动 · 关闭 · 自愈开关
+// 其余能力（活性单测、日志、流水线）都还在，但降级成文本链接——
+// 「跑流水线」是调试路径而不是日常运维动作，摆在主按钮区会让人以为它是第四个常态动作。
+import { Badge, Button, Card, Popconfirm, Space, Statistic, Switch, Tooltip, Typography } from 'antd';
+import { CaretRightOutlined, PoweroffOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import type { GroupView } from './types.js';
 
 const { Paragraph, Text } = Typography;
@@ -14,6 +16,7 @@ interface Props {
   group: GroupView;
   working: boolean;
   onAction: (action: SgAction, id: string) => void;
+  onAutoHeal: (id: string, on: boolean) => void;
   onShowLogs: (id: string) => void;
 }
 
@@ -25,14 +28,17 @@ function statusBadge(rt: GroupView['runtime']) {
   return <Badge status="processing" text="运行中 · 未检测" />;
 }
 
-export function StatusCard({ group, working, onAction, onShowLogs }: Props) {
+export function StatusCard({ group, working, onAction, onAutoHeal, onShowLogs }: Props) {
   const rt = group.runtime;
   const id = group.config.id;
+  const running = rt.status === 'running';
+  const hasHealth = !!group.config.health;
+  const autoHeal = group.config.health?.onDead === 'restart';
+
   return (
     <Card
       size="small"
-      // 头部允许换行：四个动作按钮 + 标题在窄面板里会互相挤，
-      // 换行后标题（组 id + 状态徽标）永远不会被按钮压没。
+      // 头部允许换行：动作区在窄面板里会挤，换行后标题（组 id + 状态徽标）永远不会被压没。
       styles={{ header: { flexWrap: 'wrap', rowGap: 6 } }}
       title={
         <Space size={8} style={{ minWidth: 0 }}>
@@ -41,45 +47,49 @@ export function StatusCard({ group, working, onAction, onShowLogs }: Props) {
         </Space>
       }
       extra={
-        // 按钮刻意少：hub 组的调试主力是「跑流水线」（server + client 一条龙）。
-        // 活性检测 / 日志 / 空间方法调用都有等价命令（sg check / sg logs / sg space-call），
-        // 堆在界面上只会挤占空间、也让自动化时多点几下。
-        <Space size={4} wrap>
-          <Tooltip title="停止：关停脚本 → 杀端口 → 杀 pid">
-            <Button size="small" disabled={working} onClick={() => onAction('serviceGroup.stop', id)}>
-              停止
-            </Button>
-          </Tooltip>
-          <Tooltip title="启动主脚本（幂等：已在运行则跳过）">
+        <Space size={8} wrap>
+          {/* 启动 / 关闭：同一位置切换，避免两个按钮同时可点造成语义歧义 */}
+          {running ? (
+            <Popconfirm
+              title={`关闭 ${id}？`}
+              description={`按 stopMode=${group.config.stopMode} 执行`}
+              okText="关闭"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => onAction('serviceGroup.stop', id)}
+              disabled={working}
+            >
+              <Button size="small" danger icon={<PoweroffOutlined />} disabled={working}>
+                关闭
+              </Button>
+            </Popconfirm>
+          ) : (
             <Button
               size="small"
+              type="primary"
               icon={<CaretRightOutlined />}
               disabled={working}
               onClick={() => onAction('serviceGroup.start', id)}
             >
               启动
             </Button>
-          </Tooltip>
-          <Tooltip title="流水线：空间 check → 启动 server → 等活性就绪 → client 依次执行">
-            <Button
-              size="small"
-              type="primary"
-              icon={<ThunderboltOutlined />}
-              disabled={working}
-              onClick={() => onAction('serviceGroup.run', id)}
-            >
-              跑流水线
-            </Button>
+          )}
+          {/* 自愈开关：没有探活就没有自愈可开关，所以禁用并说明原因 */}
+          <Tooltip title={hasHealth ? '失活后是否自动重启（关掉后只记录，监控照跑）' : '先配置活性检测，才有失活可自愈'}>
+            <Space size={4}>
+              <Switch
+                size="small"
+                checked={autoHeal}
+                disabled={working || !hasHealth}
+                onChange={(v) => onAutoHeal(id, v)}
+              />
+              <span className="muted">自愈</span>
+            </Space>
           </Tooltip>
         </Space>
       }
     >
       <div className="sg-stats">
-        <Statistic
-          title="状态"
-          value={rt.status === 'running' ? '运行中' : '已停止'}
-          valueStyle={{ fontSize: 14 }}
-        />
+        <Statistic title="状态" value={running ? '运行中' : '已停止'} valueStyle={{ fontSize: 14 }} />
         <Statistic title="PID" value={rt.pid ?? '-'} valueStyle={{ fontSize: 14 }} />
         <Statistic
           title="自愈次数"
@@ -115,6 +125,9 @@ export function StatusCard({ group, working, onAction, onShowLogs }: Props) {
         </button>
         <button type="button" onClick={() => onShowLogs(id)}>
           sg logs
+        </button>
+        <button type="button" onClick={() => onAction('serviceGroup.run', id)} disabled={working}>
+          <ThunderboltOutlined /> sg run（流水线）
         </button>
       </div>
     </Card>

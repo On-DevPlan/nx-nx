@@ -1,5 +1,31 @@
 ## [Unreleased]
 
+### 服务组：长脚本三动作闭环（任务 #16 第 2 轮）
+
+- **日常操作收敛为三个动作**：**启动 / 关闭 / 自愈开关**。状态卡上只留这三个
+  （`跑流水线` 降级为文本链接——它是调试路径，不是常态运维动作），
+  配置表单里删掉了 `onDead` 下拉，改为一句「自愈开关在状态卡里」，同一件事不再有两个入口。
+- **关闭策略 `stopMode`**（新字段，默认 `auto`，向后兼容）：`auto` 依次兜底
+  （关停脚本 → 杀端口占用进程 → 杀 pid，且每步之后复核，清干净就收工）；
+  `port` 直接杀掉占用端口的进程（用户点名的「默认选项」）；`script` 只跑优雅关停脚本；
+  `pid` 只杀运行态记录的 pid。`nx-nx sg stop <id> --mode <m>` 可临时覆盖本次行为。
+- **自愈开关独立入口**：`nx-nx sg autoheal <id> --state on|off` /
+  `POST /api/service-groups/:id/autoheal`。单一事实源仍是 `health.onDead`，
+  这个动作只是它的投影。**关自愈 ≠ 停监控**——watcher 继续跑、只记录不处理，
+  否则「先关自愈观察一阵」这个最常见的用法连检测痕迹都没有。
+- **停止不再冻结面板**：`stopGroup` 从 `spawnSync`（关停脚本最长 15s + taskkill/netstat）
+  改为 `execFile` + Promise，自愈或手动关闭期间 serve 的 API 照常响应。
+  顺带把「杀端口」的查找拆到 `core/service/stop.ts`，并支持非 Windows 的 `lsof` /
+  `process.kill` 路径（此前非 Windows 上 `pidAlive` 恒为 true，等于永不重启）。
+- **启动宽限期**：刚 spawn 的主脚本要到下一个检测周期才判活性——
+  端口还没 bind 就报一次「检测失败」是假警报。
+- **就绪等待可配**：`health.readyTimeoutMs`（默认 20000）取代写死的 20s，
+  `java -jar` / `go build` 这类冷启动慢的服务可放宽。
+- **运行态读改写不再丢更新**：新增 `updateRuntime(id, updater)`，把「读—算—写」
+  收进一个不跨 `await` 的同步块（Node 单线程内即原子）；自愈的 `restarts +1` 改用它。
+- 新增 `tests/unit/service-group.test.mjs`：配置默认值/校验、`stopMode` 解析、
+  真杀端口进程、`pid` 模式不误杀、自愈开关落盘、探活口径，共 10 例。
+
 ### Added
 
 - **管理空间成为常驻实体**：新增 `src/core/service/space-session.ts` 与 `_runner.mjs` 的
