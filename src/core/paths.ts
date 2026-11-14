@@ -7,7 +7,9 @@ import type { SafeRelPath } from './brand.js';
 // ---- 项目标识 ----
 export const APP_NAME = 'nx-nx';
 export const APP_TITLE = 'nx-nx';
-export const APP_DESC = 'nx-xx 项目生成器';
+// 这一行会原样出现在面板顶栏与 /api/bootstrap 里。
+// 曾经写成 nx-xx（家族模板的占位名），用户一眼就看出是没改干净的模板残留。
+export const APP_DESC = 'nx-nx 项目生成器';
 
 // ---- 数据目录（用户主目录下，可用环境变量覆盖）----
 export const APP_DIR = join(homedir(), '.nx-nx');

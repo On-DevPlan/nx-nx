@@ -1,6 +1,13 @@
-// 面板壳：tab 导航 + 当前视图。**这个文件几乎不需要改**——
+// 面板壳：左侧导航 + 顶栏 + 视图区。**这个文件几乎不需要改**——
 // 新增面板 = 在 registry.ts 登记一行 + 写一个 view。
+//
+// 为什么从「顶部横向 tab」换成「左侧栏」：
+//   顶部 tab 在四个以上就挤成一行小字，宽度还被品牌名和版本号吃掉；
+//   侧栏宽度固定，导航可以带图标与分组，内容区不再随视口抖动。
+//   顶栏留给「当前在哪、这页干什么、数据新不新」——三件静态信息。
 import { Suspense, useEffect } from 'react';
+import { Button, Tooltip } from 'antd';
+import { ReloadOutlined } from '@ant-design/icons';
 import { VIEWS } from './registry.js';
 import { useStore } from './store.js';
 import { ErrorBoundary } from './components/ui.jsx';
@@ -27,6 +34,7 @@ export default function App() {
     const fromHash = viewFromHash();
     if (fromHash && fromHash !== ui.view) patchUi({ view: fromHash });
     else if (!location.hash && ui.view) location.hash = '#/' + ui.view;
+    // 只在挂载时跑一次：后续由下面的 effect 单向回写
   }, []);
 
   useEffect(() => {
@@ -41,19 +49,14 @@ export default function App() {
 
   const current = views.find((v) => v.id === ui.view) || views[0];
   const appName = boot?.app?.name || 'nx-nx';
+  const online = Boolean(boot);
 
   return (
-    <>
-      <header>
-        <div className="brand">
-          {/* 同 index.html 的内联 SVG 思路：避免对 /logo-rounded.png 的 404。
-              字面「nx」与侧栏文字保持一致，色块和 favicon 同一套。 */}
-          <svg
-            className="brand-mark"
-            viewBox="0 0 32 32"
-            role="img"
-            aria-label="nx-nx"
-          >
+    <div className="shell">
+      <aside className="side">
+        <div className="side-brand">
+          {/* 同 index.html 的内联 SVG 思路：避免对 /logo-rounded.png 的 404 */}
+          <svg className="brand-mark" viewBox="0 0 32 32" role="img" aria-label="nx-nx">
             <rect width="32" height="32" rx="7" fill="#171717" />
             <text
               x="16"
@@ -67,48 +70,77 @@ export default function App() {
               nx
             </text>
           </svg>
-          {appName}
-          <span className="ver-tag">{boot ? `v${boot.app.version}` : ''}</span>
-          <span className="sub">nx-xx 项目生成器</span>
+          <span className="brand-name">{appName}</span>
         </div>
-        <nav>
-          {views.map((v) => (
-            <button
-              key={v.id}
-              className={'tab' + (current && current.id === v.id ? ' active' : '')}
-              onClick={() => patchUi({ view: v.id })}
-            >
-              {v.title}
-            </button>
-          ))}
-          {views.length === 0 && (
-            <span className="muted" style={{ padding: '6px 12px' }}>
-              暂无视图
-            </span>
-          )}
+
+        <nav className="side-nav">
+          <div className="side-group">工作台</div>
+          {views.map((v) => {
+            const Icon = v.icon;
+            const active = current && current.id === v.id;
+            return (
+              <button
+                key={v.id}
+                className={'nav-item' + (active ? ' active' : '')}
+                onClick={() => patchUi({ view: v.id })}
+                aria-current={active ? 'page' : undefined}
+              >
+                <Icon className="nav-icon" />
+                <span className="nav-label">{v.title}</span>
+              </button>
+            );
+          })}
+          {views.length === 0 && <span className="muted nav-empty">暂无视图</span>}
         </nav>
-      </header>
-      <main>
-        {!current ? (
-          <div className="empty">
-            <p>
-              还没有注册任何视图。在 <code>src/modules/&lt;域&gt;/view.tsx</code> 写一个，
-              再在 <code>src/web/frontend/registry.ts</code> 登记一行。
-            </p>
-            <p>
-              CLI 已就绪：<code>{appName} help</code> / <code>{appName} routes</code>。
-            </p>
+
+        <div className="side-foot">
+          <span className={'dot ' + (online ? 'dot-ok' : 'dot-bad')} />
+          <span className="mono">{online ? 'serve 在线' : 'serve 离线'}</span>
+          <span className="ver-tag">{boot ? `v${boot.app.version}` : ''}</span>
+        </div>
+      </aside>
+
+      <div className="shell-main">
+        <header className="topbar">
+          <div className="topbar-text">
+            <div className="topbar-title">{current ? current.title : '未注册视图'}</div>
+            <div className="topbar-hint">{current ? current.hint : '在 registry.ts 登记一个视图'}</div>
           </div>
-        ) : (
-          <ErrorBoundary key={current.id}>
-            <Suspense fallback={<div className="muted" style={{ padding: 24 }}>加载中…</div>}>
-              <section className="panel active">
-                <current.component />
-              </section>
-            </Suspense>
-          </ErrorBoundary>
-        )}
-      </main>
-    </>
+          <div className="topbar-actions">
+            <Tooltip title="重新读取服务端状态（bootstrap）">
+              <Button
+                size="small"
+                type="text"
+                icon={<ReloadOutlined />}
+                onClick={() => refreshBoot().catch(() => {})}
+                aria-label="刷新状态"
+              />
+            </Tooltip>
+          </div>
+        </header>
+
+        <main className="content">
+          {!current ? (
+            <div className="empty">
+              <p>
+                还没有注册任何视图。在 <code>src/modules/&lt;域&gt;/view.tsx</code> 写一个，
+                再在 <code>src/web/frontend/registry.ts</code> 登记一行。
+              </p>
+              <p>
+                CLI 已就绪：<code>{appName} help</code> / <code>{appName} routes</code>。
+              </p>
+            </div>
+          ) : (
+            <ErrorBoundary key={current.id}>
+              <Suspense fallback={<div className="muted" style={{ padding: 24 }}>加载中…</div>}>
+                <section className="panel active">
+                  <current.component />
+                </section>
+              </Suspense>
+            </ErrorBoundary>
+          )}
+        </main>
+      </div>
+    </div>
   );
 }

@@ -6,12 +6,25 @@ export type C = TypedClient<typeof MODULES>;
 export type ScriptInfo = Awaited<ReturnType<C['script.list']>>['scripts'][number];
 export type AliasInfo = Awaited<ReturnType<C['script.aliases']>>['aliases'][number];
 export type RunResult = Awaited<ReturnType<C['script.run']>>;
+export type SandboxResult = Awaited<ReturnType<C['script.sandbox']>>;
+export type RunRecord = Awaited<ReturnType<C['script.runs']>>['runs'][number];
+
+/** 两条执行通道的产出统一成一张表：变量堆长什么样跟从哪条路来的无关 */
+export interface HeapRow {
+  key: string;
+  type: string;
+  describe: string;
+  json?: unknown;
+}
 
 export const LS_KEY = 'nx-nx-script-ui';
 
+export type SideTab = 'output' | 'heap' | 'aliases' | 'runs';
+
 export interface SavedUi {
   name?: string;
-  tab?: 'output' | 'aliases';
+  tab?: SideTab;
+  panel?: string;
 }
 
 export function loadUi(): SavedUi {

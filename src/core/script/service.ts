@@ -5,7 +5,7 @@
 // Node 侧只负责把「哪个脚本 + 哪些参数」翻译成一次子进程调用。
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
-import { join, isAbsolute } from 'node:path';
+import { delimiter, join, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { badInput, conflict, notFound } from '../errors/index.js';
 import { parseParams, type ScriptParam } from './params.js';
@@ -30,6 +30,8 @@ export interface ScriptRunResult {
   code: number;
   stdout: string;
   stderr: string;
+  /** 共享面板的变量堆（装载过面板时才有）：可 JSON 化的产出清单 */
+  heap?: { key: string; type: string; describe: string }[];
 }
 
 export function scripts(): ScriptInfo[] {
@@ -205,10 +207,11 @@ function execNode(argv: string[], cwd?: string, extraEnv?: NodeJS.ProcessEnv): P
 // 跑一个脚本：内置脚本名，或任意 .mjs 路径。
 // 脚本在自己的子进程里跑：全局副作用与崩溃都被关在那个进程里。
 // opts.shared：共享函数面板名（如 demo.shared）——runner 会先装载它，再执行目标脚本。
+// opts.sharedImports：面板之间互相依赖时，先装载这些面板（它们的空间即可被 useSpace 取到）。
 // opts.env：附加环境变量（如 NX_HTTP_LOG_DIR / NX_NX_SERVE_PORT）。
 export async function runScript(
   name: string,
-  opts: { args?: string[]; cwd?: string; shared?: string; env?: NodeJS.ProcessEnv } = {},
+  opts: { args?: string[]; cwd?: string; shared?: string; sharedImports?: string[]; env?: NodeJS.ProcessEnv } = {},
 ): Promise<ScriptRunResult> {
   const target = resolveScript(name);
   const runner = runnerPath();
@@ -216,10 +219,49 @@ export async function runScript(
   const extraEnv: NodeJS.ProcessEnv = {};
   if (opts.shared) {
     extraEnv['NX_SHARED_PANEL'] = resolveSharedPanel(opts.shared);
+    if (opts.sharedImports?.length) {
+      extraEnv['NX_NS_IMPORTS'] = opts.sharedImports.map((p) => resolveSharedPanel(p)).join(delimiter);
+    }
   }
   Object.assign(extraEnv, opts.env ?? {});
   const r = await execNode(argv, opts.cwd, extraEnv);
-  return { script: target.name, path: target.path, code: r.code, stdout: r.stdout, stderr: r.stderr };
+  const heap = parseHeap(r.stdout);
+  return {
+    script: target.name,
+    path: target.path,
+    code: r.code,
+    // 机器可读的标记行不给人看：解析完就从 stdout 里摘掉，
+    // 否则 CLI 里会出现一长串 JSON，把脚本真正的输出挤没了。
+    stdout: stripMarker(r.stdout),
+    stderr: r.stderr,
+    heap,
+  };
+}
+
+const HEAP_MARK = 'NX_HEAP_RESULT ';
+
+function stripMarker(stdout: string): string {
+  if (!stdout.includes(HEAP_MARK)) return stdout;
+  return stdout
+    .split('\n')
+    .filter((l) => !l.startsWith(HEAP_MARK))
+    .join('\n');
+}
+
+// 解释器把面板的变量堆以 `NX_HEAP_RESULT <json>` 打一行出来：
+// 拿到就是结构化产出，拿不到（没装面板 / 老解释器）就当没有。
+function parseHeap(stdout: string): ScriptRunResult['heap'] {
+  const line = stdout
+    .split('\n')
+    .reverse()
+    .find((l) => l.startsWith('NX_HEAP_RESULT '));
+  if (!line) return undefined;
+  try {
+    const rows = JSON.parse(line.slice('NX_HEAP_RESULT '.length)) as unknown;
+    return Array.isArray(rows) ? (rows as { key: string; type: string; describe: string }[]) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // 共享面板定位：组内引用写的是脚本名（如 demo.shared）→ 落在 scriptsDir 下；

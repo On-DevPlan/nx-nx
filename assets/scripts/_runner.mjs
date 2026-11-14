@@ -25,14 +25,16 @@
 //   调用栈永远为空。于是这里提供会话模式：装载一次面板，然后守着 stdin，
 //   每收到一行 JSON 请求（{id, action, method, args}）就在**同一个空间实例**上
 //   执行一个动作，回一行 NX_NS_RESULT {id, ...}。stdin 关闭 → 进程退出。
-import { resolve } from 'node:path';
+import { resolve, delimiter } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createInterface } from 'node:readline';
 import { installAliases, ALIASES } from './aliases.mjs';
 import {
   callMethod,
   describeValue,
+  getSpace,
   listMethods,
+  listSpaces,
   resolvePanelSpace,
   spaceHeap,
   spaceReport,
@@ -64,6 +66,25 @@ installAliases(globalThis);
 const sharedPanel = process.env.NX_SHARED_PANEL;
 let space = null;
 if (sharedPanel) {
+  // 先装载「被依赖的其他 ns」：面板之间可以互相 import/export（ESM 原生能力），
+  // 也可以在方法里用 useSpace('名字') 拿到对方的空间对象。
+  // 导入顺序由 NX_NS_IMPORTS 决定（core 侧按配置里声明的依赖排好）。
+  const imports = (process.env.NX_NS_IMPORTS || '')
+    .split(delimiter)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const p of imports) {
+    if (resolve(p) === resolve(sharedPanel)) continue;
+    await import(pathToFileURL(resolve(p)).href);
+  }
+  // 跨 ns 的唯一入口：面板里 useSpace('order') 即得那个空间（状态 + 方法）。
+  globalThis.useSpace = getSpace;
+  globalThis.listSpaces = listSpaces;
+  // 这两个是 runner 给的工具，不是面板的产出——
+  // 不排除的话它们会被算进空间方法清单（「空间能干什么」里混进两条噪声）。
+  beforeKeys.add('useSpace');
+  beforeKeys.add('listSpaces');
+
   const panel = await import(pathToFileURL(resolve(sharedPanel)).href);
   space = resolvePanelSpace(panel, beforeKeys, aliasNames);
   if (nsAction) {
@@ -140,11 +161,20 @@ function dumpSharedPanelSnapshot(aliasNames, beforeKeys, panel, space) {
   }
   if (!entries.length) {
     console.log('[shared] （面板没有挂任何导出——数据请挂到 globalThis 或用 export 声明）');
+    emitHeap([]);
     return;
   }
   for (const [k, v] of entries) {
     console.log(`  ${k}: ${describeValue(v)}`);
   }
+  // 同一份快照再给一份机器可读的：文本给人看，JSON 给面板/接口看。
+  // 两边同源，避免「屏幕上说 A、接口里说 B」。
+  emitHeap(entries.map(([k, v]) => ({ key: k, type: typeName(v), describe: describeValue(v) })));
+}
+
+/** 变量堆的 JSON 形态：一行标记 + JSON，core 侧解析这行 */
+function emitHeap(rows) {
+  console.log('NX_HEAP_RESULT ' + JSON.stringify(rows));
 }
 
 // ---- 空间动作（introspect / call / check）----

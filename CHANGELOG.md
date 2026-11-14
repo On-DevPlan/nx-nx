@@ -1,5 +1,51 @@
 ## [Unreleased]
 
+### 短脚本沙箱 + 面板重做（任务 #16 第 2 轮 · P2/P3）
+
+**短脚本走沙箱（QuickJS 虚拟机）**——短脚本与长脚本从此是两条明确的通道：
+
+- 脚本按后缀分三类角色：`*.mjs` 长脚本（Node 子进程）、`*.short.mjs` 短脚本
+  （沙箱）、`*.shared.mjs` 共享面板（只声明不作入口）。`script list` 标注 `kind`，
+  走错通道会得到明确的提示而不是一条莫名其妙报错。
+- 新增 `nx-nx js sandbox`（HTTP `POST /api/script-sandbox`）：在 quickjs-emscripten
+  里执行片段，**无 fs、无网络、无 process**，只有 `log / args / set / heap / panel /
+  use / call` 几个宿主桥；超时（默认 5s，中断器真停）与内存上限（默认 64MB）都由宿主控制。
+- 变量堆 JSON 化：`set(key, value)` 的产出以 `{key, type, describe, json}` 返回——
+  能序列化的给值；Map / Set / 函数 / 二进制只报类型与说明，不泄露地址与句柄。
+- 共享面板进沙箱的两条桥：数据（常量等 JSON 可表示的导出 + globalThis 增量）直接注入；
+  **同步函数**经 `call(name, ...args)` 调用（async 函数被明确拒绝并指向 Node 通道）。
+  内置别名（walk / run / send 这些宿主能力）**不进沙箱**——进去了沙箱就名存实亡。
+- 运行台账：每次沙箱运行追加一行 JSONL（`~/.nx-nx/logs/script-runs.jsonl`），
+  `nx-nx js runs` / Web「台账」页签可查。
+- `script run` 新增 `--panel`：Node 通道也能先装载共享面板，其变量堆以
+  `NX_HEAP_RESULT` 行回传并从 stdout 摘除（给人看的不混机器读的）。
+- 跨 ns 协作：`_runner.mjs` 支持先装载依赖面板（`NX_NS_IMPORTS`），面板方法里用
+  `useSpace('名字')` 取对方空间；ESM 原生 import/export 照常可用。
+
+**面板重做**——壳、编辑器、日志、服务页全部换血：
+
+- 布局从「顶部横向 tab」改为**左侧导航 + 顶栏**：导航带图标与分组，顶栏放
+  「当前在哪 / 这页干什么 / serve 在不在线」，内容区不再随视口抖动。
+- 脚本页：CodeMirror 6 编辑器（行号 / 折叠 / 括号匹配）取代 textarea；脚本列表按
+  「长脚本 / 短脚本 / 共享面板」分区；新增「装载面板」选择与**变量堆 / 台账**两个页签。
+- 日志查看器：`react-virtuoso` 虚拟滚动 + `ansi-to-html` 着色（escapeXML 开启，
+  输出里的 HTML 不会被执行）。
+- 服务页：`@tanstack/react-query` 管理轮询与失效重取（页面不可见自动停）；
+  新增**流水线画布**（`@xyflow/react`）——启动 → 探活 → client 步骤画成一张图，
+  节点颜色跟运行态走。
+- 全局状态换 `zustand`：选择器订阅 + persist 中间件 + 非组件代码可 `getState()`，
+  原 `useStore()` 形状不变，视图无感迁移。
+- 修杂：「nx-xx 项目生成器」顶栏文案笔误；`sg set` 成功输出不再甩 10 行示例 JSON
+  （示例只在空态出现）；runner 的 `useSpace/listSpaces` 不再混进空间方法清单。
+
+**新增依赖（8 个）**：`quickjs-emscripten`（沙箱）、`@xyflow/react`（画布）、
+`@uiw/react-codemirror` + `@codemirror/lang-javascript`（编辑器）、
+`@tanstack/react-query`（轮询）、`react-virtuoso` + `ansi-to-html`（日志）、`zustand`（状态）。
+
+新增 `tests/unit/script-sandbox.test.mjs`（9 例）：执行与堆 JSON 化、清理语义、
+隔离（无 process/require）、超时中断、错误进台账、面板函数 call 桥与 async 拒绝、
+通道分流（.short/.shared 不能走 Node 入口）、片段名省略 .short 后缀。
+
 ### 服务组：长脚本三动作闭环（任务 #16 第 2 轮）
 
 - **日常操作收敛为三个动作**：**启动 / 关闭 / 自愈开关**。状态卡上只留这三个

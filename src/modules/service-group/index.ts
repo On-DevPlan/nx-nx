@@ -40,7 +40,8 @@ export default defineModule({
       () => ({ groups: service.listGroups() }),
       (r) => {
         if (!r.groups.length) {
-          return '（暂无服务组）nx-nx sg set <id> --config \'{ "name": "…", "main": { "script": "…" } }\' 创建';
+          // 空态是唯一该甩完整示例的地方：用户此刻正需要知道怎么写配置。
+          return `（暂无服务组）用完整配置创建：\n  nx-nx sg set demo-group ${CONFIG_HINT}`;
         }
         const lines = ['服务组:'];
         for (const g of r.groups) {
@@ -99,7 +100,9 @@ export default defineModule({
     })(
       (ctx) => service.setGroup(ctx.id, ctx.config),
       (r) =>
-        `已保存服务组 ${r.id}（${r.name}）\n  main: ${r.main?.script ?? '(未配置)'} · health: ${r.health ? r.health.kind + ':' + r.health.port : '无'} · 关闭: mode=${r.stopMode} · clients: ${r.clients.join(', ') || '无'}\n  示例配置: ${CONFIG_HINT}`,
+        `已保存服务组 ${r.id}（${r.name}）\n  main: ${r.main?.script ?? '(未配置)'} · health: ${r.health ? r.health.kind + ':' + r.health.port : '无'} · 关闭: mode=${r.stopMode} · clients: ${r.clients.join(', ') || '无'}`,
+        // 示例配置只在「需要教用户怎么写」的地方出现（空态提示 / help）。
+        // 每次保存成功都甩一遍 10 行 JSON，等于把真正的结果埋掉。
     ),
 
     defineAction({

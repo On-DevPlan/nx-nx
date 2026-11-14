@@ -1,15 +1,18 @@
-// 服务工作台（表单版）：服务组列表 / 状态 / 启停 / 表单化配置。
+// 服务工作台（表单版）：服务组列表 / 状态 / 启停 / 表单化配置 / 流水线画布。
 //
 // 设计原则：用户不碰 JSON。所有配置项都是表单字段（下拉/输入/多选），
 // 保存时由前端拼成配置对象提交 sg set；JSON 仅作为只读查看的折叠面板。
-// 表单体在 form.tsx（单文件行数约束），本文件只管列表、状态与动作。
 //
-// 组件库：antd（见 components/theme.tsx 的 token 对齐）——
-// 状态卡用 Badge/Statistic/Tooltip，配置区用 Form 家族，
-// 流水线步骤用可排序列表（顺序 = 执行顺序）。
+// 数据获取换成 react-query 的原因：
+//   原来是一个 setInterval + 手写 load()，每 5 秒无差别重拉，动作之后还要
+//   手工调一次 load；出错只能塞进一个局部 err。react-query 把「缓存 / 轮询 /
+//   失效重取 / 加载与错误态」都收进一处：动作成功只需 invalidate，视图自己更新。
+//
+// 组件库：antd + @tanstack/react-query + @xyflow/react（流水线画布）。
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Badge, Button, Card, Empty, Space, Tooltip } from 'antd';
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CliHints } from '../../web/frontend/components/CliHints.js';
 import { useDialog, useToast } from '../../web/frontend/components/ui.jsx';
 import { useStore } from '../../web/frontend/store.jsx';
@@ -17,13 +20,16 @@ import { SgForm, configFromForm, emptyForm, formFromConfig, type FormState } fro
 import { StatusCard, type SgAction } from './status-card.js';
 import { LogsDrawer } from './logs-drawer.js';
 import { SpacePanel } from './space-panel.js';
+import { PipelineCanvas } from './pipeline-canvas.js';
 import type { GroupView } from './types.js';
 
+const LIST_KEY = ['service-groups'] as const;
+
 export default function ServiceView() {
-  const { client } = useStore();
+  const { client, boot } = useStore();
   const toast = useToast();
   const { dialog, node: dialogNode } = useDialog();
-  const [groups, setGroups] = useState<GroupView[]>([]);
+  const qc = useQueryClient();
   const [scripts, setScripts] = useState<{ name: string; shared: boolean }[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
@@ -32,27 +38,27 @@ export default function ServiceView() {
   const [showJson, setShowJson] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
-      const r = await client['serviceGroup.list']({});
-      setGroups(r.groups);
-      setErr('');
-    } catch (e: unknown) {
-      setErr(String((e as { message?: string })?.message || e));
-    }
-  }, [client]);
+  // 轮询：5 秒一次。页面不可见时 react-query 会自动停掉，不必自己判断。
+  const listQuery = useQuery({
+    queryKey: LIST_KEY,
+    queryFn: () => client['serviceGroup.list']({}),
+    refetchInterval: 5000,
+    enabled: Boolean(boot),
+  });
+
+  const groups: GroupView[] = listQuery.data?.groups ?? [];
+  const queryErr = listQuery.error as { message?: string } | null;
 
   useEffect(() => {
-    void load();
-    const t = setInterval(() => void load(), 5000);
-    return () => clearInterval(t);
-  }, [load]);
+    if (queryErr) setErr(String(queryErr.message || queryErr));
+  }, [queryErr]);
 
   useEffect(() => {
+    if (!boot) return;
     client['script.list']({})
       .then((r) => setScripts(r.scripts.map((s) => ({ name: s.name, shared: s.shared }))))
       .catch(() => {});
-  }, [client]);
+  }, [client, boot]);
 
   const current = groups.find((g) => g.config.id === selected) ?? null;
 
@@ -69,6 +75,10 @@ export default function ServiceView() {
     [client],
   );
 
+  const refresh = useCallback(async () => {
+    await qc.invalidateQueries({ queryKey: LIST_KEY });
+  }, [qc]);
+
   const createGroup = async () => {
     const raw = await dialog({
       title: '新建服务组',
@@ -82,7 +92,7 @@ export default function ServiceView() {
     setBusy('create');
     try {
       await client['serviceGroup.set']({ id, config: JSON.stringify({ name: id, clients: [] }) });
-      await load();
+      await refresh();
       await select(id);
       toast(`已创建 ${id}`);
     } catch (e: unknown) {
@@ -98,7 +108,7 @@ export default function ServiceView() {
     try {
       await client['serviceGroup.set']({ id: selected, config: JSON.stringify(configFromForm(selected, form)) });
       toast('已保存');
-      await load();
+      await refresh();
     } catch (e: unknown) {
       toast('保存失败: ' + String((e as { message?: string })?.message || e));
     } finally {
@@ -111,7 +121,7 @@ export default function ServiceView() {
     try {
       const r = await client[action]({ id });
       toast(String(JSON.stringify(r).slice(0, 220)));
-      await load();
+      await refresh();
       // 关闭会改写运行态（含 stopMode 走过的路径），选中态的表单跟着刷一次
       if (selected === id) await select(id);
     } catch (e: unknown) {
@@ -127,7 +137,7 @@ export default function ServiceView() {
     try {
       await client['serviceGroup.autoheal']({ id, state: on ? 'on' : 'off' });
       toast(`自愈已${on ? '开启' : '关闭（仍监控，只记录）'}`);
-      await load();
+      await refresh();
       if (selected === id) await select(id);
     } catch (e: unknown) {
       toast('切换失败: ' + String((e as { message?: string })?.message || e));
@@ -150,7 +160,7 @@ export default function ServiceView() {
       await client['serviceGroup.delete']({ id: selected });
       setSelected(null);
       setForm(emptyForm());
-      await load();
+      await refresh();
       toast('已删除');
     } catch (e: unknown) {
       toast('删除失败: ' + String((e as { message?: string })?.message || e));
@@ -212,7 +222,7 @@ export default function ServiceView() {
         <CliHints module="service-group" />
       </Card>
 
-      {/* 右栏：状态 + 表单 */}
+      {/* 右栏：状态 + 流水线 + 空间 + 表单 */}
       <div className="sg-detail">
         {!current ? (
           <Card>
@@ -228,6 +238,11 @@ export default function ServiceView() {
               onAutoHeal={toggleAutoHeal}
               onShowLogs={() => setLogsOpen(true)}
             />
+
+            {/* 流水线画布：启动 → 探活 → client 步骤，节点颜色跟运行态走 */}
+            <Card size="small" title="流水线" extra={<span className="muted">节点颜色 = 当前运行态</span>}>
+              <PipelineCanvas group={current} />
+            </Card>
 
             {/* 管理空间：方法清单 + 一键调用（对应「启动按钮对应一段管理空间」）*/}
             <SpacePanel groupId={selected} />

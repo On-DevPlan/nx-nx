@@ -37,7 +37,9 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 | `nx-nx script list` | 列出随包分发的内置脚本与用法（`.shared` 面板也列出，标 ⛭，可编辑但不可运行） |
 | `nx-nx script aliases` | 列出脚本里可直接调用的内置全局函数（别名模块，六组：文件/进程/系统/输出/网络/服务组） |
 | `nx-nx script read/save/create/delete ...` | 脚本源码的读取 / 保存 / 新建 / 删除（Web「脚本」页同源，完整 flag 见 `help script`） |
-| `nx-nx script run <脚本名\|路径> [--参数 值...]` | 跑内置脚本或任意 .mjs 脚本（内置全局函数已注入） |
+| `nx-nx script run <脚本名\|路径> [--参数 值...] [--panel <面板>]` | 跑内置脚本或任意 .mjs 脚本（可先装载共享面板，其变量堆随结果返回；`.short` / `.shared` 不能作 Node 入口） |
+| `nx-nx js sandbox <名\|--code 片段> [--panel 面板] [--args a,b] [--timeoutMs ms] [--memoryMb mb]` | **短脚本走沙箱**（QuickJS wasm）：无 fs / 无网络 / 只有 `log args set heap panel use call`；产出变量堆（JSON，Map/函数只报类型不泄露内部结构） |
+| `nx-nx js runs [--limit N]` | 最近的短脚本运行台账（时间 / 耗时 / 产出键 / 错误） |
 | `nx-nx sg list` | 列出服务组（配置 + 运行态） |
 | `nx-nx sg show <id>` | 服务组详情：状态 / pid / 活性 / 自愈次数 / 日志路径 |
 | `nx-nx sg hub <id>` | **hub 概览**：一组看清 server / client / 空间方法 / 当前状态 |
@@ -52,16 +54,22 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 | `nx-nx sg delete <id>` | 删除服务组（先停服务） |
 | 任何命令 + `--json` | 机器可读输出（agent 模式） |
 
-Web 面板顶部有「新建项目 / 模板 / 脚本 / 服务」四个 tab；「脚本」页可直接编辑并运行脚本
-（共享面板 `⛭` 也可编辑，运行按钮禁用），「服务」页用**表单**管理服务组：状态卡（活性/自愈/日志）、
-**只有三个操作——启动 / 关闭 / 自愈开关**、主脚本与活性检测字段全部下拉与输入，不需要手写 JSON。
-「流水线步骤」区可以**上下移动**client 脚本——列表顺序就是执行顺序。
+Web 面板是**左侧导航 + 顶栏**布局（新建项目 / 模板 / 脚本 / 服务）。「脚本」页用 CodeMirror
+编辑源码，按脚本类型只亮一个运行按钮：长脚本走 Node（能碰 fs / 网络），短脚本 `.short`
+走**沙箱**（QuickJS，无 fs / 无网络）；右侧四个页签——输出（ANSI 着色 / 虚拟滚动）、
+**变量堆**（可 JSON 化的产出，Map / 函数只报类型）、内置函数、运行台账。「装载面板」下拉
+决定沙箱 / Node 运行前先装哪个共享面板。「服务」页用**表单**管理服务组：状态卡
+（活性/自愈/日志）、**只有三个操作——启动 / 关闭 / 自愈开关**、流水线画布（节点颜色 =
+运行态）、主脚本与活性检测字段全部下拉与输入，不需要手写 JSON。
 「管理空间」卡列出空间的方法与状态；活性检测、日志、流水线跑一次都给出了等价命令
 （`sg check` / `sg logs` / `sg run`），界面上只留文本链接，自动化时照抄命令即可。
 
 面板前端基于 **Ant Design 6**（`@ant-design/icons`），token 在 `src/web/frontend/components/theme.tsx`
 里对齐本项目的灰阶视觉规范（黑主色 / 12px 字号 / 28px 行高 / 1px 底线分隔 / 无阴影堆叠），
-换肤只需改 `style.css` 的 `:root` 变量 + 该文件。
+换肤只需改 `style.css` 的 `:root` 变量 + 该文件。配套的前端基建：
+`zustand`（全局 UI 状态 + localStorage 持久化）、`@tanstack/react-query`（服务组状态 5s 轮询与失效重取）、
+`@uiw/react-codemirror`（脚本编辑器）、`react-virtuoso` + `ansi-to-html`（日志查看器）、
+`@xyflow/react`（服务组流水线画布）、`quickjs-emscripten`（短脚本沙箱，Node 侧经子进程调用）。
 
 模板 id（共 3 套）：
 
@@ -88,9 +96,14 @@ Web 面板顶部有「新建项目 / 模板 / 脚本 / 服务」四个 tab；「
 node 解释器里，**内置全局函数直接可用**——不用 import，也不用自己拼 fs / shell 样板。
 
 ```bash
-nx-nx script list                     # 有哪些内置脚本
+nx-nx script list                     # 有哪些内置脚本（长脚本 / 短脚本 .short / 面板 .shared 分区列出）
 nx-nx script aliases                  # 内置全局函数清单（文件 / 进程 / 系统 / 输出 四组）
 nx-nx script run <脚本名或路径> --参数 值...
+
+# 短脚本（.short.mjs）与验算片段走沙箱：无 fs / 无网络，产出变量堆
+nx-nx js sandbox demo-batch --panel demo.shared --args '[3]'
+nx-nx js sandbox --code 'set("sum", [1,2,3].reduce((a,b)=>a+b,0))'
+nx-nx js runs --limit 10              # 运行台账
 ```
 
 脚本里可用的内置全局函数（裸名调用；完整清单见 `nx-nx script aliases`）：

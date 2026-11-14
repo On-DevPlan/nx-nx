@@ -8,6 +8,7 @@
 import { defineAction } from '../../runtime/types/action.js';
 import { defineModule } from '../../runtime/types/module.js';
 import * as service from '../../core/script/service.js';
+import * as sandbox from '../../core/script/sandbox.js';
 
 export default defineModule({
   id: 'script',
@@ -143,15 +144,20 @@ export default defineModule({
       // 脚本自己的参数由脚本定（--root / --to / --mode …），声明期枚举不了，
       // 所以走开放式：未知 flag 原样转成 argv 交给脚本。
       openFlags: true,
+      flags: {
+        // 这个不是给脚本的，是给解释器的：先装载共享面板再执行（面板产出走 heap 返回）
+        panel: { type: 'string', hint: '先装载共享面板（如 demo.shared），其变量堆随结果返回' },
+      },
     })(
       async (ctx, meta) => {
         const flags: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(ctx)) {
-          if (k === 'name' || k === 'args') continue;
+          if (k === 'name' || k === 'args' || k === 'panel') continue;
           flags[k] = v;
         }
         const result = await service.runScript(ctx.name, {
           args: [...(ctx.args ?? []), ...service.flagTokens(flags)],
+          shared: ctx.panel,
         });
         // CLI：脚本的非零退出码就是这次调用的退出码。
         // HTTP：不能污染常驻 serve 进程的退出码——面板里跑失败只体现在返回值里。
@@ -164,6 +170,86 @@ export default defineModule({
         if (r.stderr.trim()) out.push(r.stderr.trimEnd());
         if (r.code !== 0) out.push(`（脚本退出码 ${r.code}）`);
         return out.join('\n');
+      },
+    ),
+
+    // ---- 短脚本沙箱 ----
+    //
+    // 与 script.run 并列的第二条执行路：真 Node 跑业务脚本，沙箱跑「片段」。
+    // 沙箱里没有 fs / 网络 / process，只有 log / args / set / heap / panel / use / call。
+    defineAction({
+      id: 'script.sandbox',
+      cli: [
+        ['js', 'sandbox'],
+        ['script', 'sandbox'],
+      ],
+      http: ['POST', '/api/script-sandbox'],
+      summary: '在沙箱（QuickJS 虚拟机）里跑一段代码：可用共享面板、产出可 JSON 化的变量堆',
+      args: [{ name: 'name', required: false }],
+      flags: {
+        code: { type: 'string', hint: '内联代码片段（优先于 name）' },
+        panel: { type: 'string', hint: '共享面板名/路径，多个用逗号分隔' },
+        args: { type: 'array', hint: '参数（逗号分隔；HTTP 可直接传数组）' },
+        timeoutMs: { type: 'number', hint: '执行时限（默认 5000ms）' },
+        memoryMb: { type: 'number', hint: '内存上限（默认 64MB）' },
+      },
+    })(
+      (ctx) =>
+        sandbox.runSandbox({
+          name: ctx.name,
+          code: ctx.code,
+          panel: ctx.panel,
+          args: ctx.args,
+          timeoutMs: ctx.timeoutMs,
+          memoryMb: ctx.memoryMb,
+        }),
+      (r) => {
+        const out: string[] = [];
+        out.push(
+          `${r.ok ? '沙箱执行完成' : '沙箱执行失败'}（${r.durationMs}ms · 上限 ${r.timeoutMs}ms/${r.memoryMb}MB` +
+            (r.panels.length ? ` · 面板 ${r.panels.join(', ')}` : '') +
+            '）',
+        );
+        if (r.error) out.push(`  错误: ${r.error}`);
+        if (r.logs.length) {
+          out.push('', '日志:');
+          for (const l of r.logs) out.push(`  ${l}`);
+        }
+        if (r.heap.length) {
+          out.push('', '变量堆:');
+          for (const h of r.heap) out.push(`  ${h.key}  [${h.type}]  ${h.describe}`);
+        } else if (r.ok) {
+          out.push('', '变量堆为空——用 set(key, value) 把产出放进去');
+        }
+        return out.join('\n');
+      },
+    ),
+
+    defineAction({
+      id: 'script.runs',
+      cli: [
+        ['js', 'runs'],
+        ['script', 'runs'],
+      ],
+      http: ['GET', '/api/script-runs'],
+      summary: '最近的短脚本运行台账（时间 / 耗时 / 产出键 / 错误）',
+      flags: {
+        limit: { type: 'number', default: 20, hint: '取最近多少条（默认 20）' },
+      },
+    })(
+      (ctx) => ({ runs: sandbox.recentRuns(Math.min(200, Math.max(1, Number(ctx.limit) || 20))) }),
+      (r) => {
+        if (!r.runs.length) return '（还没有运行记录）';
+        const lines = ['最近运行:'];
+        for (const x of r.runs) {
+          const mark = x.ok ? 'ok  ' : 'FAIL';
+          lines.push(
+            `  ${x.at}  ${mark}  ${String(x.durationMs).padStart(5)}ms  ${x.source}` +
+              (x.heapKeys.length ? `  → ${x.heapKeys.join(', ')}` : '') +
+              (x.error ? `  ! ${x.error}` : ''),
+          );
+        }
+        return lines.join('\n');
       },
     ),
   ],

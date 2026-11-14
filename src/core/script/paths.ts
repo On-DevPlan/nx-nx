@@ -6,6 +6,7 @@
 //   manifest.json    脚本清单（名字 + 说明 + 用法）
 //   <name>.mjs       具体脚本
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { conflict, notFound, specError } from '../errors/index.js';
@@ -20,6 +21,13 @@ export interface ScriptInfo {
   path: string;
   /** 共享函数面板（.shared.mjs）：可编辑、不可直接运行（服务组自动装载） */
   shared: boolean;
+  /**
+   * 脚本的三类角色（同一套后缀约定，列表与运行入口都据此分流）：
+   *   long    普通 .mjs：Node 子进程里跑（能碰 fs / 网络 / 常驻）——服务组的主/停脚本
+   *   short   .short.mjs：沙箱片段（QuickJS，无 fs / 无网络）——一次性计算与验算
+   *   shared  .shared.mjs：共享面板，只声明不作入口
+   */
+  kind: 'long' | 'short' | 'shared';
 }
 
 // 定位 assets/scripts/。
@@ -46,6 +54,23 @@ export function runnerPath(): string {
   const p = join(scriptsDir(), '_runner.mjs');
   if (!existsSync(p)) throw specError('内置脚本解释器缺失: ' + p);
   return p;
+}
+
+// 沙箱解释器：与 _runner.mjs 同一目录，同一套「assets/scripts 随包分发」的约定。
+export function sandboxPath(): string {
+  const p = join(scriptsDir(), '_sandbox.mjs');
+  if (!existsSync(p)) throw specError('沙箱解释器缺失: ' + p);
+  return p;
+}
+
+// 短脚本执行台账（一行一次运行，JSONL）：
+// 「跑过什么、什么时候、多久、产出哪些键、报了什么错」——出问题先翻这里。
+// 与服务组日志同一层（~/.nx-nx/），但目录分开：这两类记录的生命周期不一样。
+export function scriptRunsLogPath(): string {
+  const appDir = process.env.NX_NX_HOME
+    ? join(process.env.NX_NX_HOME, '.nx-nx')
+    : join(homedir(), '.nx-nx');
+  return join(appDir, 'logs', 'script-runs.jsonl');
 }
 
 export function aliasesPath(): string {
@@ -90,13 +115,17 @@ export function listScripts(): ScriptInfo[] {
   return names.map((name) => {
     const e = manifest.get(name);
     const shared = name.endsWith('.shared');
+    const kind = shared ? 'shared' : name.endsWith('.short') ? 'short' : 'long';
     return {
       name,
-      description: e?.description ?? (shared ? '共享函数面板（服务组自动装载，不可直接运行）' : ''),
+      description:
+        e?.description ??
+        (shared ? '共享函数面板（服务组自动装载，不可直接运行）' : kind === 'short' ? '短脚本片段（沙箱执行）' : ''),
       usage: e?.usage ?? '',
       notes: e?.notes ?? '',
       path: join(dir, name + '.mjs'),
       shared,
+      kind,
     };
   });
 }
@@ -108,6 +137,9 @@ export function resolveScript(name: string): { name: string; path: string } {
   if (raw.endsWith('.shared') || raw.endsWith('.shared.mjs')) {
     throw conflict('共享函数面板不能作为入口直接执行——它由组内脚本自动装载（每次执行前注入并输出变量快照）');
   }
+  if (raw.endsWith('.short') || raw.endsWith('.short.mjs')) {
+    throw conflict('短脚本片段要在沙箱里跑：nx-nx js sandbox <名字>（不落 Node 进程，无 fs / 无网络）');
+  }
   if (raw.endsWith('.mjs') || raw.includes('/') || raw.includes('\\')) {
     const abs = isAbsolute(raw) ? raw : resolve(process.cwd(), raw);
     if (!existsSync(abs)) throw notFound(`脚本不存在: ${abs}`);
@@ -115,6 +147,9 @@ export function resolveScript(name: string): { name: string; path: string } {
   }
   const p = join(scriptsDir(), raw + '.mjs');
   if (!existsSync(p)) {
+    if (existsSync(join(scriptsDir(), raw + '.short.mjs'))) {
+      throw conflict(`「${raw}」是短脚本片段，要在沙箱里跑：nx-nx js sandbox ${raw}（无 fs / 无网络）`);
+    }
     if (existsSync(join(scriptsDir(), raw + '.shared.mjs'))) {
       throw conflict(`「${raw}」是共享函数面板，不能作为入口直接执行（去掉 .shared 后缀的脚本才是入口）`);
     }

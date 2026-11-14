@@ -237,82 +237,113 @@ table.levels tbody tr:last-child td { border-bottom: 0; }
    3. layout —— 版式（**这一层随项目自由改**）
    ============================================================ */
 
-header {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-  padding: 10px 16px;
-  border-bottom: var(--border);
-  position: sticky;
-  top: 0;
-  background: var(--paper);
-  z-index: 5;
+/* 版式：左侧导航 + 内容区（顶栏 + 面板）
+   为什么从「顶部横向 tab」换成侧栏：横向 tab 到四个以上就挤成一行小字，
+   宽度还被品牌名和版本号吃掉；侧栏宽度固定，导航能带图标，内容区不再跟着视口抖。 */
+.shell {
+  display: grid;
+  grid-template-columns: 212px minmax(0, 1fr);
+  min-height: 100vh;
 }
 
-.brand { font-weight: 700; letter-spacing: 0.5px; display: inline-flex; align-items: center; gap: 8px; }
-.brand img { width: 22px; height: 22px; border-radius: 6px; display: block; }
+.side {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--soft);
+  border-right: var(--border);
+}
+
+.side-brand { display: flex; align-items: center; gap: 8px; padding: 14px 14px 10px; }
+.brand-name { font-weight: 700; letter-spacing: 0.3px; }
 .brand-mark { width: 22px; height: 22px; display: block; }
-/* 版本徽章：紧跟品牌名，头部必须一眼看得出当前版本 */
-.brand .ver-tag {
+
+.side-nav { display: flex; flex-direction: column; gap: 1px; padding: 2px 8px; overflow: auto; }
+.side-group {
+  font-size: 11px;
+  color: var(--mid);
+  padding: 8px 8px 4px;
+  letter-spacing: 0.5px;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #4a4f56;
+  font-size: 12.5px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.nav-item:hover { background: var(--soft-2); color: var(--ink); }
+.nav-item.active {
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: var(--shadow-relief);
+}
+.nav-icon { font-size: 14px; opacity: 0.8; }
+.nav-empty { padding: 6px 8px; font-size: 12px; }
+
+.side-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: var(--border);
+  font-size: 11px;
+  color: var(--mid);
+}
+
+/* 版本徽章：脚部必须一眼看得出当前版本 */
+.ver-tag {
   font-weight: 600;
   font-size: 11px;
   font-family: ui-monospace, Consolas, monospace;
   color: var(--mid);
-  background: var(--soft);
+  background: var(--paper);
   border: 1px solid var(--soft-2);
   border-radius: 5px;
   padding: 1px 6px;
   line-height: 1.4;
-}
-.brand .sub { font-weight: 400; color: var(--mid); margin-left: 8px; font-size: 12px; }
-
-/* 分段控件：整块浅底（大按钮）包裹 pill tab（小按钮），与生成的模板保持一致。 */
-header nav {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  padding: 3px;
-  background: var(--soft);
-  border-radius: 16px;
-  min-width: 0;
-}
-header .meta {
   margin-left: auto;
-  min-width: 0;
-  max-width: 46vw;
+}
+
+.shell-main { display: flex; flex-direction: column; min-width: 0; }
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: var(--border);
+  background: var(--paper);
+}
+.topbar-text { min-width: 0; }
+.topbar-title { font-size: 14px; font-weight: 600; }
+.topbar-hint {
+  font-size: 11px;
+  color: var(--mid);
+  margin-top: 1px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--mid);
-  font-size: 12px;
-  font-family: ui-monospace, Consolas, monospace;
 }
+.topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 
-.tab {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  border: 0;
-  background: transparent;
-  padding: 0 14px;
-  height: 28px;
-  border-radius: 999px;
-  cursor: pointer;
-  color: var(--mid);
-  font-size: 13px;
-  white-space: nowrap;
-  transition: background 0.15s, color 0.15s;
-}
-.tab:hover { color: var(--ink); background: transparent; }
-.tab.active {
-  color: var(--ink);
-  background: var(--paper);
-  font-weight: 600;
-  box-shadow: var(--shadow-relief);
-}
-
-main { padding: 16px; }
+.content { padding: 14px 16px 24px; min-width: 0; }
 .panel { display: none; }
 .panel.active { display: block; }
 
@@ -432,19 +463,22 @@ main { padding: 16px; }
 
 .script-grid {
   display: grid;
-  grid-template-columns: minmax(190px, 230px) minmax(420px, 1fr) minmax(280px, 380px);
+  grid-template-columns: minmax(190px, 220px) minmax(420px, 1fr) minmax(300px, 380px);
   gap: 14px;
-  align-items: start;
+  /* 三栏同高：编辑器要撑满，右侧日志才好用虚拟滚动（高度必须确定） */
+  height: calc(100vh - 92px);
+  min-height: 520px;
+  align-items: stretch;
 }
 @media (max-width: 1100px) {
-  .script-grid { grid-template-columns: 1fr; }
+  .script-grid { grid-template-columns: 1fr; height: auto; }
 }
 
 .script-list { display: flex; flex-direction: column; }
 .script-list .ant-card-body { display: flex; flex-direction: column; padding: 0; overflow: auto; flex: 1; min-height: 0; }
 .script-list .cli-hint { margin-top: auto; }
 
-.script-editor { display: flex; flex-direction: column; min-height: 480px; }
+.script-editor { display: flex; flex-direction: column; min-height: 0; }
 .script-args {
   display: flex;
   align-items: center;
@@ -455,23 +489,21 @@ main { padding: 16px; }
 .script-args .ant-input { flex: 1; min-width: 0; font-family: ui-monospace, Consolas, monospace; }
 .script-args label { font-size: 11px; white-space: nowrap; }
 
-.code-editor {
+.editor-title { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+
+/* CodeMirror 宿主：撑满剩余高度，滚动交给它自己 */
+.cm-host {
   flex: 1;
-  width: 100%;
-  min-height: 360px;
-  padding: 10px 12px;
-  border: 0;
+  min-height: 0;
+  overflow: hidden;
   border-bottom: var(--border);
-  outline: none;
-  resize: vertical;
-  background: var(--paper);
-  color: var(--ink);
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.6;
-  tab-size: 2;
 }
-.code-editor:focus { box-shadow: var(--shadow-relief-inset); }
+.cm-host .cm-editor { height: 100%; font-size: 12px; }
+.cm-host .cm-scroller { font-family: ui-monospace, Consolas, monospace; line-height: 1.65; }
+.cm-host .cm-gutters { background: var(--soft); border-right: 1px solid var(--soft-2); color: var(--mid); }
+.cm-host .cm-activeLine { background: #fafbfc; }
+.cm-host .cm-activeLineGutter { background: var(--soft-2); }
+.cm-host .cm-focused { outline: none; }
 
 .script-meta {
   display: flex;
@@ -484,32 +516,70 @@ main { padding: 16px; }
 }
 .script-meta .copyable { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.script-output, .script-aliases { max-height: 58vh; overflow: auto; }
+/* 三栏里的右侧栏：面板选择条 + Tabs（Tabs 撑满，内容区自己滚） */
+.script-side-col { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.panel-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: var(--border);
+  border-radius: 4px;
+  background: var(--soft);
+}
+.panel-bar-label { font-size: 11px; color: var(--mid); white-space: nowrap; }
+
 .script-run-meta {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
   border-bottom: var(--border);
+  flex: 0 0 auto;
 }
-.script-output pre {
-  margin: 0;
-  padding: 10px 12px;
-  font-size: 12px;
+
+/* 输出：头部 meta 固定，日志区撑满剩余高度（虚拟滚动需要确定高度） */
+.script-output { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+
+/* 日志查看器 */
+.log-view { flex: 1; min-height: 120px; }
+.log-line {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11.5px;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+  padding: 0 12px;
 }
-.script-output .script-stderr {
-  border-top: var(--border);
-  background: var(--soft);
-  color: var(--bad);
-}
+.log-line:hover { background: var(--soft); }
+.log-empty { padding: 18px 12px; color: var(--mid); font-size: 12px; }
+
+/* 变量堆表 */
+.script-heap { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.heap-head { font-size: 11px; padding: 6px 12px 4px; }
+.heap-key { font-weight: 600; }
+.heap-desc { font-size: 11px; max-width: 100%; }
+
+/* 内置函数清单 */
+.script-aliases { overflow: auto; }
+
+/* 运行台账 */
+.script-runs { height: 100%; overflow: auto; }
+.run-at { font-size: 11px; }
+.run-src { font-size: 11px; min-width: 0; }
+.run-err { font-size: 11px; margin-top: 2px; word-break: break-word; }
 
 /* ---- 服务工作台（antd 版）----
    antd 组件自带边框与底色，这里只补「它管不到」的部分：
    列表项（沿用模板页的 .tpl-item 语汇）、状态统计条、流水线步骤行。 */
-.sg-grid { display: grid; grid-template-columns: 240px 1fr; gap: 12px; height: 100%; min-height: 0; }
+.sg-grid {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 12px;
+  /* 与脚本页同一口径：列表自己滚，详情列自己滚，整页不跟着长 */
+  height: calc(100vh - 92px);
+  min-height: 520px;
+}
 .sg-list { display: flex; flex-direction: column; min-height: 0; }
 .sg-list .ant-card-body { display: flex; flex-direction: column; padding: 0; }
 .sg-list .cli-hint { margin-top: auto; }
@@ -605,9 +675,26 @@ main { padding: 16px; }
 .param-name { flex: 0 0 auto; min-width: 96px; opacity: 0.8; display: inline-flex; align-items: center; gap: 4px; }
 .param-desc { flex: 0 0 auto; font-size: 11px; opacity: 0.55; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
 
-/* ---- 脚本工作台右侧（antd Tabs） ---- */
-.script-side { display: flex; flex-direction: column; }
-.script-side .ant-tabs { padding: 0 12px 12px; }
-.script-side .ant-tabs-nav { margin: 0 0 8px; }
-.script-side .ant-tabs-content-holder { overflow: auto; }
-.script-side .script-output, .script-side .script-aliases { max-height: 52vh; overflow: auto; }
+/* ---- 脚本工作台右侧（antd Tabs）：撑满高度，内容区自己滚 ---- */
+.script-side { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.script-side > .ant-tabs {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  padding: 0 0 8px;
+}
+.script-side .ant-tabs-nav { margin: 0 12px 6px; flex: 0 0 auto; }
+.script-side .ant-tabs-content-holder { min-height: 0; overflow: auto; }
+.script-side .ant-tabs-content,
+.script-side .ant-tabs-tabpane { height: 100%; }
+
+/* 流水线画布：固定高度（fitView 需要确定视口），边框与卡片语汇一致 */
+.sg-canvas {
+  height: 220px;
+  border: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--paper);
+}
+.sg-canvas .react-flow__attribution { opacity: 0.35; }

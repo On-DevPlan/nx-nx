@@ -35,7 +35,9 @@ cd ../nx-zz && pnpm install && pnpm start
 | `nx-nx script save <脚本名> --content <全文>` | 保存脚本源码（先写临时文件再改名） |
 | `nx-nx script create --name <名> [--description ...]` | 新建脚本并登记到 manifest |
 | `nx-nx script delete <脚本名>` | 删除脚本并从 manifest 移除 |
-| `nx-nx script run <脚本名\|路径> [--参数 值...]` | 跑内置脚本或任意 `.mjs` 脚本（内置全局函数已注入） |
+| `nx-nx script run <脚本名\|路径> [--参数 值...] [--panel <面板>]` | 跑内置脚本或任意 `.mjs` 脚本（可先装载共享面板，变量堆随结果返回） |
+| `nx-nx js sandbox <名\|--code 片段> [--panel 面板] [--args a,b]` | 在沙箱（QuickJS 虚拟机）里跑短脚本：无 fs / 无网络，产出变量堆 |
+| `nx-nx js runs [--limit N]` | 最近的短脚本运行台账 |
 
 所有命令支持 `--json`（机器可读）与 `--store <path>`（覆盖存储路径）。
 
@@ -49,8 +51,34 @@ nx-nx script aliases                  # 内置全局函数清单
 nx-nx script run sync-nx-skills --root D:\code\a_js\proj
 ```
 
-**Web 面板的「脚本」页**与这些命令同源：左侧选脚本，中间直接改源码（Ctrl/Cmd+S 保存），
-右侧看运行输出与内置函数；运行前自动保存当前编辑内容。`nx-nx serve` 后点顶部「脚本」。
+**Web 面板的「脚本」页**与这些命令同源：左侧选脚本（按「长脚本 / 短脚本 / 共享面板」分区），
+中间 CodeMirror 编辑源码（Ctrl/Cmd+S 保存），右侧看输出（ANSI 着色 · 虚拟滚动）、
+变量堆、内置函数与运行台账；运行前自动保存当前编辑内容。`nx-nx serve` 后进左侧「脚本」。
+
+### 长脚本与短脚本（两条执行通道）
+
+同一份 assets/scripts/ 目录，按后缀分流，谁走哪条路一眼可辨：
+
+| 角色 | 后缀 | 在哪跑 | 能用什么 |
+|---|---|---|---|
+| 长脚本 | `*.mjs` | Node 子进程 | fs / 网络 / 面板里的 async 函数（服务组的主/停脚本） |
+| 短脚本 | `*.short.mjs` | **沙箱**（QuickJS wasm） | 只有 `log / args / set / heap / panel / use / call`，无 fs、无网络，有超时与内存上限 |
+| 共享面板 | `*.shared.mjs` | 不作入口 | 只声明：常量、函数、隐藏 `__tests`；被长脚本自动装载，或被沙箱注入 |
+
+```bash
+# 沙箱跑短脚本：装 demo.shared 面板，传参数
+nx-nx js sandbox demo-batch --panel demo.shared --args '[3]'
+
+# 直接跑一段片段（验算、转换、试逻辑），不用建文件
+nx-nx js sandbox --code 'set("sum", [1,2,3].reduce((a,b)=>a+b,0))'
+
+# 每次运行都记台账：时间 / 耗时 / 产出键 / 错误
+nx-nx js runs --limit 10
+```
+
+沙箱里的变量堆以 JSON 返回：能序列化的给值，Map / Set / 函数只报类型
+（不泄露地址与句柄）。沙箱用 [quickjs-emscripten](https://github.com/justjake/quickjs-emscripten)
+实现——真虚拟机，不是 `node:vm` 那种可逃逸的隔离。
 
 脚本里能直接用的内置全局函数（裸名调用，完整清单见 `nx-nx script aliases`）：
 

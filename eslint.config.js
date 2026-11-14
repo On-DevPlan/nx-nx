@@ -13,6 +13,9 @@ export default tseslint.config(
       'templates/**',
       'src/web/frontend/public/**',
       'coverage/**',
+      // temp/ 是运行期的手工作坊（e2e 脚本、浏览器验收 profile、截图），
+      // 里面的东西只求能跑，不该被 lint 当成产品代码审。
+      'temp/**',
     ],
   },
 
