@@ -34,6 +34,7 @@
     "test:smoke": "node tests/smoke.mjs",
     "test:unit": "node --import tsx --test tests/unit/*.test.mjs",
     "test:spike": "node --import tsx --test spike/zod-decorator/test.mjs",
+    "test:e2e": "playwright test",
     "typecheck:spike": "tsc --noEmit -p spike/zod-decorator/tsconfig.json"
   },
   "packageManager": "pnpm@12.11.2",
@@ -57,13 +58,16 @@
     "@xyflow/react": "^12.12.1",
     "ansi-to-html": "^0.7.2",
     "antd": "6.7.0",
+    "lucide-react": "^1.75.0",
     "quickjs-emscripten": "^0.32.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-virtuoso": "^4.18.22",
+    "zod": "^4.6.7",
     "zustand": "^5.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@types/node": "^26.6.4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
@@ -72,7 +76,6 @@
     "tsx": "^4.23.15",
     "typescript": "~5.9.0",
     "typescript-eslint": "^8.71.0",
-    "vite": "^6.0.7",
-    "zod": "^4.6.7"
+    "vite": "^6.0.7"
   }
 }

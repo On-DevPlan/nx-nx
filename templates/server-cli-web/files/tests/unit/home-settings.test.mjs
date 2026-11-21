@@ -31,11 +31,11 @@ async function loadModules() {
   };
 }
 
-test('默认设置：navGroups / navHidden 都是空数组（老 store 读一次自动补）', async () => {
+test('默认设置：带一个「工作台」关系分组（侧栏壳开箱就有组），隐藏清单为空', async () => {
   withStore();
   const { home, store } = await loadModules();
   const s = await store.load();
-  assert.deepEqual(s.settings.navGroups, []);
+  assert.deepEqual(s.settings.navGroups, [{ title: '工作台', views: ['home', 'board'] }]);
   assert.deepEqual(s.settings.navHidden, []);
   const got = await home.getSettings();
   assert.deepEqual(Object.keys(got).sort(), ['schema', 'settings'], 'getSettings 只返回设置与说明，不再带页面清单');
@@ -126,7 +126,11 @@ test('--dry-run 只演练不落盘', async () => {
   const { set, store } = await loadModules();
   const r = await set.setSettings({ set: { navGroups: [{ title: '系统', views: ['home'] }] }, 'dry-run': true });
   assert.equal(r.status, 'skipped');
-  assert.deepEqual((await store.load()).settings.navGroups, []);
+  assert.deepEqual(
+    (await store.load()).settings.navGroups,
+    [{ title: '工作台', views: ['home', 'board'] }],
+    '默认分组原样保留，未被 dry-run 写入'
+  );
 });
 
 test('navOrder：可排序；坏 JSON 拒绝', async () => {

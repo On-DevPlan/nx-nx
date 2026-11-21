@@ -6,6 +6,7 @@
 import { badInput } from '../core/errors/index.js';
 import { APP_NAME } from '../core/paths.js';
 import type { ActionShape, ArgEntry, FlagSpec, CtxOf } from './types/action.js';
+import type { ZodType } from 'zod';
 
 const TYPES = new Set(['string', 'number', 'boolean', 'array']);
 
@@ -82,6 +83,10 @@ function coerceOne(name: string, spec: FlagSpec, raw: unknown): unknown {
 }
 
 // 按声明校验并强转输入。未声明的键原样透传（HTTP body 可能带界面用的额外字段）。
+//
+// 有 schema 时它是最后一道闸门：flags/args 先把手里的字符串强转成 JS 值，
+// schema 再校验范围/正则/跨字段并补默认。错误统一走 inputError → 带「用法:」，
+// 与缺参提示同一个出口（调用方只需要认一种错误形状）。
 export function applySpec<const A extends ActionShape>(action: A, raw: Record<string, unknown>): CtxOf<A> {
   const out: Record<string, unknown> = { ...raw };
 
@@ -103,7 +108,21 @@ export function applySpec<const A extends ActionShape>(action: A, raw: Record<st
     const empty = v === undefined || v === '' || (Array.isArray(v) && !v.length);
     if (empty && spec.required) throw inputError(action, `缺少参数 <${spec.name}>`);
   }
+
+  const schema = (action as { schema?: ZodType }).schema;
+  if (schema) {
+    const parsed = schema.safeParse(out);
+    if (!parsed.success) throw inputError(action, zodIssues(parsed.error.issues));
+    return parsed.data as CtxOf<A>;
+  }
   return out as CtxOf<A>;
+}
+
+/** zod issue → 一行一条（`port: 必须是 1..65535`），直接进错误消息 */
+function zodIssues(issues: { path: PropertyKey[]; message: string }[]): string {
+  return issues
+    .map((i) => `${i.path.length ? i.path.map(String).join('.') : '(参数)'}: ${i.message}`)
+    .join('；');
 }
 
 // ---- HTTP 路由模式编译：'/api/repos/:id' → 正则 + 键名 ----

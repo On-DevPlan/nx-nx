@@ -127,9 +127,10 @@ test('闸门：skipGate 用于自愈重启（恢复动作不被业务闸门拦�
     );
     saveGroups([g]);
     const r = await startGroup('gate-skip', { skipGate: true });
-    // 跳过闸门就会真去启动 —— 这次启动的是真的 demo-server，用完立刻停掉
+    // 跳过闸门就会真去启动 —— 这次启动的是真的 demo-server，用完立刻停掉。
+    // 必须 await：cwd 就在临时 HOME 里，进程没退干净时 rmSync 会 EPERM。
     assert.equal(r.started, true, r.detail);
-    stopGroup('gate-skip', { silent: true });
+    await stopGroup('gate-skip', { silent: true });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

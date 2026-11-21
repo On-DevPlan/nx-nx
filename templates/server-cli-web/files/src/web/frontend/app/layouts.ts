@@ -1,17 +1,18 @@
 // 壳清单：route.ts 里的 `layout` 字段写的就是这里的键。
 //
-// 这是全项目**唯一**需要在「加一种新版式」时改的全局文件——一行。
-// 对比旧骨架：换版式要重写 App.tsx，加页面要改 6 个文件。差别在这里。
+// 默认壳常量在 layout-default.ts——那个文件只放常量、不 import 组件，
+// 让 pages.ts 能安全地读它而不制造循环依赖。
 import type { ComponentType } from 'react';
+import { DEFAULT_LAYOUT } from './layout-default.js';
 import AppShell from './shells/app-shell/index.js';
 import SidebarShell from './shells/sidebar-shell/index.js';
+
+export { DEFAULT_LAYOUT };
 
 export const LAYOUTS: Record<string, ComponentType> = {
   app: AppShell,
   sidebar: SidebarShell,
 };
-
-export const DEFAULT_LAYOUT = 'app';
 
 /** 取壳；未登记的名字退回默认壳并大声说出来（不静默降级）。 */
 export function layoutOf(name: string | undefined): ComponentType {

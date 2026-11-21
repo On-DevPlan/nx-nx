@@ -8,7 +8,8 @@
 // 依赖没就绪就别起，起早了只会白占端口再被杀掉。check 不过直接短路，不启动。
 import { runScript } from '../script/service.js';
 import { checkHealth } from './check.js';
-import { serviceHttpLogsDir } from './paths.js';
+import { effectiveHealth, launchEnv, launchPort, type LaunchValues } from './launch.js';
+import { serviceGroupDir, serviceHttpLogsDir } from './paths.js';
 import { appendClientRecord } from './logs.js';
 import {
   getGroup,
@@ -33,7 +34,7 @@ export interface PipelineReport {
 
 const ALIVE_POLL_MS = 500;
 
-export async function runPipeline(groupId: string): Promise<PipelineReport> {
+export async function runPipeline(groupId: string, values?: LaunchValues): Promise<PipelineReport> {
   const g: ServiceGroupConfig = getGroup(groupId);
   const steps: PipelineStepReport[] = [];
   let ok = true;
@@ -52,7 +53,7 @@ export async function runPipeline(groupId: string): Promise<PipelineReport> {
   // 1) 主脚本（skipGate：上面已经问过闸门了，不重复起子进程）
   if (g.main) {
     try {
-      const r = await startGroup(groupId, { skipGate: true });
+      const r = await startGroup(groupId, { skipGate: true, values });
       steps.push({ step: 'main.start', script: g.main.script, ok: true, detail: r.detail });
     } catch (err) {
       steps.push({ step: 'main.start', script: g.main.script, ok: false, detail: msg(err) });
@@ -61,12 +62,18 @@ export async function runPipeline(groupId: string): Promise<PipelineReport> {
   }
 
   // 2) 等活性就绪（上限按组配置：java -jar / go build 冷启动常常超过 20s）
-  if (g.health) {
-    const deadline = Date.now() + g.health.readyTimeoutMs;
+  //    端口若由启动参数覆盖，探活也要跟着走同一个端口。
+  //    启动后 runtime 里已写入本次参数；显式 values 优先。
+  const launchValues = values ?? loadRuntime(groupId).launch;
+  const health = effectiveHealth(g, launchValues);
+  const servicePort = launchPort(g, launchValues) ?? health?.port;
+  const serviceUrl = servicePort ? `http://${health?.host ?? '127.0.0.1'}:${servicePort}` : '';
+  if (health) {
+    const deadline = Date.now() + health.readyTimeoutMs;
     let alive = false;
     let detail = '';
     while (Date.now() < deadline) {
-      const c = await checkHealth(g.health);
+      const c = await checkHealth(health);
       detail = c.detail;
       if (c.alive) {
         alive = true;
@@ -89,16 +96,22 @@ export async function runPipeline(groupId: string): Promise<PipelineReport> {
     try {
       const r = await runScript(client, {
         shared: g.shared,
+        // client 在服务自己的 cwd 里跑：构建产物、请求样本、测试数据都落在服务目录，
+        // 不再散落在 serve 进程的当前目录。
+        cwd: g.cwd || serviceGroupDir(g.id),
         env: {
           ...(process.env.NX_NX_SERVE_PORT ? { NX_NX_SERVE_PORT: process.env.NX_NX_SERVE_PORT } : {}),
           NX_HTTP_LOG_DIR: serviceHttpLogsDir(g.id),
+          NX_SERVICE_DIR: g.cwd || serviceGroupDir(g.id),
+          ...launchEnv(g, launchValues),
+          ...(servicePort ? { NX_SERVICE_PORT: String(servicePort), NX_SERVICE_URL: serviceUrl } : {}),
         },
       });
       steps.push({
         step: 'client',
         script: client,
         ok: r.code === 0,
-        detail: (r.stdout + (r.stderr ? '\n[stderr] ' + r.stderr : '')).trim().slice(0, 2000),
+        detail: reportText(r.stdout + (r.stderr ? '\n[stderr] ' + r.stderr : '')),
       });
       appendClientRecord(g.id, {
         script: client,
@@ -132,6 +145,24 @@ export async function runPipeline(groupId: string): Promise<PipelineReport> {
 
 function msg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+// 报告里的脚本输出：client 常常先打印 shared 面板装载快照、最后才是断言结果。
+// 报告只留「真正跑测试」那一段：优先从 `── client 开始` / heading 之后开始，
+// 没这个标记就退到 shared 隐藏用例之后；完整输出仍然原样进 client 执行日志。
+function reportText(text: string): string {
+  let t = text.trim();
+  const heading = t.lastIndexOf('── client 开始');
+  if (heading > 0) {
+    t = t.slice(heading);
+  } else {
+    const sharedEnd = t.lastIndexOf('[shared] 隐藏用例');
+    if (sharedEnd >= 0) {
+      const nl = t.indexOf('\n', sharedEnd);
+      if (nl >= 0) t = t.slice(nl + 1).trim();
+    }
+  }
+  return t.length > 2000 ? '…（前略）\n' + t.slice(-2000) : t;
 }
 
 // 供 CLI/HTTP 直接使用 runtime 快照展示

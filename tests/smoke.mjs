@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, cpSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -145,4 +145,49 @@ test('script run：脚本里的内置全局函数开箱可用（不用 import）
   writeFileSync(file, "log('ok-' + (1 + 1));\n");
   const { stdout } = await run(`script run ${file}`);
   assert.match(stdout, /ok-2/);
+});
+
+test('sg templates：默认模板 node-ping（引导入口存在）', async () => {
+  const { stdout } = await run('sg templates --json');
+  const r = JSON.parse(stdout);
+  const ids = r.templates.map((t) => t.id);
+  assert.ok(ids.includes('node-ping'), `缺默认模板 node-ping，实际 ${ids.join(',')}`);
+  assert.ok(r.templates.find((t) => t.id === 'node-ping').steps.some((s) => s.includes('sg run')));
+});
+
+test('sg stop / space-call：非法 id、枚举、args 在 handler 前被 schema 拦下', async () => {
+  const errorText = (e) => String(e?.stderr || e?.stdout || e?.message || e);
+  await assert.rejects(
+    () => run('sg stop Bad_Id --mode kill'),
+    (e) => {
+      const text = errorText(e);
+      assert.match(text, /用法: /, '错误应复用统一输入出口');
+      assert.match(text, /id: /, 'id 正则应先于 handler 触发');
+      assert.match(text, /mode: /, 'mode 枚举应被拦下');
+      return true;
+    },
+  );
+  await assert.rejects(
+    () => run('sg space-call demo --method checkUp --args {}'),
+    (e) => {
+      assert.match(errorText(e), /args: --args 必须是 JSON 数组/);
+      return true;
+    },
+  );
+});
+
+test('sg init --dry：按模板出计划但不落盘（隔离到临时脚本目录）', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'nxnx-sginit-'));
+  const scripts = join(home, 'scripts');
+  cpSync(join(ROOT, 'assets', 'scripts'), scripts, { recursive: true });
+  const { stdout } = await run('sg init smoke-svc --dry --json', {
+    NX_NX_HOME: home,
+    NX_NX_SCRIPTS: scripts,
+  });
+  const r = JSON.parse(stdout);
+  assert.equal(r.dryRun, true);
+  assert.equal(r.port, 18080);
+  assert.equal(r.files.length, 3);
+  assert.equal(r.config.health.path, '/ping');
+  assert.equal(existsSync(join(scripts, 'smoke-svc-server.mjs')), false, 'dry-run 不应落盘');
 });

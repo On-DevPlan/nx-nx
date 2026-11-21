@@ -3,16 +3,17 @@
 // 为什么是「可排序步骤」而不是多选框：流水线的执行顺序就是配置顺序，
 // 多选框表达不了顺序，用户只能靠勾选先后猜——那就等于没有流水线。
 import { Button, Empty, Form, Select, Space, Tag } from 'antd';
-import { ArrowDownOutlined, ArrowUpOutlined, DeleteOutlined } from '@ant-design/icons';
+import { ArrowDownOutlined, ArrowUpOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 
 interface Props {
   clients: string[];
   entryScripts: { name: string }[];
   setClients: (next: string[]) => void;
   toggleClient: (name: string) => void;
+  onCreateClient?: () => void;
 }
 
-export function StepsField({ clients, entryScripts, setClients, toggleClient }: Props) {
+export function StepsField({ clients, entryScripts, setClients, toggleClient, onCreateClient }: Props) {
   const move = (index: number, delta: number) => {
     const next = [...clients];
     const target = index + delta;
@@ -27,11 +28,11 @@ export function StepsField({ clients, entryScripts, setClients, toggleClient }: 
 
   return (
     <Form.Item
-      label="流水线步骤（client 脚本，按顺序依次执行）"
-      extra="顺序即执行顺序：先跑上面的，再跑下面的。可用箭头调整。"
+      label={`测试脚本组（工作流，${clients.length} 个步骤）`}
+      extra="顺序即执行顺序：首页「运行测试组」先启动/复用服务，再按这个顺序逐个跑，退出码与输出记入 client 执行日志。"
     >
       {clients.length === 0 ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未选择 client 脚本" style={{ margin: '8px 0' }} />
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没选脚本" style={{ margin: '8px 0' }} />
       ) : (
         <div className="sg-steps">
           {clients.map((c, i) => (
@@ -70,12 +71,17 @@ export function StepsField({ clients, entryScripts, setClients, toggleClient }: 
       )}
       <Select
         mode="multiple"
-        placeholder="添加 client 脚本…"
+        placeholder="添加 client / 测试脚本…"
         value={[]}
         onChange={(v) => v.forEach((n) => toggleClient(n))}
         style={{ width: '100%', marginTop: 6 }}
         options={entryScripts.filter((s) => !clients.includes(s.name)).map((s) => ({ value: s.name, label: s.name }))}
       />
+      {onCreateClient && (
+        <Button size="small" type="link" icon={<PlusOutlined />} onClick={onCreateClient} style={{ paddingLeft: 0 }}>
+          新建 client 脚本（持久化到 assets/scripts）
+        </Button>
+      )}
     </Form.Item>
   );
 }

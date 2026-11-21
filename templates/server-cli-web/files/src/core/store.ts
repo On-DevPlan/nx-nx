@@ -45,7 +45,15 @@ export interface StoreState {
 export function initialState(): StoreState {
   return {
     version: 1,
-    settings: { navGroups: [], navHidden: [], navOrder: [], theme: 'light' },
+    settings: {
+      // 关系逻辑组：默认就把「同一业务」的页面放在一组（侧栏壳按组渲染）。
+      // 页面 id 由前端路由树决定；这里引用了不存在的 id 时前端会直接跳过，
+      // 不会让整份配置失效（详见 nav-model 的 buildNav）。
+      navGroups: [{ title: '工作台', views: ['home', 'board'] }],
+      navHidden: [],
+      navOrder: [],
+      theme: 'light',
+    },
   };
 }
 

@@ -8,6 +8,7 @@ import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 
 import { delimiter, join, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { badInput, conflict, notFound } from '../errors/index.js';
+import { removeScriptManifest, upsertScriptManifest } from './manifest.js';
 import { parseParams, type ScriptParam } from './params.js';
 import {
   aliasesPath,
@@ -46,13 +47,6 @@ export interface ScriptContent {
   content: string;
 }
 
-interface ManifestEntry {
-  name: string;
-  description?: string;
-  usage?: string;
-  notes?: string;
-}
-
 // 只允许编辑 assets/scripts/ 下的用户脚本：
 // 拒绝路径分隔符、盘符、`..`、隐藏文件、清单、解释器与别名模块。
 function editableScript(name: unknown): { name: string; path: string } {
@@ -71,22 +65,6 @@ function atomicWrite(path: string, text: string): void {
   const tmp = `${path}.tmp-${process.pid}-${Date.now()}`;
   writeFileSync(tmp, text, 'utf8');
   renameSync(tmp, path);
-}
-
-// manifest 由路径模块读、由这里写；读写两边都容忍缺失/损坏的清单。
-function updateManifest(mutate: (entries: ManifestEntry[]) => ManifestEntry[]): void {
-  const p = join(scriptsDir(), 'manifest.json');
-  let parsed: { scripts?: ManifestEntry[] } = { scripts: [] };
-  if (existsSync(p)) {
-    try {
-      parsed = JSON.parse(readFileSync(p, 'utf8')) as { scripts?: ManifestEntry[] };
-    } catch {
-      parsed = { scripts: [] };
-    }
-  }
-  const entries = Array.isArray(parsed.scripts) ? parsed.scripts : [];
-  parsed.scripts = mutate([...entries]);
-  atomicWrite(p, JSON.stringify(parsed, null, 2) + '\n');
 }
 
 function defaultScript(name: string): string {
@@ -132,15 +110,11 @@ export function createScript(input: CreateScriptInput): ScriptContent {
   if (existsSync(target.path)) throw conflict(`脚本已存在: ${target.name}`);
   const text = String(input.content ?? defaultScript(target.name));
   writeFileSync(target.path, text, 'utf8');
-  updateManifest((entries) => {
-    const next = entries.filter((e) => e.name !== target.name);
-    next.push({
-      name: target.name,
-      description: String(input.description ?? ''),
-      usage: String(input.usage ?? ''),
-      notes: '',
-    });
-    return next;
+  upsertScriptManifest({
+    name: target.name,
+    description: String(input.description ?? ''),
+    usage: String(input.usage ?? ''),
+    notes: '',
   });
   return { ...target, content: text };
 }
@@ -149,7 +123,7 @@ export function deleteScript(name: unknown): { name: string; path: string } {
   const target = editableScript(name);
   if (!existsSync(target.path)) throw notFound(`脚本不存在: ${target.name}`);
   unlinkSync(target.path);
-  updateManifest((entries) => entries.filter((e) => e.name !== target.name));
+  removeScriptManifest(target.name);
   return target;
 }
 

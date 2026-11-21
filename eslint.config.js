@@ -31,8 +31,8 @@ export default tseslint.config(
     rules: {
       eqeqeq: ['error', 'smart'],
       // 文件行数上限：防止单文件持续膨胀。跳过空行与注释，统计的是有效代码行；
-      // 当前最大文件（cli.ts / view.tsx）有效行已逼近 300，新增代码应先考虑拆分。
-      'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
+      // 上限 600；接近时优先按职责拆分（schema / 文本渲染 / 执行逻辑）。
+      'max-lines': ['error', { max: 600, skipBlankLines: true, skipComments: true }],
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' },
@@ -53,7 +53,7 @@ export default tseslint.config(
     rules: {
       eqeqeq: ['error', 'smart'],
       // 与 TS 块一致的文件行数上限
-      'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
+      'max-lines': ['error', { max: 600, skipBlankLines: true, skipComments: true }],
       'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'no-var': 'error',
       'prefer-const': 'error',

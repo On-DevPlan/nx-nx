@@ -8,6 +8,7 @@
 // 调用处对象缺该字段即报红，消息直接展示在错误信息里。
 
 import type { ParamsCovered } from './http.js';
+import type { z, ZodType } from 'zod';
 
 export type FlagType = 'string' | 'number' | 'boolean' | 'array';
 
@@ -86,10 +87,15 @@ export type CtxArgs<As> = UnionToIntersection<
     : never
 >;
 
-// openFlags 的 action 可选项由数据驱动（模板 option schema），留索引签名
-export type CtxOf<A> = unknown & (A extends { flags: infer F } ? CtxFlags<F> : unknown)
-  & (A extends { args: infer As } ? CtxArgs<As> : unknown)
-  & (A extends { openFlags: true } ? { [k: string]: unknown } : unknown);
+// 声明的输入形状：有 schema 时以 schema 解析后的值为准（z.output），
+// 否则沿用 flags/args 的静态推导。两条通道共存：schema 负责合法性，
+// flags/args 负责命令行表面（help、缺失参数、强转）。
+export type CtxOf<A> = unknown &
+  (A extends { schema: infer S extends ZodType }
+    ? z.output<S>
+    : (A extends { flags: infer F } ? CtxFlags<F> : unknown)
+      & (A extends { args: infer As } ? CtxArgs<As> : unknown)
+      & (A extends { openFlags: true } ? { [k: string]: unknown } : unknown));
 
 // ---- action 形状与编译期校验 ----
 
@@ -101,6 +107,15 @@ export interface ActionShape {
   args?: readonly ArgEntry[];
   flags?: Record<string, FlagSpec>;
   openFlags?: boolean;
+  /**
+   * 可选的 zod 输入契约：CLI 与 HTTP 的**同一条**运行时闸门。
+   *
+   * flags/args 描述的是「命令行长什么样」（help、强转、缺参提示），schema 描述
+   * 「值合不合法」（范围、正则、跨字段约束、默认与 trim）。两者可以同时声明：
+   * 先按 flags 强转成 JS 值，再交给 schema 收口——handler 拿到的是 z.output。
+   * 只声明 schema 不写 flags 也能跑（HTTP body 的原始值直接进 schema）。
+   */
+  schema?: ZodType;
 }
 
 // flag 的 type 白名单（对应 spec.js 的 const TYPES）

@@ -32,6 +32,12 @@ export function serviceHttpLogsDir(groupId: string): string {
   return join(SERVICES_DIR, 'http-logs', groupId);
 }
 
+// 每组的运行工作目录（cwd）：服务自己的 client / 产物 / 临时文件落这里。
+// 脚本正文仍从 assets/scripts 解析；cwd 是「这个服务自己的空间」，不参与脚本寻址。
+export function serviceGroupDir(groupId: string): string {
+  return join(SERVICES_DIR, 'groups', groupId);
+}
+
 // 管理空间索引（空间 = 共享面板被装载后的可管理实体）
 export function serviceSpacesPath(): string {
   return join(SERVICES_DIR, 'spaces.json');

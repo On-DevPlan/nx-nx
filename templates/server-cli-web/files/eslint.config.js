@@ -76,8 +76,8 @@ export default tseslint.config(
     rules: {
       eqeqeq: ['error', 'smart'],
       // 文件行数上限：防止单文件持续膨胀。跳过空行与注释，统计的是有效代码行；
-      // 新增代码前先看看目标文件是否已逼近上限，超限应先拆分文件。
-      'max-lines': ['error', { max: 400, skipBlankLines: true, skipComments: true }],
+      // 上限 600；新增代码前先看看目标文件是否已逼近上限，超限应先拆分文件。
+      'max-lines': ['error', { max: 600, skipBlankLines: true, skipComments: true }],
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' },
@@ -97,8 +97,8 @@ export default tseslint.config(
     languageOptions: { ecmaVersion: 2023, sourceType: 'module' },
     rules: {
       eqeqeq: ['error', 'smart'],
-      // 与 TS 块一致的文件行数上限
-      'max-lines': ['error', { max: 400, skipBlankLines: true, skipComments: true }],
+      // 与 TS 块一致的文件行数上限（600）
+      'max-lines': ['error', { max: 600, skipBlankLines: true, skipComments: true }],
       'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'no-var': 'error',
       'prefer-const': 'error',

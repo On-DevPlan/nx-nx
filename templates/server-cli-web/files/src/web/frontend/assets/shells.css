@@ -138,10 +138,13 @@ main { padding: 16px; }
 /* 并排卡片用 .cols，避免每个视图各写一套 flex */
 .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; align-items: start; }
 
-/* ── 侧栏壳 ─────────────────────────────────────────────── */
+/* ── 侧栏壳（默认壳）────────────────────────────────────────
+ * 宽度由 --side-w 驱动：拖拽 / 键盘 / 一键收起都只改这一个变量。
+ * 收起态 56px 图标轨道；展开态用 localStorage 记住的宽度。
+ * 组与组之间用底线分隔，组内有一条竖直关系线——「谁和谁是一类」一眼可见。 */
 .shell { display: flex; min-height: 100vh; }
 .side {
-  flex: 0 0 208px;
+  flex: 0 0 var(--side-w, 220px);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -161,26 +164,88 @@ main { padding: 16px; }
   border-bottom: var(--border);
 }
 .side-brand img { width: 22px; height: 22px; border-radius: 6px; flex: 0 0 auto; }
-.side-nav { display: flex; flex-direction: column; gap: 2px; overflow: auto; }
-.side-group { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
-.side-group-title {
-  font-size: var(--fs-small);
+.side-brand-name { min-width: 0; flex: 1 1 auto; }
+.side-toggle {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--mid);
-  padding: 2px 8px;
+  cursor: pointer;
+}
+.side-toggle:hover { background: var(--soft-2); color: var(--ink); }
+.side-toggle:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+.side-nav { display: flex; flex-direction: column; gap: 2px; overflow: auto; }
+.side-group { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--soft-2); }
+.side-group-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--mid);
+  font: inherit;
+  font-size: var(--fs-small);
   letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+}
+.side-group-title:hover { background: var(--soft-2); color: var(--ink); }
+.side-group-name { min-width: 0; flex: 1 1 auto; }
+.side-count {
+  flex: 0 0 auto;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--paper);
+  border: 1px solid var(--soft-2);
+  color: var(--mid);
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.side-group-items { position: relative; display: flex; flex-direction: column; gap: 2px; padding-left: 8px; }
+.side-group-items::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 2px;
+  bottom: 6px;
+  width: 1px;
+  background: var(--soft-2);
 }
 .side-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 7px;
   padding: 6px 8px;
   border-radius: var(--radius-btn);
   color: inherit;
   text-decoration: none;
   font-size: var(--fs-core);
   line-height: 1.4;
+  min-width: 0;
 }
+.side-item svg { flex: 0 0 auto; opacity: 0.75; }
 .side-item:hover { background: var(--soft-2); }
 .side-item.active { background: var(--ink); color: var(--paper); }
-.side-item.nested { padding-left: 18px; }
+.side-item.active svg { opacity: 1; }
+.side-item.nested { padding-left: 12px; }
+.side-item-label { min-width: 0; }
+.side-empty { padding: 6px 8px; font-size: var(--fs-small); }
+
 .side-foot {
   margin-top: auto;
   display: flex;
@@ -191,6 +256,48 @@ main { padding: 16px; }
   border-top: var(--border);
   font-size: var(--fs-small);
 }
+.side-path { min-width: 0; }
+
+/* 收起态：56px 图标轨道。文字全部隐藏，靠 title 提示认页面。 */
+.side-collapsed .side-brand-name,
+.side-collapsed .side-item-label,
+.side-collapsed .side-group-name,
+.side-collapsed .side-count,
+.side-collapsed .side-path { display: none; }
+.side-collapsed { padding: 12px 6px; }
+.side-collapsed .side-brand { justify-content: center; padding: 2px 0 10px; }
+.side-collapsed .side-item { justify-content: center; padding: 7px 0; }
+.side-collapsed .side-group { align-items: center; }
+.side-collapsed .side-group-title { justify-content: center; padding: 2px 0; }
+.side-collapsed .side-group-title svg:first-child { display: none; }
+.side-collapsed .side-group-items { padding-left: 0; align-items: center; width: 100%; }
+.side-collapsed .side-group-items::before { display: none; }
+.side-collapsed .side-foot { justify-content: center; }
+
+/* 拖拽把手：命中区 8px，可见线只在 hover/聚焦时显形 */
+.side-resizer {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  z-index: 7;
+  cursor: col-resize;
+}
+.side-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 3px;
+  width: 2px;
+  height: 100%;
+  background: transparent;
+  transition: background 0.12s;
+}
+.side-resizer:hover::after,
+.side-resizer:focus-visible::after { background: var(--ink); opacity: 0.18; }
+.side-resizer:focus-visible { outline: none; }
+
 .side-main { flex: 1 1 auto; min-width: 0; }
 .side-main > .empty { padding: 24px; }
 @media (max-width: 720px) {

@@ -27,7 +27,8 @@ import {
 } from './store.js';
 import { appendEvent } from './logs.js';
 import { pidAlive, stopGroup as stopProcesses, type StopResult } from './stop.js';
-import { serviceHttpLogsDir, serviceLogsDir } from './paths.js';
+import { serviceHttpLogsDir, serviceGroupDir, serviceLogsDir } from './paths.js';
+import { applyLaunchArgs, effectiveHealth, launchEnv, launchPort, normalizeLaunchValues, type LaunchValues } from './launch.js';
 import { checkSpace, resolvePanelPath } from './namespace.js';
 import { runnerPath, scriptsDir } from '../script/paths.js';
 
@@ -101,11 +102,14 @@ export async function spaceGate(g: ServiceGroupConfig): Promise<SpaceGateResult 
 
 export async function startGroup(
   id: string,
-  opts: { skipGate?: boolean } = {},
+  opts: { skipGate?: boolean; values?: LaunchValues } = {},
 ): Promise<{ started: boolean; pid?: number; logFile: string; detail: string }> {
   const g = getGroup(id);
   if (!g.main) throw new Error(`服务组 ${id} 未配置主脚本（main）`);
-  const rt = loadRuntime(id);
+  let rt = loadRuntime(id);
+  // 本次启动参数：显式传入优先；自愈/重复启动沿用 runtime 里上一次的值。
+  const values = normalizeLaunchValues(g, opts.values ?? rt.launch);
+  const health = effectiveHealth(g, values);
 
   // 空间闸门：不过就不启动（保守：宁可不起，也不假装活）
   if (!opts.skipGate) {
@@ -118,11 +122,22 @@ export async function startGroup(
     }
   }
 
+  // 显式换了版本（端口 / 环境 / 配置文件）而旧进程还在：先停旧的，再按新参数起。
+  // 否则 running 的短路会让流水线对着新端口探活，却留着旧端口上的进程。
+  if (opts.values && rt.status === 'running' && rt.pid && (await pidAlive(rt.pid))) {
+    const prev = normalizeLaunchValues(g, rt.launch);
+    if (JSON.stringify(prev) !== JSON.stringify(values)) {
+      const stopped = await stopProcesses(id, { silent: true });
+      appendEvent(id, `启动参数变化，先停止旧进程：${stopped.detail}`);
+      rt = loadRuntime(id);
+    }
+  }
+
   if (rt.status === 'running' && rt.pid && (await pidAlive(rt.pid))) {
     return { started: false, pid: rt.pid, logFile: rt.logFile ?? '', detail: '已在运行' };
   }
-  if (g.health) {
-    const c = await checkHealth(g.health);
+  if (health) {
+    const c = await checkHealth(health);
     if (c.alive) {
       patchRuntime(id, {
         status: 'running',
@@ -141,14 +156,20 @@ export async function startGroup(
   const fd = openSync(logFile, 'a');
   appendFileSync(fd, `\n===== 启动 ${new Date().toISOString()} · 组 ${id} · 脚本 ${g.main.script} =====\n`, 'utf8');
 
+  // 每组自己的 cwd：启动进程、client、临时产物都在这里，不再和别的服务共用目录。
+  const cwd = g.cwd || serviceGroupDir(g.id);
+  mkdirSync(cwd, { recursive: true });
+
   const target = resolveMainScript(g.main.script);
+  const args = applyLaunchArgs(g, g.main.args, values);
   const child = spawn(
     process.execPath,
-    [runnerPath(), target, ...g.main.args],
+    [runnerPath(), target, ...args],
     {
       detached: true,
+      cwd,
       stdio: ['ignore', fd, fd],
-      env: sharedEnv(g),
+      env: sharedEnv(g, values),
     },
   );
   child.unref();
@@ -159,6 +180,7 @@ export async function startGroup(
     startedAt: Date.now(),
     logFile,
     failStreak: 0,
+    launch: values,
   });
   // 刚 spawn：宽限一个 interval 再检测（端口还没 bind 就报失活是假警报）
   startWatcher(g.id, { immediate: false });
@@ -178,7 +200,7 @@ function resolveMainScript(name: string): string {
 }
 
 // 组内脚本执行时的环境：共享面板路径 + serve 端口（check 函数要用）
-function sharedEnv(g: ServiceGroupConfig): NodeJS.ProcessEnv {
+function sharedEnv(g: ServiceGroupConfig, values?: LaunchValues): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
   if (g.shared) {
     const p = join(scriptsDir(), g.shared.endsWith('.mjs') ? g.shared : g.shared + '.mjs');
@@ -187,6 +209,17 @@ function sharedEnv(g: ServiceGroupConfig): NodeJS.ProcessEnv {
   if (process.env.NX_NX_SERVE_PORT) env['NX_NX_SERVE_PORT'] = process.env.NX_NX_SERVE_PORT;
   // client 脚本的「一请求一日志」按组隔离
   env['NX_HTTP_LOG_DIR'] = serviceHttpLogsDir(g.id);
+  // 这个服务自己的工作目录（脚本里可写 client 产物 / 缓存 / 测试数据）
+  env['NX_SERVICE_DIR'] = g.cwd || serviceGroupDir(g.id);
+  // 本次实际端口 / URL：让 client 与共享面板跟着启动参数走，而不是死记模板里的默认端口。
+  const h = effectiveHealth(g, values);
+  const port = launchPort(g, values) ?? h?.port;
+  if (port) {
+    env['NX_SERVICE_PORT'] = String(port);
+    env['NX_SERVICE_URL'] = `http://${h?.host ?? '127.0.0.1'}:${port}`;
+  }
+  // 启动参数里声明了 env 的（如 NODE_ENV / CONFIG_FILE）
+  Object.assign(env, launchEnv(g, values));
   return env;
 }
 
@@ -251,7 +284,9 @@ async function tickWatch(id: string): Promise<void> {
     stopWatcher(id);
     return;
   }
-  const result: CheckResult = await checkHealth(g.health);
+  const health = effectiveHealth(g, rt.launch);
+  if (!health) return;
+  const result: CheckResult = await checkHealth(health);
   const failStreak = result.alive ? 0 : rt.failStreak + 1;
   patchRuntime(id, {
     lastCheckAt: Date.now(),
@@ -262,9 +297,9 @@ async function tickWatch(id: string): Promise<void> {
 
   if (result.alive) return;
 
-  appendEvent(id, `检测失败（连续 ${failStreak}/${g.health.failThreshold}）：${result.detail}`);
+  appendEvent(id, `检测失败（连续 ${failStreak}/${health.failThreshold}）：${result.detail}`);
   // 自愈开关就是 health.onDead：none = 只记录不处理（监控照跑，日志照写）
-  if (failStreak >= g.health.failThreshold && g.health.onDead === 'restart') {
+  if (failStreak >= health.failThreshold && health.onDead === 'restart') {
     appendEvent(id, `判定失活 → 自愈：重启主脚本`);
     if (rt.logFile) appendMainLog(rt.logFile, `失活自愈触发（连续 ${failStreak} 次检测失败）`);
     try {

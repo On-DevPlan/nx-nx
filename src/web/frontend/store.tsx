@@ -35,9 +35,19 @@ export interface BootData {
 // 只持久化「选择」，不持久化「数据」——数据永远从 /api 拉，避免陈旧缓存。
 interface UiState {
   view: string;
+  /** 侧栏展开时的宽度（px）：拖拽改的是它；收起时按 MIN_W 渲染图标轨道 */
+  sideWidth: number;
+  /** 侧栏是否展开（false = 图标轨道，只留 SVG 与 tooltip） */
+  sideOpen: boolean;
+  /** 服务页与设置页共用的选中服务组；刷新 / 切页都不丢 */
+  serviceId: string;
 }
 
-const DEFAULT_UI: UiState = { view: 'create' };
+const MIN_SIDE = 168;
+const MAX_SIDE = 360;
+const DEFAULT_SIDE = 232;
+
+const DEFAULT_UI: UiState = { view: 'create', sideWidth: DEFAULT_SIDE, sideOpen: true, serviceId: '' };
 
 interface ShellStore {
   boot: BootData | null;
@@ -84,6 +94,8 @@ export interface StoreValue {
   client: TypedClient<typeof MODULES>;
   patchUi: ShellStore['patchUi'];
   refreshBoot: () => Promise<BootData>;
+  /** 侧栏宽度边界（App 的拖拽与键盘调整共用，避免两处写死） */
+  sideLimits: { min: number; max: number; def: number };
 }
 
 /** 视图的取数入口：保持原有形状，视图代码不需要知道状态库换了 */
@@ -93,7 +105,14 @@ export function useStore(): StoreValue {
   const patchUi = useShell((s) => s.patchUi);
   // typed client：延迟读取 boot.commands，启动完成前调用会得到明确报错
   const client = useMemo(() => makeTypedClient(() => boot?.commands), [boot]);
-  return { boot, ui, client, patchUi, refreshBoot: loadBoot };
+  return {
+    boot,
+    ui,
+    client,
+    patchUi,
+    refreshBoot: loadBoot,
+    sideLimits: { min: MIN_SIDE, max: MAX_SIDE, def: DEFAULT_SIDE },
+  };
 }
 
 /** 启动时拉一次 bootstrap；之后由窗口聚焦/手动刷新驱动 */

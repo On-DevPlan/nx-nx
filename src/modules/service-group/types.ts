@@ -2,9 +2,35 @@
 
 export type StopMode = 'auto' | 'script' | 'port' | 'pid';
 
+export type LaunchParamType = 'text' | 'number' | 'select';
+
+export interface LaunchParam {
+  key: string;
+  label: string;
+  type: LaunchParamType;
+  options?: string[];
+  default?: string;
+  arg?: string;
+  env?: string;
+  placeholder?: string;
+  description?: string;
+}
+
+export interface LaunchProfile {
+  name: string;
+  values: Record<string, string>;
+}
+
+export interface LaunchConfig {
+  params: LaunchParam[];
+  profiles?: LaunchProfile[];
+}
+
 export interface GroupConfig {
   id: string;
   name: string;
+  desc?: string;
+  cwd?: string;
   main?: { script: string; args: string[] };
   stop?: { script: string; args: string[] };
   killPort?: number;
@@ -22,6 +48,7 @@ export interface GroupConfig {
   shared?: string;
   space?: { panel?: string; check?: string };
   clients: string[];
+  launch?: LaunchConfig;
 }
 
 export interface GroupRuntime {
@@ -33,6 +60,7 @@ export interface GroupRuntime {
   restarts: number;
   lastEvent?: string;
   logFile?: string;
+  launch?: Record<string, string>;
 }
 
 export interface GroupView {

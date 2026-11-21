@@ -14,6 +14,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { probePort } from './check.js';
 import { appendEvent } from './logs.js';
+import { effectiveHealth, launchPort, type LaunchValues } from './launch.js';
 import {
   getGroup,
   loadRuntime,
@@ -31,6 +32,13 @@ export interface StopResult {
 }
 
 const IS_WIN = process.platform === 'win32';
+
+/** Windows 系统命令的绝对路径：进程 PATH 里不一定有 System32（例如精简 shell）。 */
+function winSystemTool(name: string): string {
+  const root = process.env['SystemRoot'] || process.env['windir'] || 'C:\\Windows';
+  const p = join(root, 'System32', name.endsWith('.exe') ? name : `${name}.exe`);
+  return existsSync(p) ? p : name;
+}
 const SCRIPT_TIMEOUT_MS = 15000;
 const KILL_TIMEOUT_MS = 10000;
 
@@ -75,7 +83,7 @@ async function killPid(pid: number): Promise<boolean> {
       return false;
     }
   }
-  const r = await run('taskkill', ['/F', '/T', '/PID', String(pid)], KILL_TIMEOUT_MS);
+  const r = await run(winSystemTool('taskkill'), ['/F', '/T', '/PID', String(pid)], KILL_TIMEOUT_MS);
   return r.code === 0;
 }
 
@@ -86,7 +94,7 @@ export async function pidOfPort(port: number): Promise<number | null> {
     const pid = Number(String(r.stdout).trim().split(/\s+/)[0]);
     return Number.isInteger(pid) && pid > 0 ? pid : null;
   }
-  const r = await run('netstat', ['-ano', '-p', 'tcp'], 5000);
+  const r = await run(winSystemTool('netstat'), ['-ano', '-p', 'tcp'], 5000);
   if (r.code !== 0) return null;
   for (const line of r.stdout.split('\n')) {
     if (!line.includes(`:${port} `)) continue;
@@ -113,9 +121,9 @@ export function resolveStopMode(g: ServiceGroupConfig, override?: string): StopM
   return want as StopMode;
 }
 
-/** 这个组「关闭端口」指的是哪个端口：显式 killPort 优先，否则取探活端口。 */
-export function stopPortOf(g: ServiceGroupConfig): number | undefined {
-  return g.killPort ?? g.health?.port;
+/** 这个组「关闭端口」指的是哪个端口：本次启动的 port 参数 → 显式 killPort → 探活端口。 */
+export function stopPortOf(g: ServiceGroupConfig, values?: LaunchValues): number | undefined {
+  return launchPort(g, values) ?? g.killPort ?? effectiveHealth(g, values)?.port;
 }
 
 /** 关停脚本的绝对路径（assets/scripts 定位，与 cwd 无关） */
@@ -173,12 +181,13 @@ export async function stopGroup(
   const g = getGroup(id);
   const rt = loadRuntime(id);
   const mode = resolveStopMode(g, opts.mode);
-  const port = stopPortOf(g);
+  const health = effectiveHealth(g, rt.launch);
+  const port = stopPortOf(g, rt.launch);
   const notes: string[] = [];
 
   const clear = async (): Promise<boolean> => {
     if (rt.pid && (await pidAlive(rt.pid))) return false;
-    if (port && (await probePort(port, g.health?.host ?? '127.0.0.1', 800)).open) return false;
+    if (port && (await probePort(port, health?.host ?? '127.0.0.1', 800)).open) return false;
     return true;
   };
 

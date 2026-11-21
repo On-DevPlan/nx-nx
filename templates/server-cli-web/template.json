@@ -1,7 +1,7 @@
 {
   "id": "server-cli-web",
   "name": "server-cli-web TS 骨架",
-  "description": "TypeScript 版 serve 驱动骨架：CLI 与 API 同源、编译期类型安全（泛型 action builder / 注册表查重 / typed client）；前端是真实路由树 + 可插拔布局壳（路由声明集中在 routes/，一页一个 pages/<名>/index.tsx，零全局登记）",
+  "description": "TypeScript 版 serve 驱动骨架：CLI 与 API 同源、编译期类型安全（泛型 action builder / zod input 契约 / 注册表查重 / typed client）；前端默认左侧导航壳（可拖拽改宽、收起成图标轨道、按业务关系分组），路由声明集中在 routes/，一页一个 pages/<名>/index.tsx，零全局登记",
   "namePrefix": "nx-",
   "nextSteps": [
     "cd {{name}} && pnpm install",
@@ -9,7 +9,8 @@
     "pnpm test           # lint(含行数/字符数限制) + typecheck + build + smoke + unit",
     "pnpm start          # 构建并启动面板",
     "{{name}} greet <名字>    # 试试与面板同源的 CLI 命令（可加 --loud、--json）",
-    "面板里点「看板」——那是挂在左侧栏壳下的页面，和顶栏壳共存，页面代码零改动"
+    "面板左栏：拖右边界改宽 / 点左上角图标收起成 56px 轨道 / 点组名折叠该组——宽度与展开状态都记在 localStorage",
+    "面板里点「看板」——它和首页同在默认侧栏壳下；需要顶栏 tab 的页面在 route 里写 layout: 'app'，页面代码零改动"
   ],
   "options": [
     {

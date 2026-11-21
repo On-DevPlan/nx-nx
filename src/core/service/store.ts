@@ -6,6 +6,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import {
+  serviceGroupDir,
   serviceGroupsPath,
   serviceRuntimePath,
 } from './paths.js';
@@ -38,9 +39,43 @@ export interface HealthConfig {
   onDead: 'restart' | 'none'; // 失活处理，默认 restart（自愈：stop → start）
 }
 
+// 启动参数：让同一个服务按不同版本启动（端口 / 配置文件 / 环境变量）。
+//   key     —— 表单值对象里的键
+//   arg     —— 有值时追加成 `--<arg> <value>`（已有同名 flag 会被替换）
+//   env     —— 有值时注入同名环境变量
+//   type    —— 面板渲染成输入框 / 数字框 / 下拉列表
+export type LaunchParamType = 'text' | 'number' | 'select';
+
+export interface LaunchParam {
+  key: string;
+  label: string;
+  type: LaunchParamType;
+  options?: string[];
+  default?: string;
+  arg?: string;
+  env?: string;
+  placeholder?: string;
+  description?: string;
+}
+
+// 命名预设：一次点击填好一组参数（默认 / 预发 / 生产…），字段仍可手改。
+export interface LaunchProfile {
+  name: string;
+  values: Record<string, string>;
+}
+
+export interface LaunchConfig {
+  params: LaunchParam[];
+  profiles?: LaunchProfile[];
+}
+
 export interface ServiceGroupConfig {
   id: string;
   name: string;
+  /** 一段人话说明：这个服务是干什么的（首页展示 desc 用） */
+  desc?: string;
+  /** 这个服务自己的工作目录；启动进程的 cwd，也是 client 产物/临时文件的落点 */
+  cwd?: string;
   main?: StepConfig; // 主脚本（长驻服务）
   stop?: StepConfig; // 优雅关停脚本（可选；没有则直接杀进程/端口）
   killPort?: number; // stop 兜底：杀掉占用该端口的进程
@@ -49,6 +84,7 @@ export interface ServiceGroupConfig {
   shared?: string; // 共享函数面板脚本名（如 demo.shared），组内脚本执行时自动装载
   space?: SpaceConfig; // 管理空间：面板 + 启动前的 bool check 方法
   clients: string[]; // client 脚本名列表（流水线的次步骤，依次执行）
+  launch?: LaunchConfig; // 启动版本参数（端口 / 配置文件 / 环境）
 }
 
 // 管理空间配置：
@@ -73,6 +109,8 @@ export interface GroupRuntime {
   failStreak: number;
   restarts: number;
   lastEvent?: string;
+  /** 上一次实际使用的启动参数；自愈重启会沿用这一组，不会退回默认端口 */
+  launch?: Record<string, string>;
 }
 
 export function defaultRuntime(): GroupRuntime {
@@ -158,9 +196,49 @@ export function normalizeGroup(raw: unknown, id: string): ServiceGroupConfig {
     return { panel, check };
   };
 
+  const launch = (v: unknown): LaunchConfig | undefined => {
+    if (!v || typeof v !== 'object') return undefined;
+    const s = v as Record<string, unknown>;
+    const params: LaunchParam[] = [];
+    if (Array.isArray(s.params)) {
+      for (const item of s.params) {
+        if (!item || typeof item !== 'object') continue;
+        const p = item as Record<string, unknown>;
+        const key = typeof p.key === 'string' ? p.key.trim() : '';
+        if (!key) continue;
+        const type = p.type === 'number' || p.type === 'select' ? p.type : 'text';
+        params.push({
+          key,
+          label: (typeof p.label === 'string' && p.label.trim()) || key,
+          type,
+          options: Array.isArray(p.options) ? p.options.map(String) : undefined,
+          default: typeof p.default === 'string' ? p.default : undefined,
+          arg: typeof p.arg === 'string' && p.arg.trim() ? p.arg.trim() : undefined,
+          env: typeof p.env === 'string' && p.env.trim() ? p.env.trim() : undefined,
+          placeholder: typeof p.placeholder === 'string' ? p.placeholder : undefined,
+          description: typeof p.description === 'string' ? p.description : undefined,
+        });
+      }
+    }
+    const profiles: LaunchProfile[] = [];
+    if (Array.isArray(s.profiles)) {
+      for (const item of s.profiles) {
+        if (!item || typeof item !== 'object') continue;
+        const p = item as Record<string, unknown>;
+        if (typeof p.name !== 'string' || !p.name.trim() || !p.values || typeof p.values !== 'object') continue;
+        const values: Record<string, string> = {};
+        for (const [k, val] of Object.entries(p.values as Record<string, unknown>)) values[k] = String(val);
+        profiles.push({ name: p.name.trim(), values });
+      }
+    }
+    return params.length ? { params, profiles: profiles.length ? profiles : undefined } : undefined;
+  };
+
   const cfg: ServiceGroupConfig = {
     id,
     name: String(r.name).trim(),
+    desc: typeof r.desc === 'string' && r.desc.trim() ? r.desc.trim() : undefined,
+    cwd: typeof r.cwd === 'string' && r.cwd.trim() ? r.cwd.trim() : serviceGroupDir(id),
     main: step(r.main),
     stop: step(r.stop),
     killPort: Number.isInteger(r.killPort) ? (r.killPort as number) : undefined,
@@ -169,6 +247,7 @@ export function normalizeGroup(raw: unknown, id: string): ServiceGroupConfig {
     shared: typeof r.shared === 'string' && r.shared.trim() ? r.shared.trim() : undefined,
     space: space(r.space),
     clients: Array.isArray(r.clients) ? r.clients.map(String) : [],
+    launch: launch(r.launch),
   };
   return cfg;
 }

@@ -139,7 +139,11 @@ test('setting：导航摆法经 CLI 往返（同一个 store），后端不校�
   const cli = (args) => exec(process.execPath, [BIN, ...args], { cwd: tmpdir(), env });
 
   const get0 = JSON.parse((await cli(['setting', 'get', '--json'])).stdout);
-  assert.ok(Array.isArray(get0.settings.navGroups) && get0.settings.navGroups.length === 0, '默认无分组');
+  assert.deepEqual(
+    get0.settings.navGroups,
+    [{ title: '工作台', views: ['home', 'board'] }],
+    '默认带一个「工作台」分组（侧栏开箱有组）'
+  );
   assert.equal(get0.views, undefined, '后端不再返回页面清单——页面由前端路由树决定');
 
   await cli(['setting', 'set', '--set', 'navGroups=[{"title":"求职","views":["home"]}]', '--json']);

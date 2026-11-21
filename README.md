@@ -209,6 +209,83 @@ web/      React 壳
 
 一个服务组 = 1 个主脚本（长驻服务，IO 重定向到日志）+ N 个 client 脚本（依次执行的请求方）+ 可选共享函数面板。
 
+**面板分两页**：服务首页只保留「探活 / 启动 / 停止」三个动作、一段说明（`desc`）和最近日志；主脚本参数、活性检测、交付策略、流水线与共享面板都在「服务设置」里配置。
+每个服务组有自己的 **cwd**（默认 `~/.nx-nx/services/groups/<组 id>`）：主脚本在这个目录里跑，client 的构建产物 / 请求样本 / 测试数据也落这里，互不串目录。
+
+### 5 分钟跑通一个 node ping 服务（推荐入口）
+
+```bash
+nx-nx sg init ping-demo     # 默认模板 node-ping：生成脚本 + 配置 + 下一步
+nx-nx sg run ping-demo      # 启动 → 等活性就绪 → client 打 /ping
+nx-nx sg stop ping-demo     # 关闭
+```
+
+`sg init` 会在 `assets/scripts/` 下生成三个文件，并写好服务组配置：
+
+| 文件 | 角色 | 内容 |
+| --- | --- | --- |
+| `ping-demo-server.mjs` | 主脚本 | 零依赖 Node HTTP 服务：`GET /ping` → `pong`、`GET /health` → JSON |
+| `ping-demo-client.mjs` | client | 请求 `/ping` 并断言 `pong`（基础设施来自共享面板） |
+| `ping-demo.shared.mjs` | 共享面板 | `BASE_URL` + `checkUp` 起飞闸门（装进管理空间） |
+
+改 `ping-demo-server.mjs` 就能接自己的业务；换成 REST 接口可以参考 `--template node-api`。
+两者都是「能跑、能探活、能关」的完整闭环，不是一个只能启动的空壳。
+
+```bash
+nx-nx sg templates                                  # 看全部模板
+nx-nx sg init api-demo --template node-api          # 带 Bearer 鉴权的业务 API 示例
+nx-nx sg init my-svc --template node-ping --port 18090 --name "我的服务"
+nx-nx sg init my-svc --dry                          # 只看会生成什么，不落盘
+```
+
+### 多版本启动：同一个服务，换端口 / 配置文件 / 环境
+
+服务组可以在配置里声明一组 **启动参数**（`launch.params`）：每个参数决定弹窗里显示成输入框、数字框还是下拉列表，以及启动时怎么传给主脚本。
+
+```json
+"launch": {
+  "params": [
+    { "key": "port",   "label": "端口",     "type": "number", "default": "18080", "arg": "port" },
+    { "key": "env",    "label": "运行环境", "type": "select", "default": "development",
+      "options": ["development", "staging", "production"], "env": "NODE_ENV" },
+    { "key": "config", "label": "配置文件", "type": "text", "default": "config/default.json", "arg": "config" }
+  ],
+  "profiles": [
+    { "name": "预发", "values": { "port": "18081", "env": "staging",    "config": "config/staging.json" } },
+    { "name": "生产", "values": { "port": "18082", "env": "production", "config": "config/prod.json" } }
+  ]
+}
+```
+
+- `arg`：有值时追加 `--arg value`；与 `main.args` 里同名 flag 会先删掉旧值再追加。
+- `env`：有值时注入同名环境变量（如 `NODE_ENV=staging`）。
+- `key` 或 `arg` 叫 `port` 的参数就是服务监听端口：argv、探活、停止三处都跟着它走，不会出现「启动 18081、探活盯 18080」。
+- Web 首页点「启动」会先弹参数表单，顶部可选预设（默认 / 预发 / 生产），也可以逐项改；本次参数记进运行态，自愈重启沿用。
+- 模板 `node-ping` / `node-api` 创建时自带端口 / 环境 / 配置文件三个参数与三套预设；也可以在「服务设置 → 启动参数」里增删。
+- CLI 等价写法：
+
+```bash
+nx-nx sg start ping-demo --values '{"port":"18081","env":"staging","config":"config/staging.json"}'
+```
+
+### 测试脚本组（工作流）：一个按钮跑完「启动 → 等就绪 → 请求测试 → 记日志」
+
+长服务负责一直跑，短 client 负责请求验证。服务设置页的「流水线」Tab 里可以把 client / 测试脚本选进一个组，按上下箭头排执行顺序；首页就会出现「运行测试组 (N)」按钮：
+
+- 点按钮先按启动参数启动或复用服务，再依次执行组内脚本；服务已运行就直接复用，不会重复起进程。
+- 每个脚本都在服务的 cwd 里跑，退出码、耗时、stdout / stderr 追加到 `~/.nx-nx/services/logs/clients-<id>.log`。
+- client 里用 `send()` / `get()` 发的请求一请求一日志，落在 `~/.nx-nx/services/http-logs/<id>/`；日志抽屉的「HTTP 请求」能看到文件清单。
+- 执行完弹出逐步结果（空间闸门 / 启动 / 等活性 / 每个测试脚本），失败步骤直接标红；「查看执行日志」跳到 client 执行记录。
+- 启动参数会传给 client：脚本里读 `NX_SERVICE_URL` / `NX_SERVICE_PORT` 就能跟着当前端口走，不会把模板里的默认端口写死。
+
+CLI 等价：
+
+```bash
+nx-nx sg run ping-demo --values '{"port":"18081","env":"staging"}'
+```
+
+### 手工配置（已有自己的脚本时）
+
 ```bash
 # 创建（配置整组 JSON：main / stop / killPort / stopMode / health / shared / clients）
 nx-nx sg set demo-group --config '{
@@ -240,3 +317,4 @@ nx-nx sg list / show / delete
 - **共享函数面板**：`<name>.shared.mjs`（如 `demo.shared`）——「常量 = 函数 = {}」整体优先执行，不可作为入口直接运行；组内脚本执行前自动装载并输出**堆快照**（只显示可 JSON 表示的数据确认，函数报签名，Map/循环引用等只报类型，不泄露内部表示）。面板里可以定义 API token、随机数据工厂、以及 `serviceAlive(id)` 这类活性 check 函数。
 - **client-base 思想**：基础设施（send 封装、token、常量）放共享面板，业务请求单独一个 client 脚本文件。
 - 随包演示：`demo-server` / `demo-client` / `demo-stop` / `demo.shared`（`nx-nx sg run demo-group` 一键体验）。
+- 面板「服务」页的新建流程同一条路：选模板 → 预填 id/端口 → 创建即生成脚本与配置，空态还给出一条三步命令。

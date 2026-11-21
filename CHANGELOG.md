@@ -1,5 +1,58 @@
 ## [Unreleased]
 
+### 服务组案例全链路复验（任务 #21 第 2 轮）
+
+- `sg init ping-case`（node-ping 模板）→ `sg run`：空间闸门 `checkUp` → 启动 → HTTP 探活
+  → client 请求，全链路通过；client 日志含共享面板隐藏用例 2/2 与变量堆快照。
+- 失活自愈实测：面板 API 启动后强杀主进程，serve 内 watcher 按 3s / 阈值 2 拉起新进程
+  （pid 变化、`restarts +1`、`lastEvent=自愈完成`），端口恢复 200。
+- `sg stop --mode port` 杀端口后端口关闭；`pnpm test` 全绿（lint 0 error、smoke 14、
+  unit 179、spike 29）。
+
+### 服务工作台收敛 + 服务独立 cwd（任务 #20 第 4 轮）
+
+- **测试脚本组 / 一键工作流**：首页新增「运行测试组 (N)」按钮——先启动或复用长服务、
+  等活性，再按设置页「流水线」Tab 排好的顺序跑 client / 测试脚本；每个脚本的退出码、
+  耗时、stdout / stderr 记进 `clients-<id>.log`，请求日志仍按一请求一文件落盘。
+  执行完弹出逐步报告（空间闸门 / 启动 / 等活性 / 每个脚本），失败标红，可直接跳到执行日志。
+  `sg run` 同时支持 `--values`，启动参数会以 `NX_SERVICE_URL / NX_SERVICE_PORT` 传给 client，
+  换端口跑测试不会打到旧端口。
+- **多版本启动（启动参数）**：服务组新增 `launch.params`（文本 / 数字 / 下拉三类控件）
+  与 `launch.profiles` 命名预设。首页点「启动」先弹出参数表单：端口、配置文件、
+  环境变量都能改，也可选「默认 / 预发 / 生产」一键填好；本次参数写入运行态，
+  自愈重启沿用。`key` 或 `arg` 为 `port` 的参数同时驱动 argv、探活与停止端口。
+  CLI 等价：`nx-nx sg start <id> --values '{"port":"18081"}'`。
+  设置页新增「启动参数」Tab（增删参数、类型、默认值、flag、env、下拉候选）。
+- **服务页 / 设置页分离**：服务首页只保留「探活 / 启动 / 停止」三个动作、说明（`desc`）
+  和最近日志；主脚本、活性检测、关闭策略、自愈开关、流水线、共享面板全部收进「服务设置」。
+- **每个服务一个 cwd**：服务组新增 `cwd` 字段（默认 `~/.nx-nx/services/groups/<id>`），
+  主脚本与 client 都在这个目录里运行；`NX_SERVICE_DIR` 注入脚本，构建产物 / 请求样本 /
+  测试数据各归各的服务，不再散落在 serve 进程的当前目录。模板创建时目录即建好。
+- **服务说明独立**：新增 `desc`（模板自动带一句说明），首页展示；不再拿 `name` 当 desc。
+- **client 脚本持久化**：设置页可以新建 client 脚本（写进 `assets/scripts` + manifest），
+  创建后自动加入流水线；流水线 client 在服务 cwd 中执行。
+- **首页日志优先展示真实服务输出**：有 stdout 时显示主脚本尾部，没有才退回事件日志；
+  「查看完整日志」仍打开事件 / 主脚本 / HTTP / client 的完整视图。
+- **Windows 关停修复**：`taskkill` / `netstat` 走 `System32` 绝对路径，精简 PATH 环境
+  也能按端口找到并关掉进程。
+
+### 服务组模板与上手引导（任务 #17 第 3 轮）
+
+- **`sg init` 一条命令生成一组能跑的服务**：默认模板 `node-ping`（零依赖 Node HTTP 服务，
+  `GET /ping` → `pong`）生成 `<id>-server` / `<id>-client` / `<id>.shared` 三个脚本，
+  并写好 main / health（HTTP /ping）/ killPort / shared / space.check / clients 全套配置，
+  末尾直接给出 `sg run` 等下一步命令。`sg templates` 列出模板；`--dry` 只看计划不落盘；
+  `--force` 覆盖同名脚本与服务组。
+- **第二个业务模板 `node-api`**：/health + /api/customers（Bearer 鉴权）、共享面板放
+  token 与 API 封装、附优雅关停脚本（pid 文件 → SIGTERM），把 stop 步骤也演示到位。
+- **模板正文随包分发**：`assets/service-templates/<id>/*.tpl`（`{{ID}}` / `{{PORT}}` 占位），
+  落盘同时把说明登记进 `assets/scripts/manifest.json`——脚本页直接显示用途与用法。
+- **面板引导**：新建服务组改为「选模板 → 预填 id/端口 → 创建即生成脚本与配置」；
+  空态右侧给出三步命令与模板卡片、左侧空态一键创建；表单默认值对齐模板
+  （HTTP / 127.0.0.1:18080 /ping），不用先猜端口与检测路径。
+- 新增 `tests/unit/service-templates.test.mjs`（清单 / 计划 / 落盘 / 幂等 / --force / --dry
+  + 端到端起停探活）；smoke 增加 `sg templates` 与 `sg init --dry` 两条。
+
 ### 短脚本沙箱 + 面板重做（任务 #16 第 2 轮 · P2/P3）
 
 **短脚本走沙箱（QuickJS 虚拟机）**——短脚本与长脚本从此是两条明确的通道：

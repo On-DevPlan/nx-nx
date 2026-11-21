@@ -30,6 +30,13 @@ import {
   type SpaceIndexEntry,
 } from '../../core/service/namespace.js';
 import { remoteSpaceAction } from '../../core/service/space-remote.js';
+import {
+  applyTemplate as applyServiceTemplate,
+  listTemplates as listServiceTemplates,
+  type InitInput,
+  type InitResult,
+  type ServiceTemplateMeta,
+} from '../../core/service/templates.js';
 
 export interface ServiceGroupView {
   config: ServiceGroupConfig;
@@ -43,6 +50,8 @@ export interface ServiceGroupView {
     restarts: number;
     lastEvent?: string;
     logFile?: string;
+    /** 上一次启动实际使用的参数（端口 / 环境 / 配置文件）。 */
+    launch?: Record<string, string>;
   };
 }
 
@@ -61,6 +70,7 @@ export function listGroups(): ServiceGroupView[] {
         restarts: rt.restarts,
         lastEvent: rt.lastEvent,
         logFile: rt.logFile,
+        launch: rt.launch,
       },
     };
   });
@@ -81,6 +91,7 @@ export function showGroup(id: unknown): ServiceGroupView {
       restarts: rt.restarts,
       lastEvent: rt.lastEvent,
       logFile: rt.logFile,
+      launch: rt.launch,
     },
   };
 }
@@ -112,8 +123,31 @@ export async function deleteGroup(id: unknown): Promise<{ id: string; stopped: s
   return { id: gid, stopped: stopResult.detail };
 }
 
-export function start(id: unknown): Promise<{ started: boolean; pid?: number; logFile: string; detail: string }> {
-  return startGroup(assertGroupId(id));
+export function start(
+  id: unknown,
+  values?: unknown,
+): Promise<{ started: boolean; pid?: number; logFile: string; detail: string }> {
+  const parsed = parseLaunchValues(values);
+  return startGroup(assertGroupId(id), parsed ? { values: parsed } : {});
+}
+
+// 启动参数从 CLI/HTTP 传进来时是 JSON 字符串；必须是「字符串到字符串」的对象。
+function parseLaunchValues(raw: unknown): Record<string, string> | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  let obj: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      obj = JSON.parse(raw);
+    } catch {
+      throw new Error(`启动参数必须是 JSON 对象：${raw}`);
+    }
+  }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+    throw new Error('启动参数必须是 JSON 对象');
+  }
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) out[k] = String(v);
+  return out;
 }
 
 export function stop(id: unknown, mode?: unknown): Promise<StopResult> {
@@ -151,9 +185,10 @@ export async function check(id: unknown): Promise<{ id: string; alive: boolean; 
   return { id: g.id, alive: r.alive, detail: r.detail };
 }
 
-// 流水线：main 启动 → 等活性 → clients 依次执行
-export function run(id: unknown): ReturnType<typeof runPipeline> {
-  return runPipeline(assertGroupId(id));
+// 流水线：main 启动 → 等活性 → clients（测试脚本组）依次执行
+export function run(id: unknown, values?: unknown): ReturnType<typeof runPipeline> {
+  const parsed = parseLaunchValues(values);
+  return runPipeline(assertGroupId(id), parsed);
 }
 
 // ---- 管理空间 ----
@@ -258,4 +293,17 @@ export async function hubOverview(id: unknown): Promise<HubOverview> {
     space: s ? { panel: s.panel, check: s.check, methods } : null,
     nextCommand: `nx-nx sg run ${g.id}`,
   };
+}
+
+// ---- 模板（上手引导的唯一入口）----
+//
+// 模板 = 脚本正文（assets/service-templates/*.tpl）+ 已归一化的组配置。
+// 一条 sg init 把两者都落盘，并给出下一步命令——「引导性不够」的解法就是它。
+
+export function templates(): ServiceTemplateMeta[] {
+  return listServiceTemplates();
+}
+
+export function initFromTemplate(input: InitInput): InitResult {
+  return applyServiceTemplate(input);
 }

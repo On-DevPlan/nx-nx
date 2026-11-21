@@ -41,11 +41,13 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 | `nx-nx js sandbox <名\|--code 片段> [--panel 面板] [--args a,b] [--timeoutMs ms] [--memoryMb mb]` | **短脚本走沙箱**（QuickJS wasm）：无 fs / 无网络 / 只有 `log args set heap panel use call`；产出变量堆（JSON，Map/函数只报类型不泄露内部结构） |
 | `nx-nx js runs [--limit N]` | 最近的短脚本运行台账（时间 / 耗时 / 产出键 / 错误） |
 | `nx-nx sg list` | 列出服务组（配置 + 运行态） |
+| `nx-nx sg templates` | **模板清单**：node-ping（最小可跑案例）/ node-api（Bearer 业务 API），含默认端口与下一步命令 |
+| `nx-nx sg init <id> [--template node-ping] [--port N] [--name 显示名] [--force] [--dry]` | **按模板创建**：生成脚本（`<id>-server` / `<id>-client` / `<id>.shared` 等）+ 写好服务组配置 + 打印下一步；`--dry` 只看计划不落盘。默认模板就是 node-ping |
 | `nx-nx sg show <id>` | 服务组详情：状态 / pid / 活性 / 自愈次数 / 日志路径 |
 | `nx-nx sg hub <id>` | **hub 概览**：一组看清 server / client / 空间方法 / 当前状态 |
-| `nx-nx sg set <id> --config <JSON>` | 创建或整组更新服务组配置（Web「服务」页是表单，手写 JSON 只在脚本/CI 里用） |
-| `nx-nx sg run <id>` | **流水线**：空间 check → 启动主脚本 → 等活性就绪 → client 脚本依次执行 |
-| `nx-nx sg start <id>` / `sg stop <id> [--mode auto\|script\|port\|pid]` | 只启 / 只关主脚本。关闭按 `stopMode` 走：`auto` 依次兜底（关停脚本 → 杀端口 → 杀 pid，每步复核）、`port` 直接杀端口占用进程、`script` 只跑优雅关停脚本、`pid` 只杀记录的进程 |
+| `nx-nx sg set <id> --config <JSON>` | 创建或整组更新服务组配置（Web「服务设置」页是表单，手写 JSON 只在脚本/CI 里用） |
+| `nx-nx sg run <id> [--values <JSON>]` | **一键测试组**：空间 check → 启动/复用主脚本 → 等活性就绪 → client 脚本依次执行 → 逐步报告；启动参数可临时换版本 |
+| `nx-nx sg start <id> [--values <JSON>]` / `sg stop <id> [--mode auto\|script\|port\|pid]` | 只启 / 只关主脚本。`--values` 可临时换启动版本（如 `{"port":"18081","env":"staging"}`，字段由 `launch.params` 声明）。关闭按 `stopMode` 走：`auto` 依次兜底（关停脚本 → 杀端口 → 杀 pid，每步复核）、`port` 直接杀端口占用进程、`script` 只跑优雅关停脚本、`pid` 只杀记录的进程 |
 | `nx-nx sg autoheal <id> --state on\|off` | **自愈开关**（长脚本三动作之一）：on = 失活即重启；off = 只记录不处理，**监控不停** |
 | `nx-nx sg status [id]` / `sg check <id>` | 运行态快照 / 立即活性检测（返回 `{ alive, detail }`） |
 | `nx-nx sg logs <id>` | 查看日志：事件（启动/停止/检测失败/自愈）/ 主脚本 IO 尾部 / HTTP 请求日志清单 |
@@ -58,9 +60,9 @@ Web 面板是**左侧导航 + 顶栏**布局（新建项目 / 模板 / 脚本 / 
 编辑源码，按脚本类型只亮一个运行按钮：长脚本走 Node（能碰 fs / 网络），短脚本 `.short`
 走**沙箱**（QuickJS，无 fs / 无网络）；右侧四个页签——输出（ANSI 着色 / 虚拟滚动）、
 **变量堆**（可 JSON 化的产出，Map / 函数只报类型）、内置函数、运行台账。「装载面板」下拉
-决定沙箱 / Node 运行前先装哪个共享面板。「服务」页用**表单**管理服务组：状态卡
-（活性/自愈/日志）、**只有三个操作——启动 / 关闭 / 自愈开关**、流水线画布（节点颜色 =
-运行态）、主脚本与活性检测字段全部下拉与输入，不需要手写 JSON。
+决定沙箱 / Node 运行前先装哪个共享面板。「服务」页用**表单**管理服务组：首页只有状态卡（活性/自愈/日志）与**三个操作——启动 / 关闭 / 探活**；
+点启动先弹出启动参数（端口 / 配置文件 / 环境变量，按 `launch.params` 渲染成输入框或下拉），
+顶部可选命名预设；主脚本、活性检测、关闭策略、流水线、共享面板都在首页右上角齿轮进入的「服务设置」。
 「管理空间」卡列出空间的方法与状态；活性检测、日志、流水线跑一次都给出了等价命令
 （`sg check` / `sg logs` / `sg run`），界面上只留文本链接，自动化时照抄命令即可。
 
@@ -159,6 +161,40 @@ nx-nx script run sync-nx-skills --root D:\code\a_js\proj --dry   # 只看会发�
 内置脚本解决「一次性小任务」；**服务组**解决「一个长期活着的服务 + 一组围着它跑的请求脚本」。
 它是自己写 dispatch 的现成替代：不必再维护一套 start / check / restart 的胶水脚本。
 
+### 先跑通最小案例（不要先读完整配置）
+
+```bash
+nx-nx sg init ping-demo     # 默认模板 node-ping：生成脚本 + 配置 + 下一步
+nx-nx sg run ping-demo      # 启动 → 等就绪 → client 打 /ping
+nx-nx sg stop ping-demo     # 关闭
+```
+
+生成三个脚本：`<id>-server.mjs`（Node HTTP 服务，`GET /ping` → `pong`）、
+`<id>-client.mjs`（请求 /ping）、`<id>.shared.mjs`（`BASE_URL` + `checkUp` 闸门）。
+改 server 就能接业务；`--template node-api` 是带 Bearer 鉴权与优雅关停的进阶示例。
+`nx-nx sg templates` 看全部模板，`--dry` 只看计划不落盘。
+
+### 多版本启动（端口 / 配置文件 / 环境）
+
+模板建组时自带 `launch.params`：`port`（number，arg `--port`）、`env`（select，env `NODE_ENV`）、
+`config`（text，arg `--config`），并带「默认 / 预发 / 生产」三套 `launch.profiles` 预设。
+Web 首页点「启动」先弹参数表单，可选预设再逐项改；CLI 用 `--values` 传同一份值：
+
+```bash
+nx-nx sg start ping-demo --values '{"port":"18081","env":"staging","config":"config/staging.json"}'
+```
+
+本次值写进运行态，自愈重启沿用；`key` 或 `arg` 为 `port` 的参数同时决定 argv、探活与 stop 端口。
+设置页「启动参数」Tab 可增删参数（label / key / 类型 / 默认值 / arg / env / 下拉候选）。
+
+### 测试脚本组（工作流）
+
+长服务常驻，短 client 做请求验证。设置页「流水线」Tab 把 client / 测试脚本按顺序排成组；
+首页出现「运行测试组 (N)」按钮：启动或复用服务 → 等活性 → 逐个跑脚本 → 弹逐步报告。
+每个脚本的退出码 / 耗时 / stdout / stderr 记进 `clients-<id>.log`，请求一请求一日志。
+`sg run <id> [--values <JSON>]` 是同一动作的 CLI 入口；client 里读 `NX_SERVICE_URL` / `NX_SERVICE_PORT`
+跟随本次启动端口，不要写死模板默认端口。
+
 ### 一个服务组由四样东西组成
 
 | 角色 | 是什么 | 配置形态 |
@@ -168,7 +204,9 @@ nx-nx script run sync-nx-skills --root D:\code\a_js\proj --dry   # 只看会发�
 | client 脚本 | 每个文件一个业务领域（一组请求），流水线里依次执行 | `"clients": ["用户模块", "订单模块"]` |
 | 共享面板 `shared` | 常量 + 函数 + API 封装，组内脚本执行前自动装载 | `"shared": "myapi.shared"` |
 
-可选：`stop`（优雅关停脚本）、`killPort`（stop 时兜底杀端口）。
+可选：`stop`（优雅关停脚本）、`killPort`（stop 时兜底杀端口）、`desc`（首页说明）、`cwd`（服务自己的工作目录，默认 `~/.nx-nx/services/groups/<id>`）。
+
+主脚本与 client 都以该组 `cwd` 为工作目录运行，环境变量 `NX_SERVICE_DIR` 指向它；构建产物 / 请求样本 / 测试数据因此各归各的服务。Web 端把日常动作（探活 / 启动 / 停止 / 日志）留在「服务」首页，配置 / 流水线 / 共享面板收进「服务设置」。
 
 ### 管理空间（namespace）：面板不是一段脚本，是一个可管理的空间
 
@@ -236,7 +274,8 @@ nx-nx sg spaces            # 本机所有空间（索引落盘，不用每次装
 ### 三条命令覆盖大部分场景
 
 ```bash
-# 1) 建组（Web「服务」页是表单；CLI 用 --config 传 JSON，适合脚本/CI）
+# 1) 建组（优先模板：nx-nx sg init my-svc [--template node-ping]；
+#    Web「服务」页同一条路径；下面这句是已有自己脚本时的进阶做法）
 nx-nx sg set my-svc --config '{
   "name": "本地用户服务",
   "main": { "script": "my-server", "args": ["--port", "18080"] },

@@ -15,3 +15,8 @@ src/web/frontend/public/
 
 # 本机临时产物（验证用生成项目、一次性脚本）。temp/ 历史上从未入库。
 temp/
+
+# Playwright E2E：测试数据目录 + 失败产物（截图 / trace / 报告）
+.e2e-home/
+test-results/
+playwright-report/

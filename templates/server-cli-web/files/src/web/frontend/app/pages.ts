@@ -7,6 +7,7 @@
 // 现在只有**一个**来源：文件系统。新建 routes/<名>.ts 就等于登记了一条路由
 // （页面本体放 pages/<名>/index.tsx），不需要改任何全局文件。路由 id 就是文件名。
 import type { PageDef } from '../routes/contract.js';
+import { DEFAULT_LAYOUT } from './layout-default.js';
 
 // eager: true 只取路由声明本身；page 字段是函数，组件仍然按需加载。
 // import: 'default' 直接拿 default 导出，省掉一层 .default 取值。
@@ -37,7 +38,7 @@ export const PAGES: PageEntry[] = Object.entries(DECLARATIONS)
     def,
     title: def.nav?.label || idOfModuleKey(key),
     order: def.nav?.order ?? 100,
-    layout: def.layout || 'app',
+    layout: def.layout || DEFAULT_LAYOUT,
   }))
   .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
 

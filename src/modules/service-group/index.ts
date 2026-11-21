@@ -12,19 +12,9 @@ import { defineAction } from '../../runtime/types/action.js';
 import { defineModule } from '../../runtime/types/module.js';
 import * as service from './service.js';
 import { formatSpace, formatSpaceCall } from './space-text.js';
-
-const CONFIG_HINT = `--config '{
-  "name": "示例服务",
-  "main": { "script": "demo-server", "args": ["--port", "8080"] },
-  "stop": { "script": "demo-stop" },
-  "killPort": 8080,
-  "stopMode": "auto",
-  "health": { "kind": "http", "port": 8080, "host": "127.0.0.1", "path": "/health",
-              "intervalMs": 5000, "failThreshold": 3, "readyTimeoutMs": 20000, "onDead": "restart" },
-  "shared": "demo.shared",
-  "space": { "panel": "demo.shared", "check": "checkUp" },
-  "clients": ["demo-client"]
-}'`;
+import { formatInit, formatTemplates } from './template-text.js';
+import { formatGroupList, formatGroupShow } from './group-text.js';
+import { initInput, setInput, startInput, stopInput, autohealInput, spaceCallInput, idInput, statusInput } from './schemas.js';
 
 export default defineModule({
   id: 'service-group',
@@ -32,31 +22,52 @@ export default defineModule({
   order: 35,
   actions: [
     defineAction({
+      id: 'serviceGroup.templates',
+      cli: ['sg', 'templates'],
+      http: ['GET', '/api/service-templates'],
+      summary: '列出服务组模板（模板 = 脚本 + 配置 + 下一步命令；默认 node-ping）',
+    })(
+      () => ({ templates: service.templates() }),
+      (r) => formatTemplates(r.templates),
+    ),
+
+    defineAction({
+      id: 'serviceGroup.init',
+      cli: ['sg', 'init'],
+      http: ['POST', '/api/service-groups-init/:id'],
+      summary: '按模板创建服务组：生成脚本 + 写配置 + 打印下一步（默认模板 node-ping）',
+      args: ['id'],
+      flags: {
+        template: { type: 'string', default: 'node-ping', hint: '模板 id（sg templates 查看）' },
+        port: { type: 'number', hint: '监听端口（默认取模板配置）' },
+        name: { type: 'string', hint: '显示名（默认取模板配置）' },
+        force: { type: 'boolean', hint: '覆盖已存在的同名脚本与服务组' },
+        dry: { type: 'boolean', hint: '只看会生成什么，不落盘' },
+      },
+      // 命令行表面（help / 强转）由上表描述，合法性在这里收口：
+      // id 正则与模板里的校验同一口径，端口范围不再靠 service 里手写判断兜底。
+      schema: initInput,
+    })(
+      (ctx) =>
+        service.initFromTemplate({
+          groupId: ctx.id,
+          templateId: ctx.template,
+          port: ctx.port,
+          name: ctx.name,
+          force: ctx.force,
+          dryRun: ctx.dry,
+        }),
+      (r) => formatInit(r),
+    ),
+
+    defineAction({
       id: 'serviceGroup.list',
       cli: ['sg', 'list'],
       http: ['GET', '/api/service-groups'],
       summary: '列出服务组（配置 + 运行态）',
     })(
       () => ({ groups: service.listGroups() }),
-      (r) => {
-        if (!r.groups.length) {
-          // 空态是唯一该甩完整示例的地方：用户此刻正需要知道怎么写配置。
-          return `（暂无服务组）用完整配置创建：\n  nx-nx sg set demo-group ${CONFIG_HINT}`;
-        }
-        const lines = ['服务组:'];
-        for (const g of r.groups) {
-          const rt = g.runtime;
-          const aliveMark =
-            rt.status === 'running' ? (rt.alive === false ? '· 活性 FAIL' : rt.alive === true ? '· 活性 OK' : '· 未检测') : '';
-          lines.push(
-            `  ${g.config.id}  ${g.config.name}  [${rt.status}]${aliveMark}` +
-              (rt.restarts ? ` 自愈${rt.restarts}次` : '') +
-              (g.config.health?.onDead === 'none' ? ' · 自愈OFF' : ''),
-          );
-        }
-        lines.push('', '详情: nx-nx sg show <id> · 流水线: nx-nx sg run <id>');
-        return lines.join('\n');
-      },
+      (r) => formatGroupList(r.groups),
     ),
 
     defineAction({
@@ -65,27 +76,10 @@ export default defineModule({
       http: ['GET', '/api/service-groups/:id'],
       summary: '查看服务组配置与运行态详情',
       args: ['id'],
+      schema: idInput,
     })(
       (ctx) => service.showGroup(ctx.id),
-      (r) => {
-        const c = r.config;
-        const rt = r.runtime;
-        const lines = [
-          `服务组 ${c.id} · ${c.name}`,
-          `  状态: ${rt.status}${rt.pid ? ` (pid ${rt.pid})` : ''}${rt.alive === undefined ? '' : rt.alive ? ' · 活性 OK' : ' · 活性 FAIL'}`,
-          `  main: ${c.main ? c.main.script + ' ' + c.main.args.join(' ') : '(未配置)'}`,
-          `  stop: ${c.stop ? c.stop.script : '(无关停脚本)'}${c.killPort ? ` · 杀端口 ${c.killPort}` : ''} · mode=${c.stopMode}`,
-          `  health: ${c.health ? `${c.health.kind} ${c.health.host}:${c.health.port}${c.health.path} · 每 ${c.health.intervalMs}ms · 阈值 ${c.health.failThreshold} · 就绪上限 ${c.health.readyTimeoutMs}ms` : '(未配置)'}`,
-          `  自愈: ${c.health ? (c.health.onDead === 'restart' ? '开启（失活即重启）' : '关闭（只记录）') : '(无检测，不可用)'}`,
-          `  shared: ${c.shared ?? '(无)'}`,
-          `  clients: ${c.clients.length ? c.clients.join(', ') : '(无)'}`,
-          `  自愈次数: ${rt.restarts} · 连续失败: ${rt.failStreak}`,
-          rt.detail ? `  最近检测: ${rt.detail}` : '',
-          rt.lastEvent ? `  最近事件: ${rt.lastEvent}` : '',
-          rt.logFile ? `  日志: ${rt.logFile}` : '',
-        ];
-        return lines.filter(Boolean).join('\n');
-      },
+      (r) => formatGroupShow(r),
     ),
 
     defineAction({
@@ -97,6 +91,7 @@ export default defineModule({
       flags: {
         config: { type: "string", required: true, hint: "服务组配置 JSON（name/main/stop/killPort/health/shared/clients）" },
       },
+      schema: setInput,
     })(
       (ctx) => service.setGroup(ctx.id, ctx.config),
       (r) =>
@@ -111,6 +106,7 @@ export default defineModule({
       http: ['DELETE', '/api/service-groups/:id'],
       summary: '删除服务组（先停止运行中的服务）',
       args: ['id'],
+      schema: idInput,
     })(
       (ctx) => service.deleteGroup(ctx.id),
       (r) => `已删除服务组 ${r.id}（${r.stopped}）`,
@@ -120,10 +116,14 @@ export default defineModule({
       id: 'serviceGroup.start',
       cli: ['sg', 'start'],
       http: ['POST', '/api/service-groups/:id/start'],
-      summary: '启动主脚本（detached + 日志重定向；配置了 health 则进入持续监控）',
+      summary: '启动主脚本（detached + 日志重定向；可按启动参数覆盖端口 / 配置文件 / 环境）',
       args: ['id'],
+      flags: {
+        values: { type: 'string', hint: '启动参数 JSON，如 {"port":"18081","env":"prod"}' },
+      },
+      schema: startInput,
     })(
-      (ctx) => service.start(ctx.id),
+      (ctx) => service.start(ctx.id, ctx.values),
       (r) => (r.started ? `已启动 (pid ${r.pid})\n  日志: ${r.logFile}` : `未重复启动：${r.detail}`),
     ),
 
@@ -136,6 +136,7 @@ export default defineModule({
       flags: {
         mode: { type: 'string', hint: '本次覆盖 stopMode: auto | script | port | pid' },
       },
+      schema: stopInput,
     })(
       (ctx) => service.stop(ctx.id, ctx.mode),
       (r) => `已关闭（mode=${r.mode}）：${r.detail}`,
@@ -150,6 +151,7 @@ export default defineModule({
       flags: {
         state: { type: 'string', required: true, hint: 'on | off' },
       },
+      schema: autohealInput,
     })(
       (ctx) => service.autoheal(ctx.id, ctx.state),
       (r) =>
@@ -163,6 +165,7 @@ export default defineModule({
       http: ['GET', '/api/service-groups-runtime'],
       summary: '查看运行态快照（不带 id 看全部）',
       args: [{ name: 'id', required: false }],
+      schema: statusInput,
     })(
       (ctx) => service.status(ctx.id),
       (r) => JSON.stringify(r, null, 2),
@@ -174,6 +177,7 @@ export default defineModule({
       http: ['GET', '/api/service-groups/:id/alive'],
       summary: '立即执行一次活性检测（端口/HTTP），返回 { alive, detail }',
       args: ['id'],
+      schema: idInput,
     })(
       (ctx) => service.check(ctx.id),
       (r) => `${r.alive ? '✔ 活' : '✘ 失活'}  ${r.detail}`,
@@ -185,6 +189,7 @@ export default defineModule({
       http: ['GET', '/api/service-groups/:id/logs'],
       summary: '查看服务组日志：事件（启动/停止/检测失败/自愈）/ 主脚本 IO 尾部 / HTTP 请求日志清单',
       args: ['id'],
+      schema: idInput,
     })(
       (ctx) => service.logs(ctx.id),
       (r) => {
@@ -229,6 +234,7 @@ export default defineModule({
       http: ['GET', '/api/service-groups/:id/hub'],
       summary: 'hub 概览：一组看清 server / client / 空间方法 / 当前状态',
       args: ['id'],
+      schema: idInput,
     })(
       (ctx) => service.hubOverview(ctx.id),
       (r) => {
@@ -261,6 +267,7 @@ export default defineModule({
       http: ['GET', '/api/service-groups/:id/space'],
       summary: '查看管理空间：方法清单 + 状态堆快照（可 JSON 表示的部分）',
       args: ['id'],
+      schema: idInput,
     })(
       (ctx) => service.spaceIntrospect(ctx.id),
       (r) => formatSpace(r),
@@ -276,6 +283,7 @@ export default defineModule({
         method: { type: 'string', required: true, hint: '要调用的方法名' },
         args: { type: 'string', hint: '参数（JSON 数组，如 ["demo-group"]）' },
       },
+      schema: spaceCallInput,
     })(
       (ctx) => {
         let parsed: unknown[] = [];
@@ -296,10 +304,14 @@ export default defineModule({
       id: 'serviceGroup.run',
       cli: ['sg', 'run'],
       http: ['POST', '/api/service-groups/:id/run'],
-      summary: '执行流水线：空间 check → 启动 main → 等活性就绪 → clients 依次执行',
+      summary: '一键运行测试组：空间 check → 启动 main → 等活性就绪 → clients / 测试脚本依次执行',
       args: ['id'],
+      flags: {
+        values: { type: 'string', hint: '启动参数 JSON，如 {"port":"18081","env":"prod"}' },
+      },
+      schema: startInput,
     })(
-      (ctx) => service.run(ctx.id),
+      (ctx) => service.run(ctx.id, ctx.values),
       (r) => {
         const lines = [`${r.ok ? '✔' : '✘'} 流水线 ${r.groupId}:`];
         for (const s of r.steps) {

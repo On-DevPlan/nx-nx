@@ -239,10 +239,13 @@ table.levels tbody tr:last-child td { border-bottom: 0; }
 
 /* 版式：左侧导航 + 内容区（顶栏 + 面板）
    为什么从「顶部横向 tab」换成侧栏：横向 tab 到四个以上就挤成一行小字，
-   宽度还被品牌名和版本号吃掉；侧栏宽度固定，导航能带图标，内容区不再跟着视口抖。 */
+   宽度还被品牌名和版本号吃掉；侧栏宽度固定，导航能带图标，内容区不再跟着视口抖。
+
+   侧栏宽度由 --side-w 驱动（App 拖拽 / 键盘 / 一键收起都只改这一个变量）：
+   收起态 56px 图标轨道，展开态用用户记住的宽度；两种状态共用同一条 grid。 */
 .shell {
   display: grid;
-  grid-template-columns: 212px minmax(0, 1fr);
+  grid-template-columns: var(--side-w, 232px) minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -256,9 +259,27 @@ table.levels tbody tr:last-child td { border-bottom: 0; }
   border-right: var(--border);
 }
 
-.side-brand { display: flex; align-items: center; gap: 8px; padding: 14px 14px 10px; }
-.brand-name { font-weight: 700; letter-spacing: 0.3px; }
-.brand-mark { width: 22px; height: 22px; display: block; }
+/* 通用图标按钮：顶栏刷新、侧栏收起共用（SVG 图标，无 emoji） */
+.icon-btn {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mid);
+  cursor: pointer;
+}
+.icon-btn:hover { background: var(--soft-2); color: var(--ink); }
+.icon-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+.side-brand { display: flex; align-items: center; gap: 8px; padding: 14px 10px 10px 14px; }
+.brand-name { font-weight: 700; letter-spacing: 0.3px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brand-mark { width: 22px; height: 22px; display: block; flex: 0 0 auto; }
+.side-toggle { margin-left: auto; flex: 0 0 auto; }
 
 .side-nav { display: flex; flex-direction: column; gap: 1px; padding: 2px 8px; overflow: auto; }
 .side-group {
@@ -290,7 +311,8 @@ table.levels tbody tr:last-child td { border-bottom: 0; }
   font-weight: 600;
   box-shadow: var(--shadow-relief);
 }
-.nav-icon { font-size: 14px; opacity: 0.8; }
+.nav-icon { flex: 0 0 auto; display: block; opacity: 0.8; }
+.nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-empty { padding: 6px 8px; font-size: 12px; }
 
 .side-foot {
@@ -303,6 +325,45 @@ table.levels tbody tr:last-child td { border-bottom: 0; }
   font-size: 11px;
   color: var(--mid);
 }
+
+/* 收起态：只剩图标轨道（56px）。文字一律隐藏，tooltip 由 title 提供。 */
+.side-collapsed .brand-name,
+.side-collapsed .nav-label,
+.side-collapsed .side-group,
+.side-collapsed .side-foot-text,
+.side-collapsed .side-foot-ver { display: none; }
+.side-collapsed .side-brand { padding: 14px 0 10px; justify-content: center; }
+.side-collapsed .side-toggle { margin-left: 0; }
+.side-collapsed .nav-item { justify-content: center; padding: 0; }
+.side-collapsed .side-foot { justify-content: center; padding: 10px 0; }
+
+/* 拖拽把手：贴着右边界，命中区比可见线宽（8px），键盘聚焦时显形 */
+.side-resizer {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  z-index: 7;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+.side-resizer::after {
+  content: '';
+  width: 2px;
+  height: 100%;
+  background: transparent;
+  transition: background 0.12s;
+}
+.side-resizer:hover::after,
+.side-resizer:focus-visible::after { background: var(--ink); opacity: 0.18; }
+.side-resizer:focus-visible { outline: none; }
+.side-resizer-grip { display: none; }
 
 /* 版本徽章：脚部必须一眼看得出当前版本 */
 .ver-tag {
@@ -636,6 +697,120 @@ table.levels tbody tr:last-child td { border-bottom: 0; }
   border-radius: 4px;
   margin: 4px 0 0;
 }
+
+/* 服务首页的 cwd：一行路径，过长时省略，别把卡片撑高。 */
+.sg-cwd {
+  font-size: 12px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 启动参数弹窗：一行一个字段，标签在上，控件占满宽度。 */
+.sg-launch-row {
+  margin-bottom: 12px;
+}
+.sg-launch-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.sg-launch-meta {
+  font-size: 11px;
+}
+.sg-launch-desc {
+  font-size: 11px;
+  margin-top: 3px;
+}
+
+/* 测试组执行结果：一步一块，输出可单独滚动，不把弹窗撑爆。 */
+.sg-report {
+  max-height: 58vh;
+  overflow: auto;
+}
+.sg-report-step {
+  border: var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+.sg-report-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.sg-report-kind {
+  font-weight: 600;
+}
+.sg-report-detail {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  max-height: 160px;
+  overflow: auto;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  background: var(--bg-soft, #f6f7f8);
+  border-radius: 4px;
+}
+
+/* 服务首页的日志预览：只放最近几条事件，完整内容仍在 LogsDrawer。 */
+.sg-log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding-top: 8px;
+  border-top: var(--border);
+}
+.sg-log-pre {
+  font-size: 11px;
+  line-height: 1.55;
+  max-height: 220px;
+  overflow: auto;
+  padding: 8px;
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--soft);
+  border-radius: 4px;
+}
+
+/* ---- 服务页引导：模板预览 / 空态三步走 / 列表空态 ----
+   新手第一次打开看到的就是这三块，密度要低、命令要能直接照抄。 */
+.sg-list-empty { padding: 12px; border-top: var(--border); }
+.sg-tpl-preview {
+  padding: 10px 12px;
+  background: var(--soft);
+  border-radius: 4px;
+  font-size: 12px;
+}
+.sg-tpl-steps {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+.sg-field-err { font-size: 11px; color: #e5484d; margin-top: 4px; }
+.sg-quickstart-code {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: var(--soft);
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+.sg-quickstart-list { display: flex; flex-direction: column; gap: 10px; }
+.sg-quickstart-item { padding-top: 10px; border-top: var(--border); }
+.sg-quickstart-item:first-child { padding-top: 0; border-top: 0; }
+.sg-quickstart-head { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.sg-quickstart-summary { font-size: 12px; margin-top: 4px; line-height: 1.6; }
 
 /* ---- 服务组日志抽屉 ---- */
 .sg-log-pre {

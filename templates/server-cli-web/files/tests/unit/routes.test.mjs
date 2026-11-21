@@ -57,3 +57,13 @@ test('契约文件不该被当成路由（contract.ts 必须存在且导出 defi
   const src = readFileSync(join(ROUTES, 'contract.ts'), 'utf8');
   assert.match(src, /export function definePage/, 'contract.ts 必须导出 definePage');
 });
+
+test('默认壳是左侧栏，且 pages.ts 不回头 import layouts.ts（防循环依赖白屏）', () => {
+  const home = readFileSync(join(ROUTES, 'home.ts'), 'utf8');
+  assert.doesNotMatch(home, /^\s*layout:\s*'app'/m, '首页不应写死顶栏壳——要展示默认的左侧栏');
+  const def = readFileSync(join(FRONTEND, 'app/layout-default.ts'), 'utf8');
+  assert.match(def, /DEFAULT_LAYOUT\s*=\s*'sidebar'/, '默认壳必须是 sidebar');
+  const pages = readFileSync(join(FRONTEND, 'app/pages.ts'), 'utf8');
+  assert.match(pages, /from '\.\/layout-default\.js'/, 'pages.ts 只能读常量文件');
+  assert.doesNotMatch(pages, /from '\.\/layouts\.js'/, 'pages.ts 不得 import layouts.ts（会形成 pages→layouts→shell→nav→pages 环）');
+});

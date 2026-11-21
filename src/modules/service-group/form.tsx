@@ -2,15 +2,15 @@
 // 纯表单：State 形状 + 双向转换 + JSX 表单体，不含任何 API 调用。
 //
 // 组件库：antd Form 家族（token 见 components/theme.tsx）。
-// 客户端脚本区用「可排序步骤」而不是多选框——流水线的执行顺序就是配置顺序，
-// 多选框表达不了顺序，用户只能靠勾选先后猜，那就等于没有流水线。
+// 本表单只管「配置一次」的字段；测试脚本组（工作流）在设置页的流水线 Tab 里编辑。
 import { Form, Input, InputNumber, Select, Switch, Space } from 'antd';
 import { SpaceField } from './space-field.js';
-import { StepsField } from './form-steps.js';
-import type { GroupConfig, StopMode } from './types.js';
+import type { GroupConfig, LaunchParam, LaunchProfile, StopMode } from './types.js';
 
 export interface FormState {
   name: string;
+  desc: string;
+  cwd: string;
   mainScript: string;
   mainArgs: string;
   stopScript: string;
@@ -30,21 +30,28 @@ export interface FormState {
   spacePanel: string;
   spaceCheck: string;
   clients: string[];
+  launchParams: LaunchParam[];
+  launchProfiles: LaunchProfile[];
 }
 
 export function emptyForm(): FormState {
   return {
     name: '',
+    desc: '',
+    cwd: '',
     mainScript: '',
     mainArgs: '',
     stopScript: '',
     killPort: '',
     stopMode: 'auto',
+    // 默认值对齐模板 node-ping：端口 18080、HTTP /ping。
+    // 检测开关仍是关的（没选主脚本就开检测没有意义），但一打开就是能用的值，
+    // 不用先去猜「端口填什么、路径填什么」。
     healthEnabled: false,
-    healthKind: 'port',
+    healthKind: 'http',
     healthHost: '127.0.0.1',
-    healthPort: '',
-    healthPath: '/health',
+    healthPort: '18080',
+    healthPath: '/ping',
     healthIntervalMs: '5000',
     healthFailThreshold: '3',
     healthReadyTimeoutMs: '20000',
@@ -54,12 +61,16 @@ export function emptyForm(): FormState {
     spacePanel: '',
     spaceCheck: 'checkUp',
     clients: [],
+    launchParams: [],
+    launchProfiles: [],
   };
 }
 
 export function formFromConfig(c: GroupConfig): FormState {
   return {
     name: c.name,
+    desc: c.desc ?? '',
+    cwd: c.cwd ?? '',
     mainScript: c.main?.script ?? '',
     mainArgs: (c.main?.args ?? []).join(' '),
     stopScript: c.stop?.script ?? '',
@@ -79,6 +90,8 @@ export function formFromConfig(c: GroupConfig): FormState {
     spacePanel: c.space?.panel ?? c.shared ?? '',
     spaceCheck: c.space?.check ?? 'checkUp',
     clients: [...c.clients],
+    launchParams: c.launch ? c.launch.params.map((p) => ({ ...p, options: p.options ? [...p.options] : undefined })) : [],
+    launchProfiles: c.launch?.profiles ? c.launch.profiles.map((p) => ({ name: p.name, values: { ...p.values } })) : [],
   };
 }
 
@@ -86,6 +99,8 @@ export function configFromForm(id: string, f: FormState): Record<string, unknown
   const num = (s: string) => (s.trim() ? Number(s.trim()) : undefined);
   return {
     name: f.name || id,
+    desc: f.desc.trim() || undefined,
+    cwd: f.cwd.trim() || undefined,
     main: f.mainScript ? { script: f.mainScript, args: f.mainArgs.split(/\s+/).filter(Boolean) } : undefined,
     stop: f.stopScript ? { script: f.stopScript, args: [] } : undefined,
     killPort: num(f.killPort),
@@ -105,22 +120,48 @@ export function configFromForm(id: string, f: FormState): Record<string, unknown
     shared: f.shared || undefined,
     space: f.spaceEnabled ? { panel: f.spacePanel || f.shared || undefined, check: f.spaceCheck || 'checkUp' } : undefined,
     clients: f.clients,
+    launch: f.launchParams.length
+      ? {
+          params: f.launchParams,
+          profiles: f.launchProfiles.length ? f.launchProfiles : undefined,
+        }
+      : undefined,
   };
 }
 
 interface Props {
   form: FormState;
   set: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
-  toggleClient: (name: string) => void;
   entryScripts: { name: string }[];
   panelScripts: { name: string }[];
 }
 
-export function SgForm({ form, set, toggleClient, entryScripts, panelScripts }: Props) {
+export function SgForm({ form, set, entryScripts, panelScripts }: Props) {
   return (
     <Form layout="vertical" size="small" className="sg-form-body">
       <Form.Item label="显示名">
         <Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="我的服务" />
+      </Form.Item>
+
+      <Form.Item label="说明（desc）" extra="首页会显示这段话：这个服务跑什么、给谁用。">
+        <Input.TextArea
+          value={form.desc}
+          onChange={(e) => set('desc', e.target.value)}
+          placeholder="例如：客户查询 API，长驻 Node 进程，端口 18080"
+          autoSize={{ minRows: 2, maxRows: 4 }}
+        />
+      </Form.Item>
+
+      <Form.Item
+        label="工作目录（cwd）"
+        extra="服务进程在这里运行；client 产物 / 测试数据也落这里。留空用默认目录。"
+      >
+        <Input
+          value={form.cwd}
+          onChange={(e) => set('cwd', e.target.value)}
+          placeholder="C:\\Users\\...\\services\\groups\\<组 id>"
+          className="mono"
+        />
       </Form.Item>
 
       <Form.Item label="主脚本（长驻服务，IO 重定向到日志）">
@@ -212,11 +253,15 @@ export function SgForm({ form, set, toggleClient, entryScripts, panelScripts }: 
                 addonAfter="冷启动慢就调大（java -jar / go build）"
                 style={{ width: '100%' }}
               />
-              {/* 自愈不再是表单字段：它是长脚本三动作之一，入口在状态卡的开关上。
-                  这里只说明「去哪开」，避免同一件事有两个开关互相打架。 */}
-              <span className="muted">
-                失活后是否重启 → 由状态卡的「自愈」开关控制（当前：{form.onDead === 'restart' ? '开' : '关'}）
-              </span>
+              {/* 自愈开关放在设置页：首页只留探活/启动/停止三个按钮，
+                  避免「自愈」和「启动」两个开关在同一张卡上互相打架。 */}
+              <Space size={8}>
+                <Switch
+                  checked={form.onDead === 'restart'}
+                  onChange={(v) => set('onDead', v ? 'restart' : 'none')}
+                />
+                <span className="muted">失活后自动重启（自愈）</span>
+              </Space>
             </>
           )}
         </Space>
@@ -272,13 +317,6 @@ export function SgForm({ form, set, toggleClient, entryScripts, panelScripts }: 
       </Form.Item>
 
       <SpaceField form={form} set={set} panelScripts={panelScripts} shared={form.shared} />
-
-      <StepsField
-        clients={form.clients}
-        entryScripts={entryScripts}
-        setClients={(next) => set('clients', next)}
-        toggleClient={toggleClient}
-      />
     </Form>
   );
 }
