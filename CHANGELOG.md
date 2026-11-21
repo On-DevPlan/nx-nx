@@ -1,5 +1,16 @@
 ## [Unreleased]
 
+### 随包 skill 重构为 A/B ref-map（任务 #22）
+
+- `SKILL.md` 从 27KB 大杂烩收敛为 64 行路由表：A 序列 = 脚本 / 服务使用 SOP，
+  B 序列 = 模板 / 初始化生成 SOP；细节全部下沉到 `references/A01-script.md`、
+  `A02-service.md`、`B01-template.md`、`B02-init.md`。
+- 删除背景型 `A01-product.md`（非 SOP），产品说明并入主文档与 B01；序列命名、
+  加载时机、正反例、验收清单按 key-board 规范统一。
+- 事实层逐条对齐 CLI 与模板：`sg set` 示例在隔离 `NX_NX_HOME` 实跑通过；
+  命令参数对照 `help script/sg/template`、模板选项对照 `template describe`；
+  修正旧文档的生成项目数据目录（`~/.<name>/store.json`）与 mono-gf skill 描述。
+
 ### 服务组案例全链路复验（任务 #21 第 2 轮）
 
 - `sg init ping-case`（node-ping 模板）→ `sg run`：空间闸门 `checkUp` → 启动 → HTTP 探活
