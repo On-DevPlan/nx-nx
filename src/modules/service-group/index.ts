@@ -116,14 +116,14 @@ export default defineModule({
       id: 'serviceGroup.start',
       cli: ['sg', 'start'],
       http: ['POST', '/api/service-groups/:id/start'],
-      summary: '启动主脚本（detached + 日志重定向；可按启动参数覆盖端口 / 配置文件 / 环境）',
+      summary: '启动主脚本（detached + 日志重定向；--entry 选择一条启动脚本 / 版本）',
       args: ['id'],
       flags: {
-        values: { type: 'string', hint: '启动参数 JSON，如 {"port":"18081","env":"prod"}' },
+        entry: { type: 'string', hint: '启动脚本版本名，如 预发；留空用上次或列表第一条' },
       },
       schema: startInput,
     })(
-      (ctx) => service.start(ctx.id, ctx.values),
+      (ctx) => service.start(ctx.id, ctx.entry),
       (r) => (r.started ? `已启动 (pid ${r.pid})\n  日志: ${r.logFile}` : `未重复启动：${r.detail}`),
     ),
 
@@ -264,7 +264,9 @@ export default defineModule({
           const s = r.server;
           const mark = s.status !== 'running' ? '·' : s.alive === false ? '✘' : '✔';
           lines.push(`  server  ${mark} ${s.script} ${s.args.join(' ')}`.trimEnd());
-          lines.push(`          状态 ${s.status}${s.pid ? ` (pid ${s.pid})` : ''}${s.detail ? ` · ${s.detail}` : ''}`);
+          lines.push(
+            `          状态 ${s.status}${s.pid ? ` (pid ${s.pid})` : ''}${s.entry ? ` · 版本 ${s.entry}` : ''}${s.port ? ` · 端口 ${s.port}` : ''}${s.detail ? ` · ${s.detail}` : ''}`,
+          );
         } else {
           lines.push('  server  （未配置）');
         }
@@ -325,14 +327,14 @@ export default defineModule({
       id: 'serviceGroup.run',
       cli: ['sg', 'run'],
       http: ['POST', '/api/service-groups/:id/run'],
-      summary: '一键运行测试组：空间 check → 启动 main → 等活性就绪 → clients / 测试脚本依次执行',
+      summary: '一键运行测试组：空间 check → 按启动脚本启动 main → 等活性就绪 → clients / 测试脚本依次执行',
       args: ['id'],
       flags: {
-        values: { type: 'string', hint: '启动参数 JSON，如 {"port":"18081","env":"prod"}' },
+        entry: { type: 'string', hint: '启动脚本版本名，如 预发；留空用上次或列表第一条' },
       },
       schema: startInput,
     })(
-      (ctx) => service.run(ctx.id, ctx.values),
+      (ctx) => service.run(ctx.id, ctx.entry),
       (r) => {
         const lines = [`${r.ok ? '✔' : '✘'} 流水线 ${r.groupId}:`];
         for (const s of r.steps) {

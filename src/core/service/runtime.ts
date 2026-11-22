@@ -23,12 +23,13 @@ import {
   saveGroups,
   updateRuntime,
   DEFAULT_CHECK_METHOD,
+  type HealthConfig,
   type ServiceGroupConfig,
 } from './store.js';
 import { appendEvent } from './logs.js';
 import { pidAlive, stopGroup as stopProcesses, type StopResult } from './stop.js';
 import { serviceHttpLogsDir, serviceGroupDir, serviceLogsDir } from './paths.js';
-import { applyLaunchArgs, effectiveHealth, launchEnv, launchPort, normalizeLaunchValues, type LaunchValues } from './launch.js';
+import { resolveLaunch, type ResolvedLaunch } from './launch.js';
 import { checkSpace } from './namespace.js';
 import { runnerPath } from '../script/paths.js';
 import { resolveServicePanel, resolveServiceScript } from './scripts.js';
@@ -103,14 +104,21 @@ export async function spaceGate(g: ServiceGroupConfig): Promise<SpaceGateResult 
 
 export async function startGroup(
   id: string,
-  opts: { skipGate?: boolean; values?: LaunchValues } = {},
+  opts: { skipGate?: boolean; entry?: string } = {},
 ): Promise<{ started: boolean; pid?: number; logFile: string; detail: string }> {
   const g = getGroup(id);
   if (!g.main) throw new Error(`服务组 ${id} 未配置主脚本（main）`);
   let rt = loadRuntime(id);
-  // 本次启动参数：显式传入优先；自愈/重复启动沿用 runtime 里上一次的值。
-  const values = normalizeLaunchValues(g, opts.values ?? rt.launch);
-  const health = effectiveHealth(g, values);
+  // 选哪一条启动脚本：显式 --entry 优先；否则沿用上次启动的版本；都没有就用列表第一条。
+  let launch: ResolvedLaunch;
+  try {
+    launch = resolveLaunch(g, opts.entry ?? rt.entry);
+  } catch (err) {
+    // 上次选的版本被删掉了：自愈/重复启动回退到第一条，不把服务卡死；显式指定则如实报错。
+    if (opts.entry) throw err;
+    launch = resolveLaunch(g);
+  }
+  const health = launch.health;
 
   // 空间闸门：不过就不启动（保守：宁可不起，也不假装活）
   if (!opts.skipGate) {
@@ -123,19 +131,25 @@ export async function startGroup(
     }
   }
 
-  // 显式换了版本（端口 / 环境 / 配置文件）而旧进程还在：先停旧的，再按新参数起。
+  // 显式换了启动脚本而旧进程还在：先停旧的，再按新版本起。
   // 否则 running 的短路会让流水线对着新端口探活，却留着旧端口上的进程。
-  if (opts.values && rt.status === 'running' && rt.pid && (await pidAlive(rt.pid))) {
-    const prev = normalizeLaunchValues(g, rt.launch);
-    if (JSON.stringify(prev) !== JSON.stringify(values)) {
+  if (rt.status === 'running' && rt.pid && (await pidAlive(rt.pid))) {
+    const prevEntry = rt.entry ?? '';
+    const nextEntry = launch.entry?.name ?? '';
+    if (prevEntry !== nextEntry) {
       const stopped = await stopProcesses(id, { silent: true });
-      appendEvent(id, `启动参数变化，先停止旧进程：${stopped.detail}`);
+      appendEvent(id, `启动版本切换（${prevEntry || '默认'} → ${nextEntry || '默认'}），先停止旧进程：${stopped.detail}`);
       rt = loadRuntime(id);
     }
   }
 
   if (rt.status === 'running' && rt.pid && (await pidAlive(rt.pid))) {
-    return { started: false, pid: rt.pid, logFile: rt.logFile ?? '', detail: '已在运行' };
+    return {
+      started: false,
+      pid: rt.pid,
+      logFile: rt.logFile ?? '',
+      detail: `已在运行${rt.entry ? `（版本 ${rt.entry}）` : ''}`,
+    };
   }
   if (health) {
     const c = await checkHealth(health);
@@ -155,22 +169,25 @@ export async function startGroup(
 
   const logFile = newLogFile(id);
   const fd = openSync(logFile, 'a');
-  appendFileSync(fd, `\n===== 启动 ${new Date().toISOString()} · 组 ${id} · 脚本 ${g.main.script} =====\n`, 'utf8');
+  appendFileSync(
+    fd,
+    `\n===== 启动 ${new Date().toISOString()} · 组 ${id} · 版本 ${launch.entry?.name ?? '默认'} · 脚本 ${launch.script} =====\n`,
+    'utf8',
+  );
 
   // 每组自己的 cwd：启动进程、client、临时产物都在这里，不再和别的服务共用目录。
   const cwd = g.cwd || serviceGroupDir(g.id);
   mkdirSync(cwd, { recursive: true });
 
-  const target = resolveMainScript(g.id, g.main.script);
-  const args = applyLaunchArgs(g, g.main.args, values);
+  const target = resolveMainScript(g.id, launch.script);
   const child = spawn(
     process.execPath,
-    [runnerPath(), target, ...args],
+    [runnerPath(), target, ...launch.args],
     {
       detached: true,
       cwd,
       stdio: ['ignore', fd, fd],
-      env: sharedEnv(g, values),
+      env: sharedEnv(g, launch),
     },
   );
   child.unref();
@@ -181,12 +198,22 @@ export async function startGroup(
     startedAt: Date.now(),
     logFile,
     failStreak: 0,
-    launch: values,
+    entry: launch.entry?.name,
+    port: launch.port ?? launch.health?.port,
+    alive: undefined,
+    lastCheckAt: undefined,
+    detail: '启动中，等待首次探活',
   });
   // 刚 spawn：宽限一个 interval 再检测（端口还没 bind 就报失活是假警报）
   startWatcher(g.id, { immediate: false });
-  appendEvent(id, `启动主脚本 ${g.main.script}（pid ${child.pid}）→ 日志 ${logFile}`);
-  return { started: true, pid: child.pid, logFile, detail: '已启动（日志见 ' + logFile + '）' };
+  appendEvent(id, `启动主脚本 ${launch.script}（版本 ${launch.entry?.name ?? '默认'}，pid ${child.pid}）→ 日志 ${logFile}`);
+  const port = launch.port ?? launch.health?.port;
+  return {
+    started: true,
+    pid: child.pid,
+    logFile,
+    detail: `已启动（版本 ${launch.entry?.name ?? '默认'}${port ? ` · 端口 ${port}` : ''}，日志见 ${logFile}）`,
+  };
 }
 
 // 主脚本名 → 组命名空间里的绝对路径（与 serve 进程的 cwd 无关）。
@@ -195,7 +222,7 @@ function resolveMainScript(groupId: string, name: string): string {
 }
 
 // 组内脚本执行时的环境：共享面板路径 + serve 端口（check 函数要用）
-function sharedEnv(g: ServiceGroupConfig, values?: LaunchValues): NodeJS.ProcessEnv {
+function sharedEnv(g: ServiceGroupConfig, launch: ResolvedLaunch): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
   if (g.shared) {
     env['NX_SHARED_PANEL'] = resolveServicePanel(g.id, g.shared).path;
@@ -205,15 +232,14 @@ function sharedEnv(g: ServiceGroupConfig, values?: LaunchValues): NodeJS.Process
   env['NX_HTTP_LOG_DIR'] = serviceHttpLogsDir(g.id);
   // 这个服务自己的工作目录（脚本里可写 client 产物 / 缓存 / 测试数据）
   env['NX_SERVICE_DIR'] = g.cwd || serviceGroupDir(g.id);
-  // 本次实际端口 / URL：让 client 与共享面板跟着启动参数走，而不是死记模板里的默认端口。
-  const h = effectiveHealth(g, values);
-  const port = launchPort(g, values) ?? h?.port;
+  // 本次实际端口 / URL：让 client 与共享面板跟着启动版本走，而不是死记模板里的默认端口。
+  const port = launch.port ?? launch.health?.port;
   if (port) {
     env['NX_SERVICE_PORT'] = String(port);
-    env['NX_SERVICE_URL'] = `http://${h?.host ?? '127.0.0.1'}:${port}`;
+    env['NX_SERVICE_URL'] = `http://${launch.health?.host ?? '127.0.0.1'}:${port}`;
   }
-  // 启动参数里声明了 env 的（如 NODE_ENV / CONFIG_FILE）
-  Object.assign(env, launchEnv(g, values));
+  // 启动脚本声明的环境变量（如 NODE_ENV / CONFIG_FILE）
+  Object.assign(env, launch.env);
   return env;
 }
 
@@ -278,7 +304,12 @@ async function tickWatch(id: string): Promise<void> {
     stopWatcher(id);
     return;
   }
-  const health = effectiveHealth(g, rt.launch);
+  let health: HealthConfig | undefined = g.health;
+  try {
+    health = resolveLaunch(g, rt.entry).health;
+  } catch {
+    // 启动版本被改掉/删掉时，退回配置里的 health；监控不能因为配置编辑而停摆。
+  }
   if (!health) return;
   const result: CheckResult = await checkHealth(health);
   const failStreak = result.alive ? 0 : rt.failStreak + 1;

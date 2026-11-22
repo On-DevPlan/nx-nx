@@ -1,5 +1,6 @@
 // 服务组列表 / 详情的文本输出（从 index.ts 拆出，避免单文件超行数上限）。
 import { serviceScriptsDir } from '../../core/service/paths.js';
+import { resolveLaunch } from '../../core/service/launch.js';
 import type { GroupView } from './types.js';
 
 const CONFIG_HINT = `--config '{
@@ -34,6 +35,7 @@ export function formatGroupList(groups: GroupView[]): string {
         : '';
     lines.push(
       `  ${g.config.id}  ${g.config.name}  [${rt.status}]${aliveMark}` +
+        (rt.entry ? ` 版本 ${rt.entry}${rt.port ? `:${rt.port}` : ''}` : '') +
         (rt.restarts ? ` 自愈${rt.restarts}次` : '') +
         (g.config.health?.onDead === 'none' ? ' · 自愈OFF' : ''),
     );
@@ -45,12 +47,26 @@ export function formatGroupList(groups: GroupView[]): string {
 export function formatGroupShow(r: GroupView): string {
   const c = r.config;
   const rt = r.runtime;
+  let launch: ReturnType<typeof resolveLaunch> | undefined;
+  try {
+    launch = resolveLaunch(c, rt.entry);
+  } catch {
+    // 配置不完整 / 启动脚本被删：show 仍要能看，退回静态 health。
+  }
+  const healthPort = rt.port ?? launch?.health?.port ?? c.health?.port;
   const lines = [
     `服务组 ${c.id} · ${c.name}`,
-    `  状态: ${rt.status}${rt.pid ? ` (pid ${rt.pid})` : ''}${rt.alive === undefined ? '' : rt.alive ? ' · 活性 OK' : ' · 活性 FAIL'}`,
+    `  状态: ${rt.status}${rt.pid ? ` (pid ${rt.pid})` : ''}${rt.entry ? ` · 版本 ${rt.entry}` : ''}${rt.port ? ` · 端口 ${rt.port}` : ''}${rt.alive === undefined ? '' : rt.alive ? ' · 活性 OK' : ' · 活性 FAIL'}`,
     `  main: ${c.main ? c.main.script + ' ' + c.main.args.join(' ') : '(未配置)'}`,
-    `  stop: ${c.stop ? c.stop.script : '(无关停脚本)'}${c.killPort ? ` · 杀端口 ${c.killPort}` : ''} · mode=${c.stopMode}`,
-    `  health: ${c.health ? `${c.health.kind} ${c.health.host}:${c.health.port}${c.health.path} · 每 ${c.health.intervalMs}ms · 阈值 ${c.health.failThreshold} · 就绪上限 ${c.health.readyTimeoutMs}ms` : '(未配置)'}`,
+    `  启动脚本: ${
+      c.launch?.entries.length
+        ? c.launch.entries
+            .map((e) => `${e.name}${e.port ? `(:${e.port})` : ''}${e.script ? ` [${e.script}]` : ''}`)
+            .join(' · ')
+        : '(未配置，按 main 默认参数启动)'
+    }`,
+    `  stop: ${c.stop ? c.stop.script : '(无关停脚本)'}${c.killPort ? ` · 兜底端口 ${c.killPort}` : ''} · mode=${c.stopMode}`,
+    `  health: ${c.health ? `${c.health.kind} ${c.health.host}:${healthPort}${c.health.path} · 每 ${c.health.intervalMs}ms · 阈值 ${c.health.failThreshold} · 就绪上限 ${c.health.readyTimeoutMs}ms` : '(未配置)'}`,
     `  自愈: ${c.health ? (c.health.onDead === 'restart' ? '开启（失活即重启）' : '关闭（只记录）') : '(无检测，不可用)'}`,
     `  shared: ${c.shared ?? '(无)'}`,
     `  clients: ${c.clients.length ? c.clients.join(', ') : '(无)'}`,

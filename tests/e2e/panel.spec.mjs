@@ -111,6 +111,20 @@ test('服务页：设置页建 ping-demo → 首页只留探活/启动/停止 + 
   await expect(page.locator('.sg-detail')).toContainText('check 方法');
   await expect(page.locator('.sg-detail')).toContainText('工作目录（cwd）');
   await expect(page.locator('.sg-detail')).toContainText('说明（desc）');
+  // 启动脚本列表就在「基础配置」里，不另开「启动参数」栏目。
+  await expect(page.getByRole('tab', { name: '启动参数' })).toHaveCount(0);
+  await expect(page.locator('.sg-launch-field')).toBeVisible();
+  await expect(page.locator('.sg-launch-entry')).toHaveCount(3); // 默认 / 预发 / 生产
+  const preRow = page.locator('.sg-launch-entry').nth(1);
+  await expect(preRow.locator('input[placeholder^="版本名"]')).toHaveValue('预发');
+  await expect(preRow.locator('.ant-input-number input')).toHaveValue('18081');
+
+  // 列表是真实可编辑并落盘的：改「预发」的说明 → 保存 → 配置里读得到。
+  await preRow.locator('input[placeholder="一句话说明（可留空）"]').fill('E2E 预发环境');
+  await page.getByRole('button', { name: '保存配置' }).click();
+  await expect(page.locator('.toast-stack')).toContainText('已保存');
+  const saved = await (await page.request.get('/api/service-groups/ping-demo')).json();
+  expect(saved.data.config.launch.entries[1].desc).toBe('E2E 预发环境');
   // 测试脚本组收在「流水线」Tab：选脚本、排序、新建 client 都在这里。
   await page.getByRole('tab', { name: '流水线' }).click();
   await expect(page.locator('.sg-detail')).toContainText('测试脚本组（工作流，1 个步骤）');
@@ -128,20 +142,17 @@ test('服务页：设置页建 ping-demo → 首页只留探活/启动/停止 + 
   await expect(detail).toContainText('零依赖的 Node HTTP 服务');
   await expect(detail).not.toContainText('主脚本（长驻服务');
 
-  // 启动参数：模板自带三个可填字段，预设能一键换端口。
+  // 启动脚本列表：三个版本，选一个再确认；不再弹参数输入框。
   await detail.getByRole('button', { name: '启动' }).click();
   const launch = page.locator('.ant-modal').filter({ hasText: '启动 · Ping 服务' });
   await expect(launch).toBeVisible();
-  await expect(launch.locator('.sg-launch-row')).toHaveCount(4); // 预设 + 端口 + 环境 + 配置文件
-  const portInput = launch.locator('.ant-input-number-input');
-  await expect(portInput).toHaveValue('18080');
-  await launch.locator('.sg-launch-row').first().locator('.ant-select').click();
-  // 虚拟列表里的选项在不同 DPI 下会被判成 transient；用键盘选第二项（预发）更稳。
-  await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('Enter');
-  await expect(portInput).toHaveValue('18081');
-  await launch.locator('.ant-modal-footer button').first().click();
+  await expect(launch.locator('.sg-launch-pick')).toHaveCount(3); // 默认 / 预发 / 生产
+  await launch.getByText('预发', { exact: true }).click();
+  await expect(launch.locator('.sg-launch-pick-env').filter({ hasText: 'NODE_ENV=staging' }).first()).toBeVisible();
+  await launch.locator('.ant-modal-footer button.ant-btn-primary').click();
   await expect(launch).toBeHidden();
+  await expect(detail).toContainText('启动版本：预发');
+  await expect(detail.getByRole('button', { name: '切换版本' })).toBeVisible();
 
   // 一键运行测试组：先启动/复用服务，再按设置页顺序跑 client，最后给逐步结果。
   await detail.getByRole('button', { name: /运行测试组/ }).click();

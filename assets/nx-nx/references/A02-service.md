@@ -1,6 +1,6 @@
 ---
 name: A02-service
-description: nx-nx 服务组场景 SOP——模板建组、探活、失活自愈、stop 四种模式、启动参数、流水线、共享面板与管理空间。起长驻服务、排查自愈或流水线问题时读。
+description: nx-nx 服务组场景 SOP——模板建组、探活、失活自愈、stop 四种模式、启动脚本列表、流水线、共享面板与管理空间。起长驻服务、排查自愈或流水线问题时读。
 ---
 
 # A02 · 服务组
@@ -31,7 +31,7 @@ nx-nx sg stop ping-demo          # 关闭
 | 脚本命名空间 | 本组的 server / stop / client / shared 都只住在这里，与全局脚本模块隔离 | `~/.nx-nx/services/groups/<id>/scripts/` |
 | 共享面板 | 常量 + 函数 + API 封装，组内脚本执行前自动装载 | `shared` |
 
-可选字段：`stop`（优雅关停脚本）、`killPort`（兜底杀端口）、`stopMode`（默认 `auto`）、`desc`（首页说明）、`cwd`（服务自己的工作目录，默认 `~/.nx-nx/services/groups/<id>`）、`space`（管理空间与起飞闸门）、`launch`（启动参数与预设）。
+可选字段：`stop`（优雅关停脚本）、`killPort`（兜底杀端口）、`stopMode`（默认 `auto`）、`desc`（首页说明）、`cwd`（服务自己的工作目录，默认 `~/.nx-nx/services/groups/<id>`）、`space`（管理空间与起飞闸门）、`launch`（启动脚本列表，每个版本一套 script / args / env / port）。
 
 主脚本与 client 都以该组 `cwd` 为工作目录，环境变量 `NX_SERVICE_DIR` 指向它。
 
@@ -76,7 +76,7 @@ nx-nx sg set my-svc --config '{
 | `sg list` / `sg show <id>` | 列表 / 配置 + 运行态详情 |
 | `sg set <id> --config <JSON>` | 创建或整组更新配置 |
 | `sg script <id> --op read/save/create/delete --name <名> [--content <全文>]` | 组命名空间内脚本读写（不碰全局脚本模块） |
-| `sg start <id> [--values JSON]` | 启动主脚本（先过闸门） |
+| `sg start <id> [--entry 版本名]` | 启动主脚本（先过闸门；选择启动脚本列表中的一条） |
 | `sg stop <id> [--mode auto\|script\|port\|pid]` | 关闭，模式见下 |
 | `sg autoheal <id> --state on\|off` | 自愈开关（监控不停） |
 | `sg status [id]` / `sg check <id>` | 运行态快照 / 立即探活 |
@@ -84,7 +84,7 @@ nx-nx sg set my-svc --config '{
 | `sg hub <id>` | 一组看清 server / client / 空间方法 / 当前状态 |
 | `sg space <id>` / `sg space-call <id> --method <名> [--args JSON数组]` | 空间方法清单 + 状态堆 / 调用方法 |
 | `sg spaces` | 本机所有管理空间 |
-| `sg run <id> [--values JSON]` | 一键测试组：闸门 → 启动/复用 → 等活性 → clients 依次执行 |
+| `sg run <id> [--entry 版本名]` | 一键测试组：闸门 → 启动/复用 → 等活性 → clients 依次执行 |
 | `sg delete <id>` | 删除服务组（须先停） |
 
 `stopMode` 四种走法：
@@ -96,28 +96,38 @@ nx-nx sg set my-svc --config '{
 | `port` | 直接杀占用端口的进程 | 用户点名「关掉这个端口」 |
 | `pid` | 只杀运行态记录的 pid | 端口可能被别的进程占用，避免误杀 |
 
-## 5. 启动参数与多版本
+## 5. 启动脚本列表与多版本
 
-`launch.params` 让同一组按不同端口 / 配置文件 / 环境启动：
+同一组按不同端口 / 配置文件 / 环境启动，靠的是 `launch.entries`：每一条就是一套完整启动命令，没有「参数表单」这一层。
 
 ```json
 "launch": {
-  "params": [
-    { "key": "port", "label": "端口", "type": "number", "default": "18080", "arg": "port" },
-    { "key": "env", "label": "运行环境", "type": "select", "options": ["development", "staging"], "default": "development", "env": "NODE_ENV" },
-    { "key": "config", "label": "配置文件", "type": "text", "default": "config/default.json", "arg": "config" }
-  ],
-  "profiles": [
-    { "name": "默认", "values": { "port": "18080", "env": "development", "config": "config/default.json" } },
-    { "name": "预发", "values": { "port": "18081", "env": "staging", "config": "config/staging.json" } }
+  "entries": [
+    {
+      "name": "默认",
+      "script": "my-server",
+      "args": ["--port", "18080", "--config", "config/default.json"],
+      "env": { "NODE_ENV": "development" },
+      "port": 18080,
+      "desc": "本机开发"
+    },
+    {
+      "name": "预发",
+      "args": ["--port", "18081", "--config", "config/staging.json"],
+      "env": { "NODE_ENV": "staging" },
+      "port": 18081
+    }
   ]
 }
 ```
 
-- `type`：`text` / `number` / `select`；`arg` 追加成 `--<arg> <value>`；`env` 注入同名环境变量。
-- CLI 用 `--values` 传同一份值：`sg start my-svc --values '{"port":"18081","env":"staging"}'`。
-- **`key` 或 `arg` 为 `port` 的参数同时驱动 argv、探活与 stop 端口**；换端口只改这里，别只改 config 里的 `killPort`。
-- 本次值写进运行态，自愈重启沿用；面板首页「启动」先弹参数表单，可选预设再逐项改。
+- `script` 可省略：沿用 `main.script`；也可写组内另一个启动包装脚本名。
+- `args` 是这一版的完整 argv，**不继承** `main.args`；`env` 原样注入；`port` 驱动 argv / 探活 / stop 三处。面板参数框识别单 / 双引号，带空格路径写成 `"C:\Program Files\..."`。
+- 列表第一条是默认版本。Web 首页「启动」弹出的是版本列表（选一行 + 确认），不填参数。
+- CLI：`sg start my-svc --entry 预发`；不写 `--entry` 时沿用上次版本，首次用列表第一条。
+- 切换版本会先停旧进程再起新版本；运行态记录 `entry` 与 `port`，自愈重启沿用同一版本。Web 运行中主按钮变「切换版本」，选当前版本保持不动。
+- 设置页「基础配置」底部维护这张列表（增删 / 排序 / 脚本 / 参数 / 环境 / 端口），没有单独的「启动参数」栏目。
+- 模板生成的三条只演示端口与 `NODE_ENV`；示例里的 `config/*.json` 是示意，真实项目的配置文件按自己的相对 / 绝对路径写进 `args`。
 
 ## 6. 流水线：client 按顺序跑
 
@@ -148,7 +158,7 @@ nx-nx sg set my-svc --config '{
 - watcher 按 `intervalMs` 检测；连续 `failThreshold` 次失败且 `onDead: "restart"` → 自动停掉再拉起，次数记在运行态。
 - **watcher 活在 `nx-nx serve` 进程里**：serve 不在跑时只做检测 / 手动 start / stop，不自动重启。
 - `sg autoheal <id> --state off` 只关「处理」，**监控不停**；用于「先观察一阵」。
-- 自愈重启沿用本次启动参数（端口 / 环境 / 配置文件），不会退回模板默认。
+- 自愈重启沿用本次启动脚本版本（`entry` 与 `port` 都记在运行态），不会退回模板默认端口。
 
 ## 9. 日志与数据在哪
 
@@ -172,7 +182,7 @@ nx-nx sg set my-svc --config '{
 | 把一次性脚本设成 `main` | 它跑完就退出，会被判失活并反复重启；一次性的事用 `script run` |
 | health 路径写错（服务是 `/ping`，配置写 `/health`） | 探活 404 会判失活 → 自愈循环；路径必须与主脚本真实路由一致 |
 | 没开 serve 却等自愈 | watcher 在 serve 里；先 `nx-nx serve`，或接受手动 start / stop |
-| 换端口只改 `killPort` | 同步改 `launch.params` 的 port 参数，argv / 探活 / stop 都跟它走 |
+| 换端口只改 `killPort` | 同步改对应启动脚本的 `port` 或 args 里的 `--port`；argv / 探活 / stop 都跟它走 |
 | `checkUp` 里查本服务是否活着 | 循环依赖，永远 false；只判上游依赖 |
 | 端口被别的进程占用还选 `port` 模式 | 会误杀；改 `pid` 模式只杀本组记录的进程 |
 | 把 `.shared.mjs` 当入口跑 | 只被自动装载 / import；见 [[A01-script]] |
@@ -186,6 +196,8 @@ nx-nx sg set my-svc --config '{
 - [ ] `sg init` 生成的脚本与配置能直接 `sg run`，client 有成功输出
 - [ ] `sg check` 启动后 `alive=true`，`sg stop` 后端口关闭
 - [ ] `sg show` 的 pid / 活性 / 自愈次数与实际一致
-- [ ] 换 `--values` 端口后，探活与 stop 都打到新端口
+- [ ] 换 `--entry` 版本后，argv / 探活 / stop 都打到该版本端口；运行态 `entry` 与 `port` 对得上
+- [ ] 设置页没有独立「启动参数」栏目，启动脚本列表可增删排序并写进配置
+- [ ] 首页「启动」弹出版本列表（不是输入表单），切换版本会先停旧进程
 - [ ] 需要自愈时，serve 在跑；杀主进程后运行态 `restarts` 增长
 - [ ] client 日志与 HTTP 一请求一日志都落在对应目录

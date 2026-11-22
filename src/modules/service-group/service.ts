@@ -25,6 +25,7 @@ import {
   stopGroup,
 } from '../../core/service/runtime.js';
 import type { StopResult } from '../../core/service/stop.js';
+import { resolveLaunch } from '../../core/service/launch.js';
 import { runPipeline } from '../../core/service/pipeline.js';
 import { groupLogs } from '../../core/service/logs.js';
 import {
@@ -57,8 +58,10 @@ export interface ServiceGroupView {
     restarts: number;
     lastEvent?: string;
     logFile?: string;
-    /** 上一次启动实际使用的参数（端口 / 环境 / 配置文件）。 */
-    launch?: Record<string, string>;
+    /** 上一次启动实际使用的启动脚本版本。 */
+    entry?: string;
+    /** 上一次实际使用的监听端口。 */
+    port?: number;
   };
   /** show 时附带：该组命名空间里的脚本（list 不逐组扫描，避免 N 次磁盘读）。 */
   scripts?: ReturnType<typeof listServiceScripts>;
@@ -79,7 +82,8 @@ export function listGroups(): ServiceGroupView[] {
         restarts: rt.restarts,
         lastEvent: rt.lastEvent,
         logFile: rt.logFile,
-        launch: rt.launch,
+        entry: rt.entry,
+        port: rt.port,
       },
     };
   });
@@ -100,7 +104,8 @@ export function showGroup(id: unknown): ServiceGroupView {
       restarts: rt.restarts,
       lastEvent: rt.lastEvent,
       logFile: rt.logFile,
-      launch: rt.launch,
+      entry: rt.entry,
+      port: rt.port,
     },
     scripts: listServiceScripts(g.id),
   };
@@ -135,29 +140,10 @@ export async function deleteGroup(id: unknown): Promise<{ id: string; stopped: s
 
 export function start(
   id: unknown,
-  values?: unknown,
+  entry?: unknown,
 ): Promise<{ started: boolean; pid?: number; logFile: string; detail: string }> {
-  const parsed = parseLaunchValues(values);
-  return startGroup(assertGroupId(id), parsed ? { values: parsed } : {});
-}
-
-// 启动参数从 CLI/HTTP 传进来时是 JSON 字符串；必须是「字符串到字符串」的对象。
-function parseLaunchValues(raw: unknown): Record<string, string> | undefined {
-  if (raw === undefined || raw === null || raw === '') return undefined;
-  let obj: unknown = raw;
-  if (typeof raw === 'string') {
-    try {
-      obj = JSON.parse(raw);
-    } catch {
-      throw new Error(`启动参数必须是 JSON 对象：${raw}`);
-    }
-  }
-  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
-    throw new Error('启动参数必须是 JSON 对象');
-  }
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) out[k] = String(v);
-  return out;
+  const name = typeof entry === 'string' && entry.trim() ? entry.trim() : undefined;
+  return startGroup(assertGroupId(id), name ? { entry: name } : {});
 }
 
 export function stop(id: unknown, mode?: unknown): Promise<StopResult> {
@@ -189,16 +175,24 @@ export function logs(id: unknown): ReturnType<typeof groupLogs> {
 // 立即执行一次活性检测（设置检测后，这就是「函数面板 check 的服务端事实源」）
 export async function check(id: unknown): Promise<{ id: string; alive: boolean; detail: string }> {
   const g = getGroup(assertGroupId(id));
-  if (!g.health) throw new Error(`服务组 ${g.id} 未配置活性检测（health）`);
+  let health = g.health;
+  if (g.main || g.launch?.entries?.length) {
+    try {
+      health = resolveLaunch(g, loadRuntime(g.id).entry).health;
+    } catch {
+      // 启动脚本被删 / 配置不完整时退回组级 health，探活本身不该跟着报错。
+    }
+  }
+  if (!health) throw new Error(`服务组 ${g.id} 未配置活性检测（health）`);
   const { checkHealth } = await import('../../core/service/check.js');
-  const r = await checkHealth(g.health);
+  const r = await checkHealth(health);
   return { id: g.id, alive: r.alive, detail: r.detail };
 }
 
 // 流水线：main 启动 → 等活性 → clients（测试脚本组）依次执行
-export function run(id: unknown, values?: unknown): ReturnType<typeof runPipeline> {
-  const parsed = parseLaunchValues(values);
-  return runPipeline(assertGroupId(id), parsed);
+export function run(id: unknown, entry?: unknown): ReturnType<typeof runPipeline> {
+  const name = typeof entry === 'string' && entry.trim() ? entry.trim() : undefined;
+  return runPipeline(assertGroupId(id), name);
 }
 
 // ---- 管理空间 ----
@@ -266,7 +260,17 @@ export async function spaceSnapshot(id: unknown): Promise<SpaceActionResult> {
 export interface HubOverview {
   id: string;
   name: string;
-  server: { script: string; args: string[]; status: string; pid?: number; alive?: boolean; detail?: string } | null;
+  server: {
+    script: string;
+    args: string[];
+    status: string;
+    pid?: number;
+    alive?: boolean;
+    detail?: string;
+    /** 当前运行态使用的启动脚本版本；没配版本列表时为空。 */
+    entry?: string;
+    port?: number;
+  } | null;
   clients: string[];
   stop: string;
   health: string;
@@ -284,24 +288,33 @@ export async function hubOverview(id: unknown): Promise<HubOverview> {
     const r = await introspectSpace(resolvePanelPath(s.panel, gid));
     if (r.ok) methods = (r.methods ?? []).map((m) => m.name);
   }
+  let launch: ReturnType<typeof resolveLaunch> | undefined;
+  try {
+    launch = resolveLaunch(g, rt.entry);
+  } catch {
+    // 配置被改坏 / 没有 main：hub 仍要能看，退回 main 的静态描述。
+  }
+  const health = launch?.health;
   return {
     id: g.id,
     name: g.name,
     server: g.main
       ? {
-          script: g.main.script,
-          args: g.main.args,
+          script: launch?.script ?? g.main.script,
+          args: launch?.args ?? g.main.args,
           status: rt.status,
           pid: rt.pid,
           alive: rt.alive,
           detail: rt.detail,
+          entry: launch?.entry?.name,
+          port: launch?.port,
         }
       : null,
     clients: g.clients,
-    stop: g.stop ? `${g.stop.script} · mode=${g.stopMode}` : `mode=${g.stopMode}${g.killPort ? ` · 杀端口 ${g.killPort}` : ''}`,
-    health: g.health ? `${g.health.kind} ${g.health.host}:${g.health.port}` : '（无）',
+    stop: g.stop ? `${g.stop.script} · mode=${g.stopMode}` : `mode=${g.stopMode}${g.killPort ? ` · 兜底端口 ${g.killPort}` : ''}`,
+    health: health ? `${health.kind} ${health.host}:${health.port}` : '（无）',
     space: s ? { panel: s.panel, check: s.check, methods } : null,
-    nextCommand: `nx-nx sg run ${g.id}`,
+    nextCommand: launch?.entry ? `nx-nx sg run ${g.id} --entry ${JSON.stringify(launch.entry.name)}` : `nx-nx sg run ${g.id}`,
   };
 }
 

@@ -258,40 +258,34 @@ function buildConfig(t: TemplateDef, groupId: string, name: string, port: number
       shared: shared?.name,
       space: shared ? { panel: shared.name, check: 'checkUp' } : undefined,
       clients,
-      // 启动版本：端口 / 配置文件 / 环境都做成可填字段；预设只是把常用组合一键填好。
+      // 启动脚本列表：每一版就是一条完整命令（脚本 / 参数 / 环境 / 端口）。
+      // 启动前只在列表里选版本，不再声明「参数表单」。
       launch: {
-        params: [
+        entries: [
           {
-            key: 'port',
-            label: '端口',
-            type: 'number',
-            default: String(port),
-            arg: 'port',
-            placeholder: '18080',
-            description: '服务监听端口；探活与 stop 会跟着这个值走。',
+            name: '默认',
+            script: main.name,
+            args: ['--port', String(port)],
+            env: { NODE_ENV: 'development' },
+            port,
+            desc: '本机开发：默认端口',
           },
           {
-            key: 'env',
-            label: '运行环境',
-            type: 'select',
-            options: ['development', 'staging', 'production'],
-            default: 'development',
-            env: 'NODE_ENV',
+            name: '预发',
+            script: main.name,
+            args: ['--port', String(shiftPort(port, 1))],
+            env: { NODE_ENV: 'staging' },
+            port: shiftPort(port, 1),
+            desc: '预发环境：端口 +1，NODE_ENV=staging',
           },
           {
-            key: 'config',
-            label: '配置文件',
-            type: 'text',
-            default: 'config/default.json',
-            arg: 'config',
-            placeholder: 'config/default.json',
-            description: '作为 --config 传给主脚本；脚本不读也不影响启动。',
+            name: '生产',
+            script: main.name,
+            args: ['--port', String(shiftPort(port, 2))],
+            env: { NODE_ENV: 'production' },
+            port: shiftPort(port, 2),
+            desc: '生产环境：端口 +2，NODE_ENV=production',
           },
-        ],
-        profiles: [
-          { name: '默认', values: { port: String(port), env: 'development', config: 'config/default.json' } },
-          { name: '预发', values: { port: String(port + 1), env: 'staging', config: 'config/staging.json' } },
-          { name: '生产', values: { port: String(port + 2), env: 'production', config: 'config/prod.json' } },
         ],
       },
     },
@@ -306,6 +300,11 @@ function toPort(raw: unknown, fallback: number): number {
     throw badInput(`端口非法: ${String(raw)}（须为 1~65535 的整数）`);
   }
   return n;
+}
+
+// 版本端口偏移：向上越过 65535 就向下找，保证三套版本仍有不同的合法端口。
+function shiftPort(port: number, delta: number): number {
+  return port + delta <= 65535 ? port + delta : Math.max(1, port - delta);
 }
 
 export function planTemplate(input: InitInput): TemplatePlan {

@@ -55,6 +55,7 @@ nx-nx sg stop ping-demo
 - 必填项因模板而异：`server-cli-web` 是 `letters`，`mono-gf` 是 `name`，`std-a-lang` 是 `lang`；先 `describe`。
 - 服务组 `main` 必须是**长驻**脚本；一次性的事用 `script run`，否则会被判失活并反复重启。
 - 服务组脚本住在 `~/.nx-nx/services/groups/<id>/scripts/`，不属于全局脚本模块；`script list` 看不到它们，用 `sg script` 读写。
+- 多版本启动只维护 `launch.entries`（每版一套 script / args / env / port）；启动用 `--entry 版本名`，没有 `--values` 参数表单。
 - `.shared.mjs` 不能作入口运行——它只被 `import` 或服务组自动装载。
 - 自愈 watcher 只活在 `nx-nx serve` 进程里；没开 serve 时只能手动 `sg start` / `sg stop`。
 - 生成项目的端口在**创建时**探测并写进生成物；换端口要重新生成或同步改对应配置。

@@ -13,7 +13,7 @@ import { useDialog, useToast } from '../../web/frontend/components/ui.jsx';
 import { useStore } from '../../web/frontend/store.jsx';
 import { SgForm, configFromForm, emptyForm, formFromConfig, type FormState } from './form.js';
 import { StepsField } from './form-steps.js';
-import { LaunchField } from './launch-field.js';
+import { LaunchEntriesField } from './launch-entries-field.js';
 import { PipelineCanvas } from './pipeline-canvas.js';
 import { SpacePanel } from './space-panel.js';
 import { CreateGroupModal, type CreateInput } from './create-modal.js';
@@ -304,26 +304,17 @@ export default function ServiceSettingsView() {
                     key: 'basic',
                     label: '基础配置',
                     children: (
-                      <SgForm
-                        form={form}
-                        set={set}
-                        entryScripts={entryScripts}
-                        panelScripts={panelScripts}
-                      />
-                    ),
-                  },
-                  {
-                    key: 'launch',
-                    label: '启动参数',
-                    children: (
                       <>
-                        <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-                          同一个服务可以按不同版本启动：改端口 / 配置文件 / 环境变量，启动前再确认。
-                        </Typography.Paragraph>
-                        <LaunchField
-                          params={form.launchParams}
-                          profiles={form.launchProfiles}
-                          setParams={(next) => set('launchParams', next)}
+                        <SgForm
+                          form={form}
+                          set={set}
+                          entryScripts={entryScripts}
+                          panelScripts={panelScripts}
+                        />
+                        <LaunchEntriesField
+                          entries={form.launchEntries}
+                          entryScripts={entryScripts}
+                          setEntries={(next) => set('launchEntries', next)}
                         />
                       </>
                     ),

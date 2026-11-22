@@ -14,7 +14,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { probePort } from './check.js';
 import { appendEvent } from './logs.js';
-import { effectiveHealth, launchPort, type LaunchValues } from './launch.js';
+import { resolveLaunch } from './launch.js';
 import {
   getGroup,
   loadRuntime,
@@ -123,8 +123,18 @@ export function resolveStopMode(g: ServiceGroupConfig, override?: string): StopM
 }
 
 /** 这个组「关闭端口」指的是哪个端口：本次启动的 port 参数 → 显式 killPort → 探活端口。 */
-export function stopPortOf(g: ServiceGroupConfig, values?: LaunchValues): number | undefined {
-  return launchPort(g, values) ?? g.killPort ?? effectiveHealth(g, values)?.port;
+export function stopPortOf(g: ServiceGroupConfig): number | undefined {
+  const rt = loadRuntime(g.id);
+  if (rt.port) return rt.port;
+  if (rt.entry) {
+    try {
+      const port = resolveLaunch(g, rt.entry).port;
+      if (port) return port;
+    } catch {
+      // 配置里的启动脚本被删掉时，退回 killPort / 探活端口。
+    }
+  }
+  return g.killPort ?? g.health?.port;
 }
 
 /** 关停脚本的绝对路径（组命名空间定位，与 cwd 无关） */
@@ -177,8 +187,13 @@ export async function stopGroup(
   const g = getGroup(id);
   const rt = loadRuntime(id);
   const mode = resolveStopMode(g, opts.mode);
-  const health = effectiveHealth(g, rt.launch);
-  const port = stopPortOf(g, rt.launch);
+  let health = g.health;
+  try {
+    health = resolveLaunch(g, rt.entry).health;
+  } catch {
+    // 没有 main 的组也可能只是占端口 / 记录 pid；保持原探活配置即可。
+  }
+  const port = stopPortOf(g);
   const notes: string[] = [];
 
   const clear = async (): Promise<boolean> => {

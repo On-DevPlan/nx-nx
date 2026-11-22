@@ -37,18 +37,7 @@ export const setInput = z.object({
 
 export const startInput = z.object({
   id: groupId,
-  values: z
-    .string()
-    .optional()
-    .refine((s) => {
-      if (s === undefined || s === '') return true;
-      try {
-        const v: unknown = JSON.parse(s);
-        return Boolean(v) && typeof v === 'object' && !Array.isArray(v);
-      } catch {
-        return false;
-      }
-    }, 'values 必须是启动参数字符串到字符串的 JSON 对象'),
+  entry: z.string().trim().optional(),
 });
 
 export const stopInput = z.object({

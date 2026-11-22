@@ -43,8 +43,15 @@ export function formatInit(r: InitResult): string {
   lines.push(
     r.config.stop
       ? `  stop      ${r.config.stop.script} · mode=${r.config.stopMode}`
-      : `  stop      mode=${r.config.stopMode}${r.config.killPort ? ` · 杀端口 ${r.config.killPort}` : ''}`,
+      : `  stop      mode=${r.config.stopMode}${r.config.killPort ? ` · 兜底端口 ${r.config.killPort}` : ''}`,
   );
+  if (r.config.launch?.entries.length) {
+    lines.push(
+      `  launch    ${r.config.launch.entries
+        .map((e) => `${e.name}${e.port ? `(:${e.port})` : ''}`)
+        .join(' · ')}（第一条默认；启动时选版本）`,
+    );
+  }
   if (r.config.shared) {
     lines.push(`  shared    ${r.config.shared}${r.config.space ? ` · check=${r.config.space.check}` : ''}`);
   }

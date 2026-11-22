@@ -4,8 +4,19 @@
 // 组件库：antd Form 家族（token 见 components/theme.tsx）。
 // 本表单只管「配置一次」的字段；测试脚本组（工作流）在设置页的流水线 Tab 里编辑。
 import { Form, Input, InputNumber, Select, Switch, Space } from 'antd';
+import { joinArgsText, splitArgsText } from './args-text.js';
 import { SpaceField } from './space-field.js';
-import type { GroupConfig, LaunchParam, LaunchProfile, StopMode } from './types.js';
+import type { GroupConfig, StopMode } from './types.js';
+
+/** 启动脚本编辑器里的字符串形态：参数 / 环境变量用文本编辑，保存时再解析。 */
+export interface LaunchEntryForm {
+  name: string;
+  script: string;
+  argsText: string;
+  envText: string;
+  port: string;
+  desc: string;
+}
 
 export interface FormState {
   name: string;
@@ -30,8 +41,7 @@ export interface FormState {
   spacePanel: string;
   spaceCheck: string;
   clients: string[];
-  launchParams: LaunchParam[];
-  launchProfiles: LaunchProfile[];
+  launchEntries: LaunchEntryForm[];
 }
 
 export function emptyForm(): FormState {
@@ -61,8 +71,7 @@ export function emptyForm(): FormState {
     spacePanel: '',
     spaceCheck: 'checkUp',
     clients: [],
-    launchParams: [],
-    launchProfiles: [],
+    launchEntries: [],
   };
 }
 
@@ -90,13 +99,40 @@ export function formFromConfig(c: GroupConfig): FormState {
     spacePanel: c.space?.panel ?? c.shared ?? '',
     spaceCheck: c.space?.check ?? 'checkUp',
     clients: [...c.clients],
-    launchParams: c.launch ? c.launch.params.map((p) => ({ ...p, options: p.options ? [...p.options] : undefined })) : [],
-    launchProfiles: c.launch?.profiles ? c.launch.profiles.map((p) => ({ name: p.name, values: { ...p.values } })) : [],
+    launchEntries: (c.launch?.entries ?? []).map((e) => ({
+      name: e.name,
+      script: e.script ?? '',
+      argsText: joinArgsText(e.args),
+      envText: Object.entries(e.env)
+        .map(([k, v]) => `${k}=${v}`)
+        .join('\n'),
+      port: e.port ? String(e.port) : '',
+      desc: e.desc ?? '',
+    })),
   };
 }
 
 export function configFromForm(id: string, f: FormState): Record<string, unknown> {
   const num = (s: string) => (s.trim() ? Number(s.trim()) : undefined);
+  const entries = f.launchEntries
+    .filter((e) => e.name.trim())
+    .map((e) => {
+      const env: Record<string, string> = {};
+      for (const line of e.envText.split(/\r?\n|,/)) {
+        const at = line.indexOf('=');
+        if (at <= 0) continue;
+        const k = line.slice(0, at).trim();
+        if (k) env[k] = line.slice(at + 1).trim();
+      }
+      return {
+        name: e.name.trim(),
+        script: e.script.trim() || undefined,
+        args: splitArgsText(e.argsText),
+        env,
+        port: num(e.port),
+        desc: e.desc.trim() || undefined,
+      };
+    });
   return {
     name: f.name || id,
     desc: f.desc.trim() || undefined,
@@ -120,12 +156,7 @@ export function configFromForm(id: string, f: FormState): Record<string, unknown
     shared: f.shared || undefined,
     space: f.spaceEnabled ? { panel: f.spacePanel || f.shared || undefined, check: f.spaceCheck || 'checkUp' } : undefined,
     clients: f.clients,
-    launch: f.launchParams.length
-      ? {
-          params: f.launchParams,
-          profiles: f.launchProfiles.length ? f.launchProfiles : undefined,
-        }
-      : undefined,
+    launch: entries.length ? { entries } : undefined,
   };
 }
 

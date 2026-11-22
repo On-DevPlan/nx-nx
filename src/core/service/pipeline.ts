@@ -8,7 +8,7 @@
 // 依赖没就绪就别起，起早了只会白占端口再被杀掉。check 不过直接短路，不启动。
 import { runScript } from '../script/service.js';
 import { checkHealth } from './check.js';
-import { effectiveHealth, launchEnv, launchPort, type LaunchValues } from './launch.js';
+import { resolveLaunch, type ResolvedLaunch } from './launch.js';
 import { serviceGroupDir, serviceHttpLogsDir } from './paths.js';
 import { resolveServicePanel, resolveServiceScript } from './scripts.js';
 import { appendClientRecord } from './logs.js';
@@ -35,7 +35,7 @@ export interface PipelineReport {
 
 const ALIVE_POLL_MS = 500;
 
-export async function runPipeline(groupId: string, values?: LaunchValues): Promise<PipelineReport> {
+export async function runPipeline(groupId: string, entryName?: string): Promise<PipelineReport> {
   const g: ServiceGroupConfig = getGroup(groupId);
   const steps: PipelineStepReport[] = [];
   let ok = true;
@@ -54,7 +54,7 @@ export async function runPipeline(groupId: string, values?: LaunchValues): Promi
   // 1) 主脚本（skipGate：上面已经问过闸门了，不重复起子进程）
   if (g.main) {
     try {
-      const r = await startGroup(groupId, { skipGate: true, values });
+      const r = await startGroup(groupId, { skipGate: true, entry: entryName });
       steps.push({ step: 'main.start', script: g.main.script, ok: true, detail: r.detail });
     } catch (err) {
       steps.push({ step: 'main.start', script: g.main.script, ok: false, detail: msg(err) });
@@ -62,13 +62,22 @@ export async function runPipeline(groupId: string, values?: LaunchValues): Promi
     }
   }
 
-  // 2) 等活性就绪（上限按组配置：java -jar / go build 冷启动常常超过 20s）
-  //    端口若由启动参数覆盖，探活也要跟着走同一个端口。
-  //    启动后 runtime 里已写入本次参数；显式 values 优先。
-  const launchValues = values ?? loadRuntime(groupId).launch;
-  const health = effectiveHealth(g, launchValues);
-  const servicePort = launchPort(g, launchValues) ?? health?.port;
+  // 本次实际生效的启动脚本：startGroup 可能因为旧版本被删而回退，所以从运行态重新解析。
+  let launch: ResolvedLaunch;
+  if (g.main) {
+    try {
+      launch = resolveLaunch(g, loadRuntime(groupId).entry ?? entryName);
+    } catch {
+      launch = resolveLaunch(g);
+    }
+  } else {
+    launch = { script: '', args: [], env: {}, port: undefined, health: g.health };
+  }
+  const health = launch.health;
+  const servicePort = launch.port ?? health?.port;
   const serviceUrl = servicePort ? `http://${health?.host ?? '127.0.0.1'}:${servicePort}` : '';
+  const startStep = steps.find((s) => s.step === 'main.start');
+  if (startStep && launch.script) startStep.script = launch.script;
   if (health) {
     const deadline = Date.now() + health.readyTimeoutMs;
     let alive = false;
@@ -82,7 +91,7 @@ export async function runPipeline(groupId: string, values?: LaunchValues): Promi
       }
       await new Promise((r) => setTimeout(r, ALIVE_POLL_MS));
     }
-    steps.push({ step: 'main.alive', script: g.main?.script ?? '', ok: alive, detail });
+    steps.push({ step: 'main.alive', script: launch.script, ok: alive, detail });
     if (!alive) {
       await stopGroup(groupId, { silent: true });
       return { groupId, ok: false, steps };
@@ -115,7 +124,7 @@ export async function runPipeline(groupId: string, values?: LaunchValues): Promi
           ...(process.env.NX_NX_SERVE_PORT ? { NX_NX_SERVE_PORT: process.env.NX_NX_SERVE_PORT } : {}),
           NX_HTTP_LOG_DIR: serviceHttpLogsDir(g.id),
           NX_SERVICE_DIR: g.cwd || serviceGroupDir(g.id),
-          ...launchEnv(g, launchValues),
+          ...launch.env,
           ...(servicePort ? { NX_SERVICE_PORT: String(servicePort), NX_SERVICE_URL: serviceUrl } : {}),
         },
       });

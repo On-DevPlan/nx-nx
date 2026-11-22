@@ -30,6 +30,7 @@ const { listTemplates, getTemplate, planTemplate, applyTemplate, templatesRoot }
 const { loadGroups, saveGroups, loadRuntime, normalizeGroup } = await import('../../src/core/service/store.js');
 const { startGroup, stopGroup } = await import('../../src/core/service/runtime.js');
 const { runPipeline } = await import('../../src/core/service/pipeline.js');
+const { check: checkService } = await import('../../src/modules/service-group/service.js');
 const { listScripts } = await import('../../src/core/script/paths.js');
 const {
   resolveServiceScript,
@@ -58,8 +59,27 @@ function freePort() {
   });
 }
 
-async function waitPing(port, timeoutMs = 15000) {
-  const deadline = Date.now() + timeoutMs;
+// 给已存在的组换一条自定义启动脚本（模拟用户在设置页加一个「预发」版本）。
+function useAltEntry(groupId, alt) {
+  const groups = loadGroups();
+  const g = groups.find((x) => x.id === groupId);
+  if (!g?.main) throw new Error(`组 ${groupId} 不存在`);
+  g.launch = {
+    entries: [
+      {
+        name: '预发',
+        script: g.main.script,
+        args: ['--port', String(alt), '--config', 'config/staging.json'],
+        env: { NODE_ENV: 'staging' },
+        port: alt,
+        desc: '测试用预发版本',
+      },
+    ],
+  };
+  saveGroups(groups);
+}
+
+async function waitPing(port, timeoutMs = 15000) {  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
       const r = await fetch(`http://127.0.0.1:${port}/ping`);
@@ -107,18 +127,16 @@ test('planTemplate：脚本名、端口、health、shared/space/clients 都按�
   assert.deepEqual(plan.config.space, { panel: 'demo-svc.shared', check: 'checkUp' });
   assert.deepEqual(plan.config.clients, ['demo-svc-client']);
   assert.equal(plan.config.stopMode, 'auto');
-  // 启动版本：端口 / 环境 / 配置文件三个可填参数 + 三套预设。
+  // 启动脚本列表：三条完整版本，不再声明参数表单。
   assert.deepEqual(
-    plan.config.launch?.params.map((p) => p.key),
-    ['port', 'env', 'config'],
-  );
-  assert.equal(plan.config.launch?.params[0]?.default, '18123');
-  assert.deepEqual(plan.config.launch?.params[1]?.options, ['development', 'staging', 'production']);
-  assert.deepEqual(
-    plan.config.launch?.profiles?.map((p) => p.name),
+    plan.config.launch?.entries.map((e) => e.name),
     ['默认', '预发', '生产'],
   );
-  assert.equal(plan.config.launch?.profiles?.[1]?.values.port, '18124');
+  assert.deepEqual(plan.config.launch?.entries[0]?.args, ['--port', '18123']);
+  assert.deepEqual(plan.config.launch?.entries[0]?.env, { NODE_ENV: 'development' });
+  assert.equal(plan.config.launch?.entries[1]?.port, 18124);
+  assert.deepEqual(plan.config.launch?.entries[1]?.env, { NODE_ENV: 'staging' });
+  assert.equal(plan.config.launch?.entries[2]?.port, 18125);
   assert.equal(plan.config.name, 'Ping 服务');
   assert.match(plan.config.desc ?? '', /Node HTTP/);
   assert.match(plan.config.cwd ?? '', /services[\\/]groups[\\/]demo-svc$/);
@@ -253,20 +271,25 @@ test('组脚本 CRUD：只写本组命名空间；被配置引用的脚本不许
 
 // ---- 端到端：模板生成的脚本真的能跑 ----
 
-test('多版本启动：values 改端口 → argv / 探活 / 停止都跟着新端口', async () => {
+test('多版本启动：选择 entry 改端口 → argv / 探活 / 停止都跟着新端口', async () => {
   const base = await freePort();
   const alt = await freePort();
   process.env.NX_NX_SERVE_PORT = String(await freePort());
   applyTemplate({ groupId: 'ping-ver', port: base, templateId: 'node-ping', force: true });
+  useAltEntry('ping-ver', alt);
 
-  const started = await startGroup('ping-ver', { values: { port: String(alt), env: 'staging', config: 'config/staging.json' } });
+  const started = await startGroup('ping-ver', { entry: '预发' });
   try {
     assert.ok(await waitPing(alt), '指定端口没有起来');
     const rt = loadRuntime('ping-ver');
-    assert.equal(rt.launch?.port, String(alt));
+    assert.equal(rt.entry, '预发');
+    assert.equal(rt.port, alt);
     await assert.rejects(() => fetch(`http://127.0.0.1:${base}/ping`), '旧端口不应被监听');
     const health = await (await fetch(`http://127.0.0.1:${alt}/health`)).json();
     assert.equal(health.ok, true);
+    // 面板「探活」也要跟当前版本端口，不能拿配置里的基准端口去打。
+    const checked = await checkService('ping-ver');
+    assert.equal(checked.alive, true, checked.detail);
   } finally {
     const stopped = await stopGroup('ping-ver', { mode: 'port', silent: true });
     assert.match(stopped.detail, /已杀端口/);
@@ -278,19 +301,20 @@ test('多版本启动：values 改端口 → argv / 探活 / 停止都跟着新�
   }
 });
 
-test('一键测试组：runPipeline(values) 用新端口跑 client，执行记录落盘', async () => {
+test('一键测试组：runPipeline(entry) 用选定版本跑 client，执行记录落盘', async () => {
   const base = await freePort();
   const alt = await freePort();
   process.env.NX_NX_SERVE_PORT = String(await freePort());
   applyTemplate({ groupId: 'ping-wf', port: base, templateId: 'node-ping', force: true });
+  useAltEntry('ping-wf', alt);
 
-  const rep = await runPipeline('ping-wf', { port: String(alt), env: 'staging', config: 'config/staging.json' });
+  const rep = await runPipeline('ping-wf', '预发');
   try {
     assert.equal(rep.ok, true, rep.steps.map((s) => `${s.step}:${s.ok}:${s.detail}`).join('\n'));
     const clientStep = rep.steps.find((s) => s.step === 'client');
     assert.ok(clientStep?.ok, 'client 步骤应执行成功');
     assert.match(clientStep?.detail ?? '', /pong/);
-    assert.ok(await waitPing(alt), '测试组应在 values 指定的端口上运行服务');
+    assert.ok(await waitPing(alt), '测试组应在选定版本指定的端口上运行服务');
     await assert.rejects(() => fetch(`http://127.0.0.1:${base}/ping`), '旧端口不应被监听');
     const clientsLog = readFileSync(join(BASE, 'home', '.nx-nx', 'services', 'logs', 'clients-ping-wf.log'), 'utf8');
     assert.match(clientsLog, /ping-wf-client/);

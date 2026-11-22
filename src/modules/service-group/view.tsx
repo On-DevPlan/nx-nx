@@ -4,7 +4,7 @@
 // 这不是功能缩水：把「每天点的」和「配置一次就不动的」分开，第一次上手
 // 才不会先面对一张有八个字段的表单。
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Badge, Button, Card, Empty, Input, InputNumber, Modal, Select, Space, Tag, Tooltip, Typography } from 'antd';
+import { Alert, Badge, Button, Card, Empty, Modal, Radio, Space, Tag, Tooltip, Typography } from 'antd';
 import {
   CaretRightOutlined,
   FileTextOutlined,
@@ -18,7 +18,7 @@ import { useToast } from '../../web/frontend/components/ui.jsx';
 import { useStore } from '../../web/frontend/store.jsx';
 import { LogsDrawer } from './logs-drawer.js';
 import type { PipelineReport } from '../../core/service/pipeline.js';
-import type { GroupView, LaunchParam } from './types.js';
+import type { GroupView, LaunchEntry } from './types.js';
 
 const LIST_KEY = ['service-groups'] as const;
 
@@ -52,8 +52,7 @@ export default function ServiceView() {
   const [logsOpen, setLogsOpen] = useState(false);
   const [launchOpen, setLaunchOpen] = useState(false);
   const [launchIntent, setLaunchIntent] = useState<'start' | 'run'>('start');
-  const [launchValues, setLaunchValues] = useState<Record<string, string>>({});
-  const [launchProfile, setLaunchProfile] = useState<string | undefined>(undefined);
+  const [launchEntry, setLaunchEntry] = useState('');
   const [report, setReport] = useState<PipelineReport | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
 
@@ -94,38 +93,24 @@ export default function ServiceView() {
     await qc.invalidateQueries({ queryKey: ['service-group-logs', selected] });
   }, [qc, selected]);
 
-  const launchParams: LaunchParam[] = current?.config.launch?.params ?? [];
-  const launchProfiles = current?.config.launch?.profiles ?? [];
+  const launchEntries: LaunchEntry[] = current?.config.launch?.entries ?? [];
 
   const openLaunch = (intent: 'start' | 'run' = 'start') => {
     if (!current) return;
-    const values: Record<string, string> = {};
-    for (const p of launchParams) {
-      values[p.key] = current.runtime.launch?.[p.key] ?? p.default ?? (p.type === 'select' ? (p.options?.[0] ?? '') : '');
-    }
+    const prev = current.runtime.entry;
     setLaunchIntent(intent);
-    setLaunchValues(values);
-    setLaunchProfile(undefined);
+    setLaunchEntry(prev && launchEntries.some((e) => e.name === prev) ? prev : (launchEntries[0]?.name ?? ''));
     setLaunchOpen(true);
-  };
-
-  const applyProfile = (name: string | undefined) => {
-    setLaunchProfile(name);
-    const p = launchProfiles.find((x) => x.name === name);
-    if (!p) return;
-    const values: Record<string, string> = {};
-    for (const param of launchParams) values[param.key] = p.values[param.key] ?? param.default ?? '';
-    setLaunchValues(values);
   };
 
   const act = async (
     action: 'serviceGroup.start' | 'serviceGroup.stop' | 'serviceGroup.check' | 'serviceGroup.run',
     id: string,
-    values?: Record<string, string>,
+    entry?: string,
   ) => {
     setBusy(action + id);
     try {
-      const payload = { id, ...(values ? { values: JSON.stringify(values) } : {}) };
+      const payload = { id, ...(entry ? { entry } : {}) };
       const r = await client[action](payload);
       if (action === 'serviceGroup.run') {
         const rep = r as unknown as PipelineReport;
@@ -159,13 +144,12 @@ export default function ServiceView() {
     if (!current) return;
     const id = current.config.id;
     setLaunchOpen(false);
-    void act(launchIntent === 'run' ? 'serviceGroup.run' : 'serviceGroup.start', id, launchValues);
+    void act(launchIntent === 'run' ? 'serviceGroup.run' : 'serviceGroup.start', id, launchEntry || undefined);
   };
 
   const runWorkflow = () => {
     if (!current) return;
-    if (launchParams.length) openLaunch('run');
-    else void act('serviceGroup.run', current.config.id);
+    openLaunch('run');
   };
 
   const working = busy !== null;
@@ -175,11 +159,12 @@ export default function ServiceView() {
   // 首页优先展示主脚本的真实输出；还没有输出（刚创建/没启动过）才退回事件日志。
   const output = tailLines(logsQuery.data?.main ?? '');
   const preview = output || events;
-  // 上次启动真正用的参数：告诉用户此刻这个服务是「哪个版本」。
-  const usedLaunch = launchParams
-    .filter((p) => current?.runtime.launch?.[p.key])
-    .map((p) => `${p.label}=${current?.runtime.launch?.[p.key]}`)
-    .join(' · ');
+  // 上次启动真正用的版本：告诉用户此刻这个服务是「哪套启动脚本」。
+  const usedLaunch = current?.runtime.entry
+    ? `${current.runtime.entry}${current.runtime.port ? ` · 端口 ${current.runtime.port}` : ''}`
+    : current?.runtime.port
+      ? `默认 · 端口 ${current.runtime.port}`
+      : '';
   const workflowCount = current?.config.clients.length ?? 0;
 
   return (
@@ -200,7 +185,15 @@ export default function ServiceView() {
           >
             <div className="tpl-name mono">
               {g.runtime.status === 'running' ? (
-                <span className={g.runtime.alive === false ? 'dot dot-bad' : 'dot dot-ok'} />
+                <span
+                  className={
+                    g.runtime.alive === true
+                      ? 'dot dot-ok'
+                      : g.runtime.alive === false
+                        ? 'dot dot-bad'
+                        : 'dot'
+                  }
+                />
               ) : (
                 <span className="dot" />
               )}{' '}
@@ -268,7 +261,7 @@ export default function ServiceView() {
             </Typography.Paragraph>
             {usedLaunch && (
               <Typography.Paragraph type="secondary" style={{ marginBottom: 12, fontSize: 12 }}>
-                启动参数：{usedLaunch}
+                启动版本：{usedLaunch}
               </Typography.Paragraph>
             )}
 
@@ -283,17 +276,23 @@ export default function ServiceView() {
                   探活
                 </Button>
               </Tooltip>
-              <Tooltip title="启动主脚本（detached，IO 重定向到日志）">
+              <Tooltip
+                title={
+                  running
+                    ? launchEntries.length
+                      ? '运行中也能换版本：选一条新版本会先停旧进程再启动'
+                      : '没有启动脚本列表，运行中不能切换版本'
+                    : '启动主脚本（detached，IO 重定向到日志）；先选启动脚本版本再确认'
+                }
+              >
                 <Button
                   size="small"
                   type="primary"
                   icon={<CaretRightOutlined />}
-                  disabled={working || running}
-                  onClick={() =>
-                    launchParams.length ? openLaunch() : void act('serviceGroup.start', current.config.id)
-                  }
+                  disabled={working || (running && launchEntries.length === 0)}
+                  onClick={() => openLaunch()}
                 >
-                  启动
+                  {running ? '切换版本' : '启动'}
                 </Button>
               </Tooltip>
               <Tooltip
@@ -352,77 +351,76 @@ export default function ServiceView() {
         open={launchOpen}
         title={
           current
-            ? `${launchIntent === 'run' ? '运行测试组' : '启动'} · ${current.config.name}`
+            ? `${launchIntent === 'run' ? '运行测试组' : running ? '切换版本' : '启动'} · ${current.config.name}`
             : launchIntent === 'run'
               ? '运行测试组'
               : '启动服务'
         }
-        okText={launchIntent === 'run' ? '运行' : '启动'}
+        okText={launchIntent === 'run' ? '运行' : running ? '切换版本' : '启动'}
         cancelText="取消"
         onOk={startWithLaunch}
         onCancel={() => setLaunchOpen(false)}
         destroyOnClose
+        width={680}
       >
-        {launchProfiles.length > 0 && (
-          <div className="sg-launch-row">
-            <div className="sg-launch-label">预设</div>
-            <Select
-              value={launchProfile}
-              onChange={applyProfile}
-              allowClear
-              placeholder="自定义（不套预设）"
-              style={{ width: '100%' }}
-              options={launchProfiles.map((p) => ({ value: p.name, label: p.name }))}
+        {launchEntries.length === 0 ? (
+          current && (
+            <Alert
+              type="info"
+              showIcon
+              message="这个服务还没有启动脚本列表，将按主脚本默认参数启动"
+              description={
+                <span className="mono">
+                  {current.config.main?.script ?? '（未配置主脚本）'}{' '}
+                  {(current.config.main?.args ?? []).join(' ')}
+                </span>
+              }
             />
-          </div>
+          )
+        ) : (
+          <Radio.Group
+            value={launchEntry}
+            onChange={(e) => setLaunchEntry(String(e.target.value))}
+            style={{ width: '100%' }}
+          >
+            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+              {launchEntries.map((e, i) => {
+                const script = e.script || current?.config.main?.script || '';
+                const envKeys = Object.keys(e.env);
+                return (
+                  <Radio key={e.name} value={e.name} style={{ width: '100%', margin: 0 }}>
+                    <div className="sg-launch-pick">
+                      <div className="sg-launch-pick-head">
+                        <Typography.Text strong>{e.name}</Typography.Text>
+                        {i === 0 && <Tag color="blue">默认</Tag>}
+                        {e.desc && <span className="muted">{e.desc}</span>}
+                        {e.port && <span className="mono muted">:{e.port}</span>}
+                      </div>
+                      <div className="muted mono sg-launch-pick-cmd">
+                        {script} {e.args.join(' ')}
+                      </div>
+                      {envKeys.length > 0 && (
+                        <div className="muted mono sg-launch-pick-env">
+                          {envKeys.map((k) => `${k}=${e.env[k]}`).join(' · ')}
+                        </div>
+                      )}
+                    </div>
+                  </Radio>
+                );
+              })}
+            </Space>
+          </Radio.Group>
         )}
-        {launchParams.map((p) => {
-          const value = launchValues[p.key] ?? '';
-          return (
-            <div className="sg-launch-row" key={p.key}>
-              <div className="sg-launch-label">
-                {p.label}
-                {(p.arg || p.env) && (
-                  <span className="muted mono sg-launch-meta">
-                    {p.arg ? `--${p.arg}` : ''}
-                    {p.arg && p.env ? ' · ' : ''}
-                    {p.env ? `$${p.env}` : ''}
-                  </span>
-                )}
-              </div>
-              {p.type === 'select' ? (
-                <Select
-                  value={value || undefined}
-                  onChange={(v) => setLaunchValues({ ...launchValues, [p.key]: v ?? '' })}
-                  placeholder={p.placeholder || '请选择'}
-                  style={{ width: '100%' }}
-                  options={(p.options ?? []).map((o) => ({ value: o, label: o }))}
-                />
-              ) : p.type === 'number' ? (
-                <InputNumber
-                  value={value ? Number(value) : undefined}
-                  onChange={(v) => setLaunchValues({ ...launchValues, [p.key]: v == null ? '' : String(v) })}
-                  placeholder={p.placeholder}
-                  style={{ width: '100%' }}
-                />
-              ) : (
-                <Input
-                  value={value}
-                  onChange={(e) => setLaunchValues({ ...launchValues, [p.key]: e.target.value })}
-                  placeholder={p.placeholder}
-                />
-              )}
-              {p.description && <div className="muted sg-launch-desc">{p.description}</div>}
-            </div>
-          );
-        })}
         <Alert
+          style={{ marginTop: 12 }}
           type="info"
           showIcon
           message={
             launchIntent === 'run'
-              ? '参数用于本次运行：先启动/复用服务，再按设置页的顺序执行测试脚本。'
-              : '参数会写入本次运行态：自愈重启沿用，停止会按这里填的端口关服务。'
+              ? '按选中的启动脚本起服务，再顺序执行测试脚本；切换版本会先停旧进程。'
+              : running
+                ? '选另一条会先停旧进程再按新版本启动；选当前版本则保持不动。'
+                : '启动后记录当前版本：自愈重启沿用，停止按这个版本的端口关。'
           }
         />
       </Modal>

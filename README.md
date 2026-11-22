@@ -258,50 +258,58 @@ nx-nx sg init my-svc --template node-ping --port 18090 --name "我的服务"
 nx-nx sg init my-svc --dry                          # 只看会生成什么，不落盘
 ```
 
-### 多版本启动：同一个服务，换端口 / 配置文件 / 环境
+### 多版本启动：同一服务，用不同启动脚本
 
-服务组可以在配置里声明一组 **启动参数**（`launch.params`）：每个参数决定弹窗里显示成输入框、数字框还是下拉列表，以及启动时怎么传给主脚本。
+同一份服务代码可以按不同端口 / 配置文件 / 环境启动。控制方式是 **启动脚本列表**（`launch.entries`）：每一行就是一套完整命令，不在启动时填参数，也不需要单独的参数配置页。
 
 ```json
 "launch": {
-  "params": [
-    { "key": "port",   "label": "端口",     "type": "number", "default": "18080", "arg": "port" },
-    { "key": "env",    "label": "运行环境", "type": "select", "default": "development",
-      "options": ["development", "staging", "production"], "env": "NODE_ENV" },
-    { "key": "config", "label": "配置文件", "type": "text", "default": "config/default.json", "arg": "config" }
-  ],
-  "profiles": [
-    { "name": "预发", "values": { "port": "18081", "env": "staging",    "config": "config/staging.json" } },
-    { "name": "生产", "values": { "port": "18082", "env": "production", "config": "config/prod.json" } }
+  "entries": [
+    {
+      "name": "默认",
+      "script": "ping-server",
+      "args": ["--port", "18080", "--config", "config/default.json"],
+      "env": { "NODE_ENV": "development" },
+      "port": 18080,
+      "desc": "本机开发"
+    },
+    {
+      "name": "预发",
+      "args": ["--port", "18081", "--config", "config/staging.json"],
+      "env": { "NODE_ENV": "staging" },
+      "port": 18081
+    }
   ]
 }
 ```
 
-- `arg`：有值时追加 `--arg value`；与 `main.args` 里同名 flag 会先删掉旧值再追加。
-- `env`：有值时注入同名环境变量（如 `NODE_ENV=staging`）。
-- `key` 或 `arg` 叫 `port` 的参数就是服务监听端口：argv、探活、停止三处都跟着它走，不会出现「启动 18081、探活盯 18080」。
-- Web 首页点「启动」会先弹参数表单，顶部可选预设（默认 / 预发 / 生产），也可以逐项改；本次参数记进运行态，自愈重启沿用。
-- 模板 `node-ping` / `node-api` 创建时自带端口 / 环境 / 配置文件三个参数与三套预设；也可以在「服务设置 → 启动参数」里增删。
+- `script` 可选：不写就沿用 `main.script`；也可以指向组命名空间里另一个启动包装脚本。
+- `args` 是这一版的完整参数，不继承 `main.args`；`env` 原样注入子进程。面板参数框识别单 / 双引号，带空格的路径写成 `"C:\Program Files\..."`。
+- `port` 驱动 argv / 探活 / 停止三处，避免「启动 18081、探活盯 18080」；留空则从 `args` 里的 `--port` 推断。
+- 组内第一行是默认版本。Web 首页点「启动」弹出的是**版本列表**（不是参数表单），选一行确认即启动；本次版本记进运行态，自愈重启沿用。
+- 切换版本会先停旧进程再按新版本起，不会让旧端口上的进程继续跑；Web 服务运行中主按钮变成「切换版本」，选当前版本则保持不动。
+- 模板 `node-ping` / `node-api` 创建时自带「默认 / 预发 / 生产」三条启动脚本（端口 +0/+1/+2，配 `NODE_ENV`）；示例里的 `config/*.json` 只是示意，用自己的配置文件时把真实相对 / 绝对路径写进 `args`。在「服务设置 → 基础配置」的启动脚本列表里可以增删、排序、改参数。
 - CLI 等价写法：
 
 ```bash
-nx-nx sg start ping-demo --values '{"port":"18081","env":"staging","config":"config/staging.json"}'
+nx-nx sg start ping-demo --entry 预发
+nx-nx sg run ping-demo --entry 预发
 ```
 
 ### 测试脚本组（工作流）：一个按钮跑完「启动 → 等就绪 → 请求测试 → 记日志」
 
 长服务负责一直跑，短 client 负责请求验证。服务设置页的「流水线」Tab 里可以把 client / 测试脚本选进一个组，按上下箭头排执行顺序；首页就会出现「运行测试组 (N)」按钮：
 
-- 点按钮先按启动参数启动或复用服务，再依次执行组内脚本；服务已运行就直接复用，不会重复起进程。
+- 点按钮先从启动脚本列表里选一个版本，启动或复用服务，再依次执行组内脚本；服务已运行就直接复用，不会重复起进程。
 - 每个脚本都在服务的 cwd 里跑，退出码、耗时、stdout / stderr 追加到 `~/.nx-nx/services/logs/clients-<id>.log`。
 - client 里用 `send()` / `get()` 发的请求一请求一日志，落在 `~/.nx-nx/services/http-logs/<id>/`；日志抽屉的「HTTP 请求」能看到文件清单。
 - 执行完弹出逐步结果（空间闸门 / 启动 / 等活性 / 每个测试脚本），失败步骤直接标红；「查看执行日志」跳到 client 执行记录。
-- 启动参数会传给 client：脚本里读 `NX_SERVICE_URL` / `NX_SERVICE_PORT` 就能跟着当前端口走，不会把模板里的默认端口写死。
+- 启动脚本的 `env` 与端口会传给 client：脚本里读 `NX_SERVICE_URL` / `NX_SERVICE_PORT` 就能跟着当前版本走，不会把模板里的默认端口写死。
 
 CLI 等价：
 
 ```bash
-nx-nx sg run ping-demo --values '{"port":"18081","env":"staging"}'
+nx-nx sg run ping-demo --entry 预发
 ```
 
 ### 手工配置（已有自己的脚本时）

@@ -707,23 +707,58 @@ table.levels tbody tr:last-child td { border-bottom: 0; }
   white-space: nowrap;
 }
 
-/* 启动参数弹窗：一行一个字段，标签在上，控件占满宽度。 */
-.sg-launch-row {
-  margin-bottom: 12px;
+/* 启动脚本编辑器：一行一套完整命令，参数 / 环境变量都用等宽字体。 */
+.sg-launch-field {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #eef2f8;
 }
-.sg-launch-label {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
+.sg-launch-field-label {
   font-size: 13px;
-  margin-bottom: 4px;
+  font-weight: 500;
+  color: #2b3038;
+  margin-bottom: 2px;
 }
-.sg-launch-meta {
-  font-size: 11px;
+.sg-launch-entry {
+  border: 1px solid #dbe4f0;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcfe;
 }
-.sg-launch-desc {
+.sg-launch-entry-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.sg-launch-entry .ant-input,
+.sg-launch-entry .ant-input-number,
+.sg-launch-entry .ant-select {
+  max-width: 100%;
+}
+
+/* 启动弹窗：版本列表，不填参数；命令行预览保持单行可换行。 */
+.sg-launch-pick {
+  display: block;
+  padding: 2px 0;
+}
+.sg-launch-pick-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sg-launch-pick-cmd {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.sg-launch-pick-env {
+  margin-top: 2px;
   font-size: 11px;
-  margin-top: 3px;
 }
 
 /* 测试组执行结果：一步一块，输出可单独滚动，不把弹窗撑爆。 */

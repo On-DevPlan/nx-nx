@@ -2,28 +2,18 @@
 
 export type StopMode = 'auto' | 'script' | 'port' | 'pid';
 
-export type LaunchParamType = 'text' | 'number' | 'select';
-
-export interface LaunchParam {
-  key: string;
-  label: string;
-  type: LaunchParamType;
-  options?: string[];
-  default?: string;
-  arg?: string;
-  env?: string;
-  placeholder?: string;
-  description?: string;
-}
-
-export interface LaunchProfile {
+/** 一条启动脚本（版本）：完整命令，不再有「参数表单」这一层。 */
+export interface LaunchEntry {
   name: string;
-  values: Record<string, string>;
+  script?: string;
+  args: string[];
+  env: Record<string, string>;
+  port?: number;
+  desc?: string;
 }
 
 export interface LaunchConfig {
-  params: LaunchParam[];
-  profiles?: LaunchProfile[];
+  entries: LaunchEntry[];
 }
 
 export interface GroupConfig {
@@ -60,7 +50,8 @@ export interface GroupRuntime {
   restarts: number;
   lastEvent?: string;
   logFile?: string;
-  launch?: Record<string, string>;
+  entry?: string;
+  port?: number;
 }
 
 export interface GroupView {

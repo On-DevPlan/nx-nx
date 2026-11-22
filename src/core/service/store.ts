@@ -39,34 +39,26 @@ export interface HealthConfig {
   onDead: 'restart' | 'none'; // 失活处理，默认 restart（自愈：stop → start）
 }
 
-// 启动参数：让同一个服务按不同版本启动（端口 / 配置文件 / 环境变量）。
-//   key     —— 表单值对象里的键
-//   arg     —— 有值时追加成 `--<arg> <value>`（已有同名 flag 会被替换）
-//   env     —— 有值时注入同名环境变量
-//   type    —— 面板渲染成输入框 / 数字框 / 下拉列表
-export type LaunchParamType = 'text' | 'number' | 'select';
-
-export interface LaunchParam {
-  key: string;
-  label: string;
-  type: LaunchParamType;
-  options?: string[];
-  default?: string;
-  arg?: string;
-  env?: string;
-  placeholder?: string;
-  description?: string;
-}
-
-// 命名预设：一次点击填好一组参数（默认 / 预发 / 生产…），字段仍可手改。
-export interface LaunchProfile {
+// 启动脚本（启动版本）：同一个服务可以按不同端口 / 配置文件 / 环境启动。
+// 每一条就是一套完整的启动方式：脚本（默认沿用 main.script）、参数、环境变量、端口。
+// 不声明「参数表单」，启动前只在列表里选一个版本。
+export interface LaunchEntry {
+  /** 版本名，也是 CLI --entry 的值；组内唯一 */
   name: string;
-  values: Record<string, string>;
+  /** 这一版用哪个脚本；留空沿用 main.script（可指向组内另一个启动包装脚本） */
+  script?: string;
+  /** 完整参数（不继承 main.args）；start 时原样追加到脚本后面 */
+  args: string[];
+  /** 注入的环境变量 */
+  env: Record<string, string>;
+  /** 服务监听端口；留空则从 args 的 --port 推断。探活与 stop 都跟着它走 */
+  port?: number;
+  /** 一句话说明（面板上显示） */
+  desc?: string;
 }
 
 export interface LaunchConfig {
-  params: LaunchParam[];
-  profiles?: LaunchProfile[];
+  entries: LaunchEntry[];
 }
 
 export interface ServiceGroupConfig {
@@ -84,7 +76,7 @@ export interface ServiceGroupConfig {
   shared?: string; // 共享函数面板脚本名（如 demo.shared），组内脚本执行时自动装载
   space?: SpaceConfig; // 管理空间：面板 + 启动前的 bool check 方法
   clients: string[]; // client 脚本名列表（流水线的次步骤，依次执行）
-  launch?: LaunchConfig; // 启动版本参数（端口 / 配置文件 / 环境）
+  launch?: LaunchConfig; // 启动脚本列表（每个版本一套 script / args / env / port）
 }
 
 // 管理空间配置：
@@ -109,8 +101,10 @@ export interface GroupRuntime {
   failStreak: number;
   restarts: number;
   lastEvent?: string;
-  /** 上一次实际使用的启动参数；自愈重启会沿用这一组，不会退回默认端口 */
-  launch?: Record<string, string>;
+  /** 上一次实际使用的启动脚本（版本名）；自愈重启沿用这一条 */
+  entry?: string;
+  /** 上一次实际使用的监听端口；停止时优先按这个端口关 */
+  port?: number;
 }
 
 export function defaultRuntime(): GroupRuntime {
@@ -196,31 +190,69 @@ export function normalizeGroup(raw: unknown, id: string): ServiceGroupConfig {
     return { panel, check };
   };
 
-  const launch = (v: unknown): LaunchConfig | undefined => {
+  const launch = (v: unknown, main: StepConfig | undefined): LaunchConfig | undefined => {
     if (!v || typeof v !== 'object') return undefined;
     const s = v as Record<string, unknown>;
-    const params: LaunchParam[] = [];
+
+    const uniqueName = (raw: string, used: Set<string>): string => {
+      let name = raw.trim() || '启动版本';
+      let i = 2;
+      while (used.has(name)) name = `${raw.trim() || '启动版本'} (${i++})`;
+      used.add(name);
+      return name;
+    };
+
+    // 新格式：entries 每条就是一套完整启动脚本，原样用。
+    if (Array.isArray(s.entries)) {
+      const used = new Set<string>();
+      const entries: LaunchEntry[] = [];
+      for (const item of s.entries) {
+        if (!item || typeof item !== 'object') continue;
+        const e = item as Record<string, unknown>;
+        if (typeof e.name !== 'string' || !e.name.trim()) continue;
+        const env: Record<string, string> = {};
+        if (e.env && typeof e.env === 'object' && !Array.isArray(e.env)) {
+          for (const [k, val] of Object.entries(e.env as Record<string, unknown>)) {
+            if (k.trim()) env[k.trim()] = String(val);
+          }
+        }
+        const port = Number(e.port);
+        entries.push({
+          name: uniqueName(e.name, used),
+          script: typeof e.script === 'string' && e.script.trim() ? e.script.trim() : undefined,
+          args: Array.isArray(e.args) ? e.args.map(String) : [],
+          env,
+          port: Number.isInteger(port) && port > 0 && port <= 65535 ? port : undefined,
+          desc: typeof e.desc === 'string' && e.desc.trim() ? e.desc.trim() : undefined,
+        });
+      }
+      if (entries.length) return { entries };
+    }
+
+    // 旧格式兼容：params + profiles 在加载时折算成 entries，之后运行时只认 entries。
+    // 这样旧配置仍能按原来的预设启动，但面板不再出现「参数编辑」这一栏。
+    const params: { key: string; arg?: string; env?: string; default?: string; options?: string[] }[] = [];
     if (Array.isArray(s.params)) {
       for (const item of s.params) {
         if (!item || typeof item !== 'object') continue;
         const p = item as Record<string, unknown>;
         const key = typeof p.key === 'string' ? p.key.trim() : '';
         if (!key) continue;
-        const type = p.type === 'number' || p.type === 'select' ? p.type : 'text';
         params.push({
           key,
-          label: (typeof p.label === 'string' && p.label.trim()) || key,
-          type,
-          options: Array.isArray(p.options) ? p.options.map(String) : undefined,
-          default: typeof p.default === 'string' ? p.default : undefined,
           arg: typeof p.arg === 'string' && p.arg.trim() ? p.arg.trim() : undefined,
           env: typeof p.env === 'string' && p.env.trim() ? p.env.trim() : undefined,
-          placeholder: typeof p.placeholder === 'string' ? p.placeholder : undefined,
-          description: typeof p.description === 'string' ? p.description : undefined,
+          default: typeof p.default === 'string' ? p.default : undefined,
+          options: Array.isArray(p.options) ? p.options.map(String) : undefined,
         });
       }
     }
-    const profiles: LaunchProfile[] = [];
+    if (!params.length) return undefined;
+
+    const defaults: Record<string, string> = {};
+    for (const p of params) defaults[p.key] = p.default ?? p.options?.[0] ?? '';
+
+    const rawProfiles: { name: string; values: Record<string, string> }[] = [];
     if (Array.isArray(s.profiles)) {
       for (const item of s.profiles) {
         if (!item || typeof item !== 'object') continue;
@@ -228,18 +260,51 @@ export function normalizeGroup(raw: unknown, id: string): ServiceGroupConfig {
         if (typeof p.name !== 'string' || !p.name.trim() || !p.values || typeof p.values !== 'object') continue;
         const values: Record<string, string> = {};
         for (const [k, val] of Object.entries(p.values as Record<string, unknown>)) values[k] = String(val);
-        profiles.push({ name: p.name.trim(), values });
+        rawProfiles.push({ name: p.name.trim(), values });
       }
     }
-    return params.length ? { params, profiles: profiles.length ? profiles : undefined } : undefined;
+
+    const toEntry = (name: string, values: Record<string, string>): LaunchEntry => {
+      const args = [...(main?.args ?? [])];
+      const env: Record<string, string> = {};
+      let port: number | undefined;
+      for (const p of params) {
+        const val = values[p.key] ?? defaults[p.key] ?? '';
+        if (!val) continue;
+        if (p.arg) {
+          const flag = `--${p.arg}`;
+          for (let i = args.length - 1; i >= 0; i--) {
+            if (args[i] === flag) args.splice(i, 2);
+            else if (args[i]?.startsWith(flag + '=')) args.splice(i, 1);
+          }
+          args.push(flag, val);
+        }
+        if (p.env) env[p.env] = val;
+        if (p.key === 'port' || p.arg === 'port') {
+          const n = Number(val);
+          if (Number.isInteger(n) && n > 0 && n <= 65535) port = n;
+        }
+      }
+      return { name, script: main?.script, args, env, port };
+    };
+
+    const used = new Set<string>();
+    const entries: LaunchEntry[] = [];
+    if (rawProfiles.length) {
+      for (const p of rawProfiles) entries.push(toEntry(uniqueName(p.name, used), { ...defaults, ...p.values }));
+    } else {
+      entries.push(toEntry('默认', defaults));
+    }
+    return { entries };
   };
 
+  const main = step(r.main);
   const cfg: ServiceGroupConfig = {
     id,
     name: String(r.name).trim(),
     desc: typeof r.desc === 'string' && r.desc.trim() ? r.desc.trim() : undefined,
     cwd: typeof r.cwd === 'string' && r.cwd.trim() ? r.cwd.trim() : serviceGroupDir(id),
-    main: step(r.main),
+    main,
     stop: step(r.stop),
     killPort: Number.isInteger(r.killPort) ? (r.killPort as number) : undefined,
     stopMode: stopMode(r.stopMode),
@@ -247,7 +312,7 @@ export function normalizeGroup(raw: unknown, id: string): ServiceGroupConfig {
     shared: typeof r.shared === 'string' && r.shared.trim() ? r.shared.trim() : undefined,
     space: space(r.space),
     clients: Array.isArray(r.clients) ? r.clients.map(String) : [],
-    launch: launch(r.launch),
+    launch: launch(r.launch, main),
   };
   return cfg;
 }
