@@ -653,6 +653,7 @@ table.levels tbody tr:last-child td { border-bottom: 0; }
 .sg-form-body .ant-form-item { margin-bottom: 12px; }
 .sg-form-body .ant-form-item-label > label { font-size: 12px; }
 .sg-form-body .ant-form-item-extra { font-size: 11px; color: var(--mid); margin-top: 2px; }
+.sg-script-code { font-size: 12px; line-height: 1.55; margin-top: 8px; }
 .sg-steps { display: flex; flex-direction: column; gap: 4px; }
 .sg-step {
   display: flex;

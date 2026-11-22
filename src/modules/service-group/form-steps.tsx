@@ -28,8 +28,8 @@ export function StepsField({ clients, entryScripts, setClients, toggleClient, on
 
   return (
     <Form.Item
-      label={`测试脚本组（工作流，${clients.length} 个步骤）`}
-      extra="顺序即执行顺序：首页「运行测试组」先启动/复用服务，再按这个顺序逐个跑，退出码与输出记入 client 执行日志。"
+      label={`client 步骤（${clients.length} 个）`}
+      extra="顺序即执行顺序；这里只放 client，不放服务的启动/停止/探活脚本。"
     >
       {clients.length === 0 ? (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没选脚本" style={{ margin: '8px 0' }} />
@@ -71,7 +71,7 @@ export function StepsField({ clients, entryScripts, setClients, toggleClient, on
       )}
       <Select
         mode="multiple"
-        placeholder="添加 client / 测试脚本…"
+        placeholder="添加 client…"
         value={[]}
         onChange={(v) => v.forEach((n) => toggleClient(n))}
         style={{ width: '100%', marginTop: 6 }}

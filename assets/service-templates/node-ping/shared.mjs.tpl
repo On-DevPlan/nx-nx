@@ -18,6 +18,15 @@ installAliases(globalThis);
 globalThis.BASE_URL = process.env.NX_SERVICE_URL || 'http://127.0.0.1:' + (Number(process.env.NX_SERVICE_PORT) || {{PORT}});
 globalThis.CREATED_AT = new Date().toISOString();
 
+// 真实可用的示例数据：服务 /api/users 与 client 都直接读它，不是注释里的占位符。
+globalThis.API_TOKEN = 'local-demo-token-{{ID}}';
+globalThis.DEMO_USERS = [
+  { id: 'U-001', name: '林一', role: 'admin', active: true },
+  { id: 'U-002', name: '陈默', role: 'editor', active: true },
+  { id: 'U-003', name: '周密', role: 'viewer', active: false },
+];
+globalThis.DEMO_REQUEST = { path: '/ping', expected: 'pong', token: API_TOKEN };
+
 // ---- 起飞闸门：返回 true 才允许启动主脚本 ----
 //
 // 写 check 的正确姿势是「判依赖，不要判自己」：
@@ -35,15 +44,25 @@ globalThis.alwaysDown = async function alwaysDown() {
   return false;
 };
 
+// 共享数据方法：client 直接调用，不需要在每个脚本里复制数据。
+globalThis.listUsers = function listUsers(onlyActive = true) {
+  return onlyActive ? DEMO_USERS.filter((u) => u.active) : [...DEMO_USERS];
+};
+globalThis.findUser = function findUser(id) {
+  return DEMO_USERS.find((u) => u.id === id) || null;
+};
+
 // ---- 显式声明空间（名字 + 状态，索引里一眼认得出）----
 export const SPACE = defineSpace({
   name: '{{ID}}',
-  description: '{{ID}} 的管理空间：BASE_URL + 起飞闸门',
-  state: { BASE_URL, CREATED_AT },
+  description: '{{ID}} 的管理空间：真实示例用户 + 请求配置 + 起飞闸门',
+  state: { BASE_URL, API_TOKEN, DEMO_USERS, DEMO_REQUEST, CREATED_AT },
 });
 
 // ---- 隐藏测试案例（装载后自动执行，失败只告警不阻断）----
 globalThis.__tests = {
-  'BASE_URL 指向本机': () => BASE_URL.startsWith('http://127.0.0.1:'),
+  '示例用户已装载': () => DEMO_USERS.length === 3,
+  'token 来自共享面板': () => API_TOKEN.startsWith('local-demo-token-'),
+  'findUser 能查到 U-001': () => findUser('U-001')?.name === '林一',
   'checkUp 是函数': () => typeof checkUp === 'function',
 };

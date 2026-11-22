@@ -69,7 +69,8 @@ export interface ServiceGroupConfig {
   /** 这个服务自己的工作目录；启动进程的 cwd，也是 client 产物/临时文件的落点 */
   cwd?: string;
   main?: StepConfig; // 主脚本（长驻服务）
-  stop?: StepConfig; // 优雅关停脚本（可选；没有则直接杀进程/端口）
+  stop?: StepConfig; // 服务自己的优雅关停脚本
+  probe?: StepConfig; // 服务自己的探活脚本：退出码 0=活，非 0=失活
   killPort?: number; // stop 兜底：杀掉占用该端口的进程
   stopMode: StopMode; // 关闭动作的走法，默认 auto
   health?: HealthConfig;
@@ -306,6 +307,7 @@ export function normalizeGroup(raw: unknown, id: string): ServiceGroupConfig {
     cwd: typeof r.cwd === 'string' && r.cwd.trim() ? r.cwd.trim() : serviceGroupDir(id),
     main,
     stop: step(r.stop),
+    probe: step(r.probe),
     killPort: Number.isInteger(r.killPort) ? (r.killPort as number) : undefined,
     stopMode: stopMode(r.stopMode),
     health: h(r.health),

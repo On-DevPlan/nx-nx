@@ -1,6 +1,8 @@
 // 服务组域的业务 facade：组 CRUD、启停、活性、流水线。
 //
 // core/service/ 是执行真相源；这里做参数校验与结果整形，供 CLI/HTTP/Web 共用。
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   getGroup,
   loadGroups,
@@ -184,15 +186,14 @@ export async function check(id: unknown): Promise<{ id: string; alive: boolean; 
     }
   }
   if (!health) throw new Error(`服务组 ${g.id} 未配置活性检测（health）`);
-  const { checkHealth } = await import('../../core/service/check.js');
-  const r = await checkHealth(health);
+  const { checkGroupHealth } = await import('../../core/service/check.js');
+  const r = await checkGroupHealth(g, health);
   return { id: g.id, alive: r.alive, detail: r.detail };
 }
 
-// 流水线：main 启动 → 等活性 → clients（测试脚本组）依次执行
-export function run(id: unknown, entry?: unknown): ReturnType<typeof runPipeline> {
-  const name = typeof entry === 'string' && entry.trim() ? entry.trim() : undefined;
-  return runPipeline(assertGroupId(id), name);
+// 客户端流水线：只按配置顺序执行 client，不碰长服务生命周期。
+export function run(id: unknown): ReturnType<typeof runPipeline> {
+  return runPipeline(assertGroupId(id));
 }
 
 // ---- 管理空间 ----
@@ -334,7 +335,13 @@ export interface GroupScriptOpResult {
 
 // 组内脚本的四个动作收在一个入口：它们操作的是同一个命名空间，
 // 不必为每个动作各开一条 HTTP 路由（路由表越短，越不容易撞车）。
-export function groupScriptOp(id: unknown, op: unknown, name?: unknown, content?: unknown): GroupScriptOpResult {
+export function groupScriptOp(
+  id: unknown,
+  op: unknown,
+  name?: unknown,
+  content?: unknown,
+  contentFile?: unknown,
+): GroupScriptOpResult {
   const gid = assertGroupId(id);
   const action = String(op ?? 'read') as GroupScriptOpResult['op'];
   if (!['read', 'save', 'create', 'delete'].includes(action)) {
@@ -347,16 +354,26 @@ export function groupScriptOp(id: unknown, op: unknown, name?: unknown, content?
     const r = readServiceScript(gid, name);
     return { groupId: gid, op: action, name: r.name, path: r.path, content: r.content, source: r.source };
   }
+  if (action === 'delete') {
+    const r = deleteServiceScript(gid, name);
+    return { groupId: gid, op: action, name: r.name, path: r.path };
+  }
+  const text = scriptContent(content, contentFile);
   if (action === 'save') {
-    const r = saveServiceScript(gid, name, content);
+    const r = saveServiceScript(gid, name, text);
     return { groupId: gid, op: action, name: r.name, path: r.path, content: r.content, source: r.source };
   }
-  if (action === 'create') {
-    const r = createServiceScript({ groupId: gid, name, content });
-    return { groupId: gid, op: action, name: r.name, path: r.path, content: r.content, source: r.source };
+  const r = createServiceScript({ groupId: gid, name, content: text });
+  return { groupId: gid, op: action, name: r.name, path: r.path, content: r.content, source: r.source };
+}
+
+// AI / 脚本生成完整源码时，命令行直接传多行全文既难写也容易被 shell 吃掉换行。
+// --contentFile 是 CLI 与 HTTP 共用的入口：只读本机文件，不给相对路径之外的隐式搜索。
+function scriptContent(content: unknown, contentFile: unknown): string {
+  if (contentFile !== undefined && contentFile !== null && String(contentFile).trim()) {
+    return readFileSync(resolve(String(contentFile).trim()), 'utf8');
   }
-  const r = deleteServiceScript(gid, name);
-  return { groupId: gid, op: action, name: r.name, path: r.path };
+  return String(content ?? '');
 }
 
 // ---- 模板（上手引导的唯一入口）----

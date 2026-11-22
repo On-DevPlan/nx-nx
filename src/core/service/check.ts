@@ -4,7 +4,10 @@
 //   port: TCP 三次握手成功即活（不发送任何数据）
 //   http: 状态码 < 500 即活（4xx 也算活，服务本体在响应）
 import net from 'node:net';
-import type { HealthConfig } from './store.js';
+import { runScript } from '../script/service.js';
+import { serviceGroupDir, serviceHttpLogsDir } from './paths.js';
+import { resolveServicePanel, resolveServiceScript } from './scripts.js';
+import type { HealthConfig, ServiceGroupConfig } from './store.js';
 
 export interface CheckResult {
   alive: boolean;
@@ -63,4 +66,64 @@ async function checkHttp(h: HealthConfig): Promise<CheckResult> {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * 组级探活入口：配了服务自己的 probe 脚本就执行它，否则退回端口/HTTP 检测。
+ *
+ * 脚本协议只有两条：退出码 0 = 活，非 0 = 失活；最后一行若为 JSON，
+ * 其中的 detail 作为面板详情展示。健康脚本与服务、client 同在一个组命名空间，
+ * 可以读共享面板里的真实数据，不再是一段用户改不到的内置探测逻辑。
+ */
+export async function checkGroupHealth(g: ServiceGroupConfig, h?: HealthConfig): Promise<CheckResult> {
+  const health = h ?? g.health;
+  if (!g.probe?.script) {
+    if (!health) return { alive: false, detail: '服务组未配置探活（health 与 probe 都为空）' };
+    return checkHealth(health);
+  }
+  const cwd = g.cwd || serviceGroupDir(g.id);
+  const port = health?.port;
+  const env: NodeJS.ProcessEnv = {
+    NX_SERVICE_DIR: cwd,
+    NX_HTTP_LOG_DIR: serviceHttpLogsDir(g.id),
+    ...(port ? { NX_SERVICE_PORT: String(port), NX_SERVICE_URL: `http://${health?.host ?? '127.0.0.1'}:${port}` } : {}),
+  };
+  let shared: string | undefined;
+  if (g.shared) {
+    try {
+      shared = resolveServicePanel(g.id, g.shared).path;
+    } catch {
+      shared = undefined;
+    }
+  }
+  try {
+    const target = resolveServiceScript(g.id, g.probe.script).path;
+    const r = await runScript(target, { args: g.probe.args, cwd, shared, env });
+    let detail = probeDetail(r.stdout, r.stderr, r.code);
+    let alive = r.code === 0;
+    const lastJson = [...r.stdout.trim().split(/\r?\n/)].reverse().find((line) => {
+      try {
+        return Boolean(JSON.parse(line) && typeof line === 'string');
+      } catch {
+        return false;
+      }
+    });
+    if (lastJson) {
+      const parsed = JSON.parse(lastJson) as { alive?: unknown; detail?: unknown };
+      if (typeof parsed.alive === 'boolean') alive = parsed.alive;
+      if (typeof parsed.detail === 'string' && parsed.detail) detail = parsed.detail;
+    }
+    return { alive, detail };
+  } catch (err) {
+    return { alive: false, detail: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+function probeDetail(stdout: string, stderr: string, code: number): string {
+  const lines = (stdout + (stderr ? '\n[stderr] ' + stderr : ''))
+    .trim()
+    .split(/\r?\n/)
+    .filter((line) => line.trim() && !line.startsWith('[shared]'));
+  const text = lines.slice(-4).join(' | ') || `探活脚本退出码 ${code}`;
+  return text.length > 400 ? '…' + text.slice(-400) : text;
 }

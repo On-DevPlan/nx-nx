@@ -23,6 +23,7 @@ export interface GroupConfig {
   cwd?: string;
   main?: { script: string; args: string[] };
   stop?: { script: string; args: string[] };
+  probe?: { script: string; args: string[] };
   killPort?: number;
   stopMode: StopMode;
   health?: {

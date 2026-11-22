@@ -1,4 +1,36 @@
-## [Unreleased]
+## [0.18.0] - 2026-11-22
+
+### AI 生成完整 servicegroup：CLI 底座与 nx-kv 案例
+
+- `sg script` 新增 **`--contentFile <路径>`**：AI 生成的整份脚本从本机文件导入，不再把多行
+  全文拼进 shell 参数；CLI 与 HTTP 共用同一份输入契约。
+- 随包新增 `assets/examples/nx-kv-servicegroup/`：server / stop / health / shared / client 五份脚本
+  与 `config.json`，把 `nx-kv serve` 的启动、独立端口/数据目录、HTTP 契约验证做成可照抄底座。
+  client 验证 `/api/ping`、`/api/health`、`/api/bootstrap`、`/api/contract`、`/api/localtasks`。
+- `A03-service-module.md` 改为**纯 SOP**：让 AI 按固定五脚本、CLI 写配置、`--contentFile` 导入、
+  起停验证、复制 client 扩展这套动作执行，不再讲基础概念。
+- 已在真实 CLI 路径验证：`sg set` → `sg script --contentFile` × 5 → `sg start` → `sg check` →
+  `sg run` → `sg stop` 全过。
+
+### 服务模块成型：服务自带脚本、客户端流水线与真实共享数据（任务 #25）
+
+- **完整默认案例**：`sg init` 一次生成 `server / stop / health / shared / client` 五个脚本，并写全
+  `main / stop / probe / health / shared / space / clients / launch.entries`。Web 新建入口不再提供
+  「空白服务」，创建即有可改的默认实现；首页去掉「还没配置」提示与冗长引导。
+- **服务自己的探活脚本**：新增 `probe` 配置；`sg check` 与 watcher 优先执行组内探活脚本，
+  退出码 0=活、非 0=失活，末行 JSON 的 `detail` 用于面板展示；未配 probe 才回退端口 / HTTP 检测。
+  默认案例的 `/ping` 探活脚本跟着启动版本的实际端口走。
+- **默认停止脚本**：`node-ping` 模板生成 `<id>-stop.mjs`，请求服务 `/shutdown` 优雅退出；
+  `stopMode=auto` 保留端口 / pid 兜底，并给关停脚本注入真实 cwd / URL / 端口。
+- **流水线只跑 client**：`sg run` / 首页「运行客户端」不再启动、探活、自愈或停止服务，只按
+  `clients` 顺序执行并逐步报告；`--entry` 从 `sg run` 移除，启动版本只属于 `sg start`。
+  服务设置页删除流水线画布，新增「客户端」顺序列表。
+- **设置页重组**：四个 Tab（服务脚本 / 客户端 / 共享数据 / 高级）。服务脚本页直接编辑本组的
+  启动、停止、探活、共享文件；client 下拉只列真正的 client，不会把 stop / probe 选进流水线。
+- **共享面板有真实数据**：默认案例提供 token、三条示例用户与请求配置；服务 `/api/users` 与 client
+  读同一份数据并互相校验，`sg space` 状态堆可直接看到，`findUser` 可调用。
+- **模块 SkillRef**：新增 `assets/nx-nx/references/A03-service-module.md`，主 skill 路由 A03 介绍
+  整个模块，A02 保留命令 SOP。
 
 ### 启动参数改为启动脚本列表（任务 #24）
 

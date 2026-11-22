@@ -13,20 +13,23 @@ description: nx-nx 服务组场景 SOP——模板建组、探活、失活自愈
 ## 1. 先跑通最小案例
 
 ```bash
-nx-nx sg init ping-demo          # 默认模板 node-ping：生成脚本 + 配置 + 下一步
-nx-nx sg run ping-demo           # 闸门 → 启动/复用 → 等活性 → client 打 /ping
-nx-nx sg check ping-demo         # 立即探活：{ alive, detail }
-nx-nx sg stop ping-demo          # 关闭
+nx-nx sg init ping-demo          # 默认模板 node-ping：五个脚本 + 配置 + 下一步
+nx-nx sg start ping-demo         # 启动服务（闸门 → 主脚本）
+nx-nx sg check ping-demo         # 执行服务自己的探活脚本
+nx-nx sg run ping-demo           # 只运行 client 流水线
+nx-nx sg stop ping-demo          # 停止服务
 ```
 
-`sg init` 生成三个脚本：`<id>-server.mjs`（`GET /ping` → `pong`）、`<id>-client.mjs`（请求 /ping）、`<id>.shared.mjs`（`BASE_URL` + `checkUp` 闸门），并写好 main / health / killPort / shared / space.check / clients。脚本落在**该组自己的命名空间** `~/.nx-nx/services/groups/<id>/scripts/`，不写全局 `assets/scripts/`、不登记全局 manifest。`sg templates` 看模板，`--dry` 只看计划不落盘。
+`sg init` 生成五个脚本：`<id>-server.mjs`、`<id>-stop.mjs`、`<id>-health.mjs`、`<id>-client.mjs`、`<id>.shared.mjs`，并写好 main / stop / probe / health / killPort / shared / space.check / clients。模块心智模型与共享示例数据见 [[A03-service-module]]。脚本落在**该组自己的命名空间** `~/.nx-nx/services/groups/<id>/scripts/`，不写全局 `assets/scripts/`、不登记全局 manifest。`sg templates` 看模板，`--dry` 只看计划不落盘。
 
 ## 2. 一个服务组由什么组成
 
 | 角色 | 作用 | 配置字段 |
 | --- | --- | --- |
 | 主脚本 | 长驻服务；node 起 HTTP，或在 node 里 `run('java', ['-jar', …])` / `go run` | `main: { script, args }` |
-| 活性检测 | 端口可连（`port`）或 HTTP 响应（`http`，状态码 < 500 算活） | `health` |
+| 停止脚本 | 服务自己的关停方式（auto 下仍有端口 / pid 兜底） | `stop` / `stopMode` |
+| 探活脚本 | 退出码 0=活，非 0=失活；末行 JSON 的 detail 展示到面板 | `probe` |
+| 活性检测 | 未配 probe 时用端口可连（`port`）或 HTTP 响应（`http`） | `health` |
 | client 脚本 | 每个文件一个业务领域，流水线里依次执行 | `clients: []` |
 | 脚本命名空间 | 本组的 server / stop / client / shared 都只住在这里，与全局脚本模块隔离 | `~/.nx-nx/services/groups/<id>/scripts/` |
 | 共享面板 | 常量 + 函数 + API 封装，组内脚本执行前自动装载 | `shared` |
@@ -79,12 +82,12 @@ nx-nx sg set my-svc --config '{
 | `sg start <id> [--entry 版本名]` | 启动主脚本（先过闸门；选择启动脚本列表中的一条） |
 | `sg stop <id> [--mode auto\|script\|port\|pid]` | 关闭，模式见下 |
 | `sg autoheal <id> --state on\|off` | 自愈开关（监控不停） |
-| `sg status [id]` / `sg check <id>` | 运行态快照 / 立即探活 |
+| `sg status [id]` / `sg check <id>` | 运行态快照 / 执行探活脚本（未配 probe 时用端口或 HTTP） |
 | `sg logs <id>` | 事件 / 主脚本 IO 尾部 / HTTP 请求日志清单 |
 | `sg hub <id>` | 一组看清 server / client / 空间方法 / 当前状态 |
 | `sg space <id>` / `sg space-call <id> --method <名> [--args JSON数组]` | 空间方法清单 + 状态堆 / 调用方法 |
 | `sg spaces` | 本机所有管理空间 |
-| `sg run <id> [--entry 版本名]` | 一键测试组：闸门 → 启动/复用 → 等活性 → clients 依次执行 |
+| `sg run <id>` | 运行客户端流水线：只按 `clients` 顺序执行，不启动 / 停止服务 |
 | `sg delete <id>` | 删除服务组（须先停） |
 
 `stopMode` 四种走法：
@@ -129,13 +132,13 @@ nx-nx sg set my-svc --config '{
 - 设置页「基础配置」底部维护这张列表（增删 / 排序 / 脚本 / 参数 / 环境 / 端口），没有单独的「启动参数」栏目。
 - 模板生成的三条只演示端口与 `NODE_ENV`；示例里的 `config/*.json` 是示意，真实项目的配置文件按自己的相对 / 绝对路径写进 `args`。
 
-## 6. 流水线：client 按顺序跑
+## 6. 流水线：只有 client 按顺序跑
 
-- `clients` 是顺序数组；`sg run` 依次执行并逐步报告（闸门 / 启动 / 等活性 / 每个 client）。
+- `clients` 是顺序数组；`sg run` 只执行这些 client 并逐步报告，**不会启动或停止服务**。
+- 服务准备好了再跑流水线；`sg start` / `sg check` / `sg stop` 是独立的生命周期动作。
 - 每个 client 的退出码、耗时、stdout / stderr 追加到 `clients-<id>.log`；失败标红，可跳执行日志。
 - 启动端口以 `NX_SERVICE_URL` / `NX_SERVICE_PORT` 传给 client——**不要写死模板默认端口**。
-- 端口上已有本组服务且活性通过时，`sg run` / `sg start` **复用**，不重复起进程、不撞端口。
-- 设置页「流水线」Tab 可排序 / 增删 client；Web 与 CLI 改的是同一份配置。
+- 设置页「客户端」Tab 可排序 / 增删 client；Web 与 CLI 改的是同一份配置。
 
 ## 7. 共享面板与管理空间
 
@@ -147,8 +150,8 @@ nx-nx sg set my-svc --config '{
 - `shared` 在组内脚本执行前自动装载；常量、`globalThis` 增量、具名导出都进空间。
 - `space.check` 指向一个**返回 bool** 的方法，启动主脚本前先调：
   - `false` → 不启动（依赖没就绪，起早了只占端口）；
-  - `true` → 启动 → 等活性 → clients。
-- **闸门管住两扇门**：`sg run` 与 `sg start` / 面板「启动」都过闸门；自愈重启走 `skipGate`，恢复动作不能被业务闸门拦死。
+  - `true` → 允许启动；后续 `sg run` 只跑 client，不再触发启动。
+- **闸门管住启动入口**：`sg start` / 面板「启动」都过闸门；自愈重启走 `skipGate`，恢复动作不能被业务闸门拦死。
 - 写 check 的正确姿势：**判依赖，不判自己**。问「上游可达 / 凭据就绪 / 端口没被占」，不要先问「我活着吗」。
 - 空间是常驻实体：方法可列举、状态堆跨调用保留、调用栈会累积；`sg space` 看快照，`sg space-call` 调方法。
 - 有 serve 在跑时，CLI 的空间命令自动转给 serve，和 Web 面板作用在同一个空间；没 serve 时 CLI 起临时空间，用完即走。
@@ -191,10 +194,10 @@ nx-nx sg set my-svc --config '{
 
 ## 11. 验收清单
 
-- [ ] `sg init` 生成的脚本落在组命名空间，`script list` 里不出现这些脚本
+- [ ] `sg init` 生成启动/停止/探活/共享/client 五个脚本，`script list` 里不出现这些脚本
 - [ ] 两个组放同名 server / client / shared，各自启动与 client 执行互不干扰
-- [ ] `sg init` 生成的脚本与配置能直接 `sg run`，client 有成功输出
-- [ ] `sg check` 启动后 `alive=true`，`sg stop` 后端口关闭
+- [ ] `sg init` 生成的脚本与配置能直接 `sg start`，服务起来后 `sg run` 的 client 有成功输出
+- [ ] `sg check` 执行的是服务自己的探活脚本，停止后返回失活
 - [ ] `sg show` 的 pid / 活性 / 自愈次数与实际一致
 - [ ] 换 `--entry` 版本后，argv / 探活 / stop 都打到该版本端口；运行态 `entry` 与 `port` 对得上
 - [ ] 设置页没有独立「启动参数」栏目，启动脚本列表可增删排序并写进配置

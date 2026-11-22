@@ -35,12 +35,7 @@ function tailLines(text: string, max = 8): string {
 }
 
 function stepLabel(step: string): string {
-  if (step === 'space.check') return '空间闸门';
-  if (step === 'main.start') return '启动主脚本';
-  if (step === 'main.alive') return '等待活性';
-  if (step === 'client') return '测试脚本';
-  if (step === 'noop') return '未配置';
-  return step;
+  return step === 'client' ? 'client 脚本' : step === 'noop' ? '未配置' : step;
 }
 
 export default function ServiceView() {
@@ -51,7 +46,6 @@ export default function ServiceView() {
   const [busy, setBusy] = useState<string | null>(null);
   const [logsOpen, setLogsOpen] = useState(false);
   const [launchOpen, setLaunchOpen] = useState(false);
-  const [launchIntent, setLaunchIntent] = useState<'start' | 'run'>('start');
   const [launchEntry, setLaunchEntry] = useState('');
   const [report, setReport] = useState<PipelineReport | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
@@ -95,10 +89,9 @@ export default function ServiceView() {
 
   const launchEntries: LaunchEntry[] = current?.config.launch?.entries ?? [];
 
-  const openLaunch = (intent: 'start' | 'run' = 'start') => {
+  const openLaunch = () => {
     if (!current) return;
     const prev = current.runtime.entry;
-    setLaunchIntent(intent);
     setLaunchEntry(prev && launchEntries.some((e) => e.name === prev) ? prev : (launchEntries[0]?.name ?? ''));
     setLaunchOpen(true);
   };
@@ -110,7 +103,7 @@ export default function ServiceView() {
   ) => {
     setBusy(action + id);
     try {
-      const payload = { id, ...(entry ? { entry } : {}) };
+      const payload = { id, ...(action === 'serviceGroup.start' && entry ? { entry } : {}) };
       const r = await client[action](payload);
       if (action === 'serviceGroup.run') {
         const rep = r as unknown as PipelineReport;
@@ -119,8 +112,8 @@ export default function ServiceView() {
         const passed = rep.steps.filter((s) => s.ok).length;
         toast(
           rep.ok
-            ? `测试组完成：${passed}/${rep.steps.length} 步通过`
-            : `测试组有失败：${passed}/${rep.steps.length} 步通过`,
+            ? `客户端完成：${passed}/${rep.steps.length} 步通过`
+            : `客户端有失败：${passed}/${rep.steps.length} 步通过`,
         );
       } else {
         const data = r as { alive?: boolean; started?: boolean; stopped?: boolean; detail?: string };
@@ -144,12 +137,11 @@ export default function ServiceView() {
     if (!current) return;
     const id = current.config.id;
     setLaunchOpen(false);
-    void act(launchIntent === 'run' ? 'serviceGroup.run' : 'serviceGroup.start', id, launchEntry || undefined);
+    void act('serviceGroup.start', id, launchEntry || undefined);
   };
 
-  const runWorkflow = () => {
-    if (!current) return;
-    openLaunch('run');
+  const runClients = () => {
+    if (current) void act('serviceGroup.run', current.config.id);
   };
 
   const working = busy !== null;
@@ -253,16 +245,13 @@ export default function ServiceView() {
               </Space>
             }
           >
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-              {current.config.desc || '还没写说明——去设置页补一句这个服务是干什么的。'}
-            </Typography.Paragraph>
-            <Typography.Paragraph type="secondary" className="mono sg-cwd" style={{ marginBottom: 12 }}>
-              cwd: {current.config.cwd || '（启动时自动创建默认目录）'}
+            <Typography.Paragraph type="secondary" style={{ marginBottom: 10 }}>
+              {current.config.desc || current.config.name}
             </Typography.Paragraph>
             {usedLaunch && (
-              <Typography.Paragraph type="secondary" style={{ marginBottom: 12, fontSize: 12 }}>
-                启动版本：{usedLaunch}
-              </Typography.Paragraph>
+              <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 10, fontSize: 12 }}>
+                {usedLaunch}
+              </Typography.Text>
             )}
 
             <Space size={8} wrap>
@@ -295,21 +284,15 @@ export default function ServiceView() {
                   {running ? '切换版本' : '启动'}
                 </Button>
               </Tooltip>
-              <Tooltip
-                title={
-                  workflowCount
-                    ? `一键运行测试组：启动/复用服务 → 等活性 → ${workflowCount} 个脚本依次执行`
-                    : '先在设置页的「流水线」选测试脚本'
-                }
-              >
+              <Tooltip title="按配置顺序运行 client，不启动或停止服务">
                 <Button
                   size="small"
                   icon={<ThunderboltOutlined />}
                   disabled={working || workflowCount === 0}
                   loading={busy === `serviceGroup.run${current.config.id}`}
-                  onClick={runWorkflow}
+                  onClick={runClients}
                 >
-                  运行测试组{workflowCount ? ` (${workflowCount})` : ''}
+                  运行客户端{workflowCount ? ` (${workflowCount})` : ''}
                 </Button>
               </Tooltip>
               <Tooltip title={running ? '按 stopMode 关闭服务' : '服务当前未运行'}>
@@ -349,14 +332,8 @@ export default function ServiceView() {
 
       <Modal
         open={launchOpen}
-        title={
-          current
-            ? `${launchIntent === 'run' ? '运行测试组' : running ? '切换版本' : '启动'} · ${current.config.name}`
-            : launchIntent === 'run'
-              ? '运行测试组'
-              : '启动服务'
-        }
-        okText={launchIntent === 'run' ? '运行' : running ? '切换版本' : '启动'}
+        title={current ? `${running ? '切换版本' : '启动'} · ${current.config.name}` : '启动服务'}
+        okText={running ? '切换版本' : '启动'}
         cancelText="取消"
         onOk={startWithLaunch}
         onCancel={() => setLaunchOpen(false)}
@@ -411,23 +388,16 @@ export default function ServiceView() {
             </Space>
           </Radio.Group>
         )}
-        <Alert
-          style={{ marginTop: 12 }}
-          type="info"
-          showIcon
-          message={
-            launchIntent === 'run'
-              ? '按选中的启动脚本起服务，再顺序执行测试脚本；切换版本会先停旧进程。'
-              : running
-                ? '选另一条会先停旧进程再按新版本启动；选当前版本则保持不动。'
-                : '启动后记录当前版本：自愈重启沿用，停止按这个版本的端口关。'
-          }
-        />
+        {launchEntries.length > 0 && (
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {running ? '选另一条会先停旧进程再启动。' : '启动后记录版本，自愈与停止都沿用。'}
+          </Typography.Text>
+        )}
       </Modal>
 
       <Modal
         open={reportOpen}
-        title={report ? `测试组结果 · ${report.groupId}` : '测试组结果'}
+        title={report ? `客户端结果 · ${report.groupId}` : '客户端结果'}
         width={760}
         onCancel={() => setReportOpen(false)}
         footer={[

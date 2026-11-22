@@ -30,7 +30,7 @@ const { listTemplates, getTemplate, planTemplate, applyTemplate, templatesRoot }
 const { loadGroups, saveGroups, loadRuntime, normalizeGroup } = await import('../../src/core/service/store.js');
 const { startGroup, stopGroup } = await import('../../src/core/service/runtime.js');
 const { runPipeline } = await import('../../src/core/service/pipeline.js');
-const { check: checkService } = await import('../../src/modules/service-group/service.js');
+const { check: checkService, groupScriptOp } = await import('../../src/modules/service-group/service.js');
 const { listScripts } = await import('../../src/core/script/paths.js');
 const {
   resolveServiceScript,
@@ -107,7 +107,7 @@ test('模板清单：node-ping 是默认模板，带端口与下一步命令', (
 });
 
 test('模板正文目录存在（随包分发，缺文件时明确报错）', () => {
-  assert.ok(existsSync(join(templatesRoot(), 'node-ping', 'server.mjs.tpl')));
+  assert.ok(existsSync(join(templatesRoot(), 'node-ping', 'health.mjs.tpl')));
   assert.ok(existsSync(join(templatesRoot(), 'node-api', 'stop.mjs.tpl')));
 });
 
@@ -115,16 +115,18 @@ test('planTemplate：脚本名、端口、health、shared/space/clients 都按�
   const plan = planTemplate({ groupId: 'demo-svc', templateId: 'node-ping', port: 18123 });
   assert.deepEqual(
     plan.files.map((f) => f.name),
-    ['demo-svc-server', 'demo-svc-client', 'demo-svc.shared'],
+    ['demo-svc-server', 'demo-svc-stop', 'demo-svc-health', 'demo-svc-client', 'demo-svc.shared'],
   );
   assert.equal(plan.config.main?.script, 'demo-svc-server');
+  assert.equal(plan.config.stop?.script, 'demo-svc-stop');
+  assert.equal(plan.config.probe?.script, 'demo-svc-health');
   assert.deepEqual(plan.config.main?.args, ['--port', '18123']);
   assert.equal(plan.config.health?.port, 18123);
   assert.equal(plan.config.health?.path, '/ping');
   assert.equal(plan.config.health?.onDead, 'restart');
   assert.equal(plan.config.killPort, 18123);
-  assert.equal(plan.config.shared, 'demo-svc.shared');
   assert.deepEqual(plan.config.space, { panel: 'demo-svc.shared', check: 'checkUp' });
+  assert.equal(plan.config.shared, 'demo-svc.shared');
   assert.deepEqual(plan.config.clients, ['demo-svc-client']);
   assert.equal(plan.config.stopMode, 'auto');
   // 启动脚本列表：三条完整版本，不再声明参数表单。
@@ -138,7 +140,7 @@ test('planTemplate：脚本名、端口、health、shared/space/clients 都按�
   assert.deepEqual(plan.config.launch?.entries[1]?.env, { NODE_ENV: 'staging' });
   assert.equal(plan.config.launch?.entries[2]?.port, 18125);
   assert.equal(plan.config.name, 'Ping 服务');
-  assert.match(plan.config.desc ?? '', /Node HTTP/);
+  assert.match(plan.config.desc ?? '', /Node 案例/);
   assert.match(plan.config.cwd ?? '', /services[\\/]groups[\\/]demo-svc$/);
 });
 
@@ -153,18 +155,40 @@ test('node-api 模板：带停服脚本，健康路径 /health', () => {
   assert.equal(plan.port, 18081);
   assert.equal(plan.config.health?.path, '/health');
   assert.equal(plan.config.stop?.script, 'api-svc-stop');
+  assert.equal(plan.config.probe?.script, 'api-svc-health');
   assert.equal(plan.files.find((f) => f.role === 'shared')?.name, 'api-svc.shared');
+});
+
+test('nx-kv 服务组示例：五份脚本与配置齐全（AI 生成套件的底座）', () => {
+  const dir = join(ROOT, 'assets', 'examples', 'nx-kv-servicegroup');
+  for (const file of ['server.mjs', 'stop.mjs', 'health.mjs', 'shared.mjs', 'client.mjs', 'config.json']) {
+    assert.ok(existsSync(join(dir, file)), `示例缺文件: ${file}`);
+  }
+  const cfg = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8'));
+  for (const key of ['main', 'stop', 'probe', 'health', 'shared', 'clients', 'launch']) {
+    assert.ok(cfg[key], `config.json 缺字段: ${key}`);
+  }
+  assert.equal(cfg.health.path, '/api/health');
+  assert.equal(cfg.launch.entries[0].env.NX_SERVE_NO_OPEN, '1');
+  const shared = readFileSync(join(dir, 'shared.mjs'), 'utf8');
+  for (const endpoint of ['/api/ping', '/api/health', '/api/bootstrap', '/api/contract', '/api/localtasks']) {
+    assert.ok(shared.includes(endpoint), `shared.mjs 缺接口: ${endpoint}`);
+  }
 });
 
 // ---- 落盘 ----
 
 test('applyTemplate：脚本落进组命名空间、不登记全局 manifest、组配置写入', () => {
   const r = applyTemplate({ groupId: 'write-svc', templateId: 'node-ping', port: 18124 });
-  assert.equal(r.written.length, 3);
+  assert.equal(r.written.length, 5);
   const dir = groupScripts('write-svc');
   const server = readFileSync(join(dir, 'write-svc-server.mjs'), 'utf8');
   assert.match(server, /\/ping/);
   assert.match(server, /pong/);
+  assert.match(server, /\/api\/users/);
+  const shared = readFileSync(join(dir, 'write-svc.shared.mjs'), 'utf8');
+  assert.match(shared, /DEMO_USERS/);
+  assert.match(shared, /local-demo-token/);
   // 与脚本同目录的 helper 必须一起落盘，脚本里的 `./aliases.mjs` 才 import 得到。
   assert.ok(existsSync(join(dir, 'aliases.mjs')));
   assert.ok(existsSync(join(dir, '_ns.mjs')));
@@ -188,14 +212,14 @@ test('applyTemplate 幂等：同名组已存在时报错；删掉配置后重跑
   // 模拟「配置丢了、脚本还在」：不应重复覆盖，全部跳过
   saveGroups(loadGroups().filter((g) => g.id !== 'write-svc'));
   const again = applyTemplate({ groupId: 'write-svc', port: 18124 });
-  assert.deepEqual(again.skipped, ['write-svc-server', 'write-svc-client', 'write-svc.shared']);
+  assert.deepEqual(again.skipped, ['write-svc-server', 'write-svc-stop', 'write-svc-health', 'write-svc-client', 'write-svc.shared']);
   assert.equal(again.written.length, 0);
 });
 
 test('applyTemplate --force：覆盖同名组与已存在的脚本', () => {
   const r = applyTemplate({ groupId: 'write-svc', port: 18125, force: true, templateId: 'node-ping' });
-  // server / shared 含端口占位 → 覆盖；client 只引用 BASE_URL，内容不变 → 跳过
-  assert.deepEqual(r.written, ['write-svc-server', 'write-svc.shared']);
+  // server / stop / health / shared 含端口或 id 占位 → 覆盖；client 只引用共享数据，内容不变 → 跳过
+  assert.deepEqual(r.written, ['write-svc-server', 'write-svc-stop', 'write-svc-health', 'write-svc.shared']);
   assert.deepEqual(r.skipped, ['write-svc-client']);
   const config = loadGroups().find((g) => g.id === 'write-svc');
   assert.equal(config.health?.port, 18125);
@@ -225,7 +249,7 @@ test('隔离：两个组的同名脚本各自独立解析', () => {
   // 组列表只看自己命名空间里的文件。
   assert.deepEqual(
     listServiceScripts('iso-a').map((s) => s.name),
-    ['iso-a-client', 'iso-a-server', 'iso-a.shared', 'server'],
+    ['iso-a-client', 'iso-a-health', 'iso-a-server', 'iso-a-stop', 'iso-a.shared', 'server'],
   );
 });
 
@@ -269,6 +293,17 @@ test('组脚本 CRUD：只写本组命名空间；被配置引用的脚本不许
   assert.throws(() => deleteServiceScript('crud-a', outside), /包外脚本不可/);
 });
 
+test('脚本 CLI：--contentFile 从本机文件导入完整脚本正文', () => {
+  applyTemplate({ groupId: 'file-import', templateId: 'node-ping', port: 18221, force: true });
+  const source = join(BASE, 'generated-server.mjs');
+  const code = '// AI 生成的完整脚本\nlog("from file");\n';
+  writeFileSync(source, code, 'utf8');
+  const created = groupScriptOp('file-import', 'create', 'ai-server', undefined, source);
+  assert.equal(created.content, code);
+  assert.equal(readServiceScript('file-import', 'ai-server').content, code);
+  assert.throws(() => groupScriptOp('file-import', 'create', 'bad', undefined, join(BASE, 'missing.mjs')), /ENOENT/);
+});
+
 // ---- 端到端：模板生成的脚本真的能跑 ----
 
 test('多版本启动：选择 entry 改端口 → argv / 探活 / 停止都跟着新端口', async () => {
@@ -301,21 +336,21 @@ test('多版本启动：选择 entry 改端口 → argv / 探活 / 停止都跟�
   }
 });
 
-test('一键测试组：runPipeline(entry) 用选定版本跑 client，执行记录落盘', async () => {
+test('客户端流水线：只跑 client，不启动或停止服务，并跟随当前启动版本', async () => {
   const base = await freePort();
   const alt = await freePort();
   process.env.NX_NX_SERVE_PORT = String(await freePort());
   applyTemplate({ groupId: 'ping-wf', port: base, templateId: 'node-ping', force: true });
   useAltEntry('ping-wf', alt);
-
-  const rep = await runPipeline('ping-wf', '预发');
+  await startGroup('ping-wf', { entry: '预发' });
   try {
+    assert.ok(await waitPing(alt), '测试前置：选定版本没有起来');
+    const rep = await runPipeline('ping-wf');
     assert.equal(rep.ok, true, rep.steps.map((s) => `${s.step}:${s.ok}:${s.detail}`).join('\n'));
-    const clientStep = rep.steps.find((s) => s.step === 'client');
-    assert.ok(clientStep?.ok, 'client 步骤应执行成功');
-    assert.match(clientStep?.detail ?? '', /pong/);
-    assert.ok(await waitPing(alt), '测试组应在选定版本指定的端口上运行服务');
-    await assert.rejects(() => fetch(`http://127.0.0.1:${base}/ping`), '旧端口不应被监听');
+    assert.deepEqual(rep.steps.map((s) => s.step), ['client'], '流水线不应包含 main.start / main.alive');
+    assert.match(rep.steps[0].detail, /pong/);
+    assert.match(rep.steps[0].detail, /共享数据/);
+    assert.ok(await waitPing(alt), '流水线跑完后服务仍应保持运行');
     const clientsLog = readFileSync(join(BASE, 'home', '.nx-nx', 'services', 'logs', 'clients-ping-wf.log'), 'utf8');
     assert.match(clientsLog, /ping-wf-client/);
   } finally {
@@ -323,6 +358,16 @@ test('一键测试组：runPipeline(entry) 用选定版本跑 client，执行记
     await new Promise((r) => setTimeout(r, 300));
     await assert.rejects(() => fetch(`http://127.0.0.1:${alt}/ping`));
   }
+});
+
+test('客户端流水线：服务未启动时不代启动，只如实报 client 失败', async () => {
+  const port = await freePort();
+  process.env.NX_NX_SERVE_PORT = String(await freePort());
+  applyTemplate({ groupId: 'ping-client-only', port, templateId: 'node-ping', force: true });
+  const rep = await runPipeline('ping-client-only');
+  assert.equal(rep.ok, false);
+  assert.deepEqual(rep.steps.map((s) => s.step), ['client']);
+  await assert.rejects(() => fetch(`http://127.0.0.1:${port}/ping`), '流水线不该把服务拉起来');
 });
 
 test('端到端：模板起的 ping 服务能探活、能关闭', async () => {

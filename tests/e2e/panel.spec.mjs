@@ -85,7 +85,7 @@ test('侧栏：拖拽右边界真的改宽', async ({ page }) => {
   expect(Math.abs(reset - 232)).toBeLessThan(3);
 });
 
-test('服务页：设置页建 ping-demo → 首页只留探活/启动/停止 + 日志', async ({ page }) => {
+test('服务页：设置页建完整案例 → 首页只留探活/启动/运行/停止 + 日志', async ({ page }) => {
   // 幂等：重复跑/上一次中断留下的同名服务组先删掉（API 404 不算失败）。
   await page.request.delete('/api/service-groups/ping-demo').catch(() => {});
   await page.goto('/');
@@ -93,79 +93,82 @@ test('服务页：设置页建 ping-demo → 首页只留探活/启动/停止 + 
   await nav(page).getByRole('button', { name: '服务', exact: true }).click();
   await page.getByRole('button', { name: /去设置页创建/ }).click();
 
-  await page.getByRole('button', { name: /从模板创建/ }).first().click();
+  await page.getByRole('button', { name: /创建完整案例|从模板创建/ }).first().click();
   const modal = page.locator('.ant-modal');
   await expect(modal).toBeVisible();
-  await expect(modal.getByText('新建服务组')).toBeVisible();
+  await expect(modal.getByText('新建服务')).toBeVisible();
   // 默认模板 node-ping 带出的默认值：id=ping-demo / 端口=18080
   await expect(modal.locator('input[placeholder="ping-demo"]')).toHaveValue('ping-demo');
   await expect(modal.locator('.ant-input-number input')).toHaveValue('18080');
 
-  await modal.getByRole('button', { name: '按模板创建' }).click();
+  await modal.getByRole('button', { name: '创建服务' }).click();
   await expect(modal).toBeHidden({ timeout: 15_000 });
 
-  // 设置页负责配置：主脚本 / 探活路径 / 空间闸门都能看到。
+  // 默认落到「服务脚本」：四个角色都带默认实现，可直接改，不用先配置。
   await expect(page.locator('.sg-list').getByText('ping-demo', { exact: true })).toBeVisible();
+  for (const tab of ['启动', '停止', '探活', '共享']) {
+    await expect(page.getByRole('tab', { name: tab, exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole('tab', { name: '高级', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '客户端', exact: true })).toBeVisible();
   await expect(page.locator('.sg-detail')).toContainText('ping-demo-server');
   await expect(page.locator('.sg-detail')).toContainText('/ping');
-  await expect(page.locator('.sg-detail')).toContainText('check 方法');
-  await expect(page.locator('.sg-detail')).toContainText('工作目录（cwd）');
-  await expect(page.locator('.sg-detail')).toContainText('说明（desc）');
-  // 启动脚本列表就在「基础配置」里，不另开「启动参数」栏目。
+  await expect(page.locator('.sg-script-code')).toBeVisible();
+
+  // 启动脚本列表收在「高级」里，没有独立「启动参数」栏目。
+  await page.getByRole('tab', { name: '高级', exact: true }).click();
   await expect(page.getByRole('tab', { name: '启动参数' })).toHaveCount(0);
   await expect(page.locator('.sg-launch-field')).toBeVisible();
-  await expect(page.locator('.sg-launch-entry')).toHaveCount(3); // 默认 / 预发 / 生产
+  await expect(page.locator('.sg-launch-entry')).toHaveCount(3);
   const preRow = page.locator('.sg-launch-entry').nth(1);
   await expect(preRow.locator('input[placeholder^="版本名"]')).toHaveValue('预发');
   await expect(preRow.locator('.ant-input-number input')).toHaveValue('18081');
 
-  // 列表是真实可编辑并落盘的：改「预发」的说明 → 保存 → 配置里读得到。
   await preRow.locator('input[placeholder="一句话说明（可留空）"]').fill('E2E 预发环境');
   await page.getByRole('button', { name: '保存配置' }).click();
   await expect(page.locator('.toast-stack')).toContainText('已保存');
   const saved = await (await page.request.get('/api/service-groups/ping-demo')).json();
   expect(saved.data.config.launch.entries[1].desc).toBe('E2E 预发环境');
-  // 测试脚本组收在「流水线」Tab：选脚本、排序、新建 client 都在这里。
-  await page.getByRole('tab', { name: '流水线' }).click();
-  await expect(page.locator('.sg-detail')).toContainText('测试脚本组（工作流，1 个步骤）');
-  await expect(page.locator('.sg-detail')).toContainText('ping-demo-client');
-  await expect(page.locator('.sg-detail')).toContainText('新建 client 脚本');
+  expect(saved.data.config.stop.script).toBe('ping-demo-stop');
+  expect(saved.data.config.probe.script).toBe('ping-demo-health');
+  expect(saved.data.config.shared).toBe('ping-demo.shared');
 
-  // 服务首页只保留三个运行按钮 + 日志预览。
+  await page.getByRole('tab', { name: '客户端', exact: true }).click();
+  await expect(page.locator('.sg-detail')).toContainText('client 步骤（1 个）');
+  await expect(page.locator('.sg-detail')).toContainText('ping-demo-client');
+  await expect(page.locator('.sg-detail')).not.toContainText('流水线画布');
+
+  // 服务首页：四个运维按钮 + 日志预览。
   await nav(page).getByRole('button', { name: '服务', exact: true }).click();
   const detail = page.locator('.sg-detail');
   await expect(detail.getByRole('button', { name: '探活' })).toBeVisible();
   await expect(detail.getByRole('button', { name: '启动' })).toBeVisible();
-  await expect(detail.getByRole('button', { name: '运行测试组 (1)' })).toBeVisible();
+  await expect(detail.getByRole('button', { name: '运行客户端 (1)' })).toBeVisible();
   await expect(detail.getByRole('button', { name: '停止' })).toBeVisible();
   await expect(detail).toContainText('最近日志');
-  await expect(detail).toContainText('零依赖的 Node HTTP 服务');
+  await expect(detail).toContainText('完整的本机 Node 案例');
   await expect(detail).not.toContainText('主脚本（长驻服务');
 
   // 启动脚本列表：三个版本，选一个再确认；不再弹参数输入框。
   await detail.getByRole('button', { name: '启动' }).click();
   const launch = page.locator('.ant-modal').filter({ hasText: '启动 · Ping 服务' });
   await expect(launch).toBeVisible();
-  await expect(launch.locator('.sg-launch-pick')).toHaveCount(3); // 默认 / 预发 / 生产
+  await expect(launch.locator('.sg-launch-pick')).toHaveCount(3);
   await launch.getByText('预发', { exact: true }).click();
   await expect(launch.locator('.sg-launch-pick-env').filter({ hasText: 'NODE_ENV=staging' }).first()).toBeVisible();
   await launch.locator('.ant-modal-footer button.ant-btn-primary').click();
   await expect(launch).toBeHidden();
-  await expect(detail).toContainText('启动版本：预发');
+  await expect(detail).toContainText('预发 · 端口 18081');
   await expect(detail.getByRole('button', { name: '切换版本' })).toBeVisible();
 
-  // 一键运行测试组：先启动/复用服务，再按设置页顺序跑 client，最后给逐步结果。
-  await detail.getByRole('button', { name: /运行测试组/ }).click();
-  const runModal = page.locator('.ant-modal').filter({ hasText: '运行测试组 · Ping 服务' });
-  await expect(runModal).toBeVisible();
-  await runModal.locator('.ant-modal-footer button.ant-btn-primary').click();
-  await expect(runModal).toBeHidden({ timeout: 15000 });
-
-  const report = page.locator('.ant-modal').filter({ hasText: '测试组结果' });
+  // 客户端流水线独立：点一下就跑，不弹启动版本，也不管理服务生命周期。
+  await detail.getByRole('button', { name: /运行客户端/ }).click();
+  const report = page.locator('.ant-modal').filter({ hasText: '客户端结果' });
   await expect(report).toBeVisible({ timeout: 30000 });
   await expect(report).toContainText('全部通过');
-  await expect(report).toContainText('测试脚本');
+  await expect(report).toContainText('client 脚本');
   await expect(report).toContainText('pong');
+  await expect(report).toContainText('共享数据');
   await report.getByRole('button', { name: '查看执行日志' }).click();
 
   const drawer = page.locator('.ant-drawer').filter({ hasText: '服务组日志' });

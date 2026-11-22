@@ -23,7 +23,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 
 // ---- 模板声明（内容在 assets/service-templates 下，声明在这里）----
 
-export type TemplateRole = 'main' | 'client' | 'shared' | 'stop';
+export type TemplateRole = 'main' | 'client' | 'shared' | 'stop' | 'health';
 
 interface TemplateFileSpec {
   /** .tpl 文件名（同目录下） */
@@ -58,9 +58,9 @@ const TEMPLATES: readonly TemplateDef[] = [
   {
     id: 'node-ping',
     title: 'Node HTTP 服务 + /ping',
-    summary: '零依赖的 Node HTTP 服务：GET /ping → pong。带上活性检测、自愈与共享面板闸门——第一次上手就用这个，一条命令生成、能跑、能关。',
+    summary: '完整的本机 Node 案例：启动、停止、探活、共享示例数据和 client 都已配置。',
     level: 'case',
-    tags: ['node', '最小案例', 'http'],
+    tags: ['node', '完整案例', 'http'],
     defaultPort: 18080,
     defaultName: 'Ping 服务',
     exampleId: 'ping-demo',
@@ -73,23 +73,35 @@ const TEMPLATES: readonly TemplateDef[] = [
         usage: 'nx-nx sg start {id}',
       },
       {
+        tpl: 'stop.mjs.tpl',
+        role: 'stop',
+        desc: '停止脚本：请求服务自己的 /shutdown，失败时由端口/pid 兜底',
+        usage: 'nx-nx sg stop {id}',
+      },
+      {
+        tpl: 'health.mjs.tpl',
+        role: 'health',
+        desc: '探活脚本：请求 /ping，输出可 JSON 表示的检测结果',
+        usage: 'nx-nx sg check {id}',
+      },
+      {
         tpl: 'client.mjs.tpl',
         role: 'client',
-        desc: 'client：请求 /ping 并断言 pong（基础设施来自共享面板）',
+        desc: 'client：依次验证 /ping 与共享用户数据',
         usage: 'nx-nx sg run {id}',
       },
       {
         tpl: 'shared.mjs.tpl',
         role: 'shared',
-        desc: '共享面板：BASE_URL + checkUp 起飞闸门',
+        desc: '共享面板：本机 token、示例用户、请求配置与 checkUp',
         usage: '（共享面板，组内脚本执行前自动装载，不能直接运行）',
       },
     ],
     steps: [
-      'nx-nx sg run {id}      # 启动 → 等就绪 → client 打 /ping',
-      'nx-nx sg start {id}    # 只启动主脚本',
-      'nx-nx sg check {id}    # 立即探活：GET /ping',
-      'nx-nx sg stop {id}     # 关闭（杀端口占用进程）',
+      'nx-nx sg start {id}    # 启动完整案例',
+      'nx-nx sg run {id}      # 只运行 client 流水线',
+      'nx-nx sg check {id}    # 执行服务自己的探活脚本',
+      'nx-nx sg stop {id}     # 执行停止脚本，必要时端口/pid 兜底',
       'nx-nx sg show {id}     # 查看配置与运行态',
     ],
   },
@@ -117,6 +129,12 @@ const TEMPLATES: readonly TemplateDef[] = [
         usage: 'nx-nx sg stop {id}',
       },
       {
+        tpl: 'health.mjs.tpl',
+        role: 'health',
+        desc: '探活脚本：请求 /health 并输出 JSON 结果',
+        usage: 'nx-nx sg check {id}',
+      },
+      {
         tpl: 'shared.mjs.tpl',
         role: 'shared',
         desc: '共享面板：API_TOKEN / sendHeaders / api.getCustomers / checkUp',
@@ -130,8 +148,9 @@ const TEMPLATES: readonly TemplateDef[] = [
       },
     ],
     steps: [
-      'nx-nx sg run {id}      # 启动 → 等就绪 → client 跑业务请求',
-      'nx-nx sg check {id}    # 立即探活：GET /health',
+      'nx-nx sg start {id}    # 启动业务服务',
+      'nx-nx sg run {id}      # 只运行 client 流水线',
+      'nx-nx sg check {id}    # 执行探活脚本：GET /health',
       'nx-nx sg logs {id}     # 事件 / 主脚本 IO / 请求日志',
       'nx-nx sg stop {id}     # 关闭（先跑关停脚本，再兜底杀端口）',
       'nx-nx sg show {id}     # 查看配置与运行态',
@@ -224,6 +243,7 @@ function fileNameOf(role: TemplateRole, groupId: string): string {
   if (role === 'main') return `${groupId}-server`;
   if (role === 'client') return `${groupId}-client`;
   if (role === 'stop') return `${groupId}-stop`;
+  if (role === 'health') return `${groupId}-health`;
   return `${groupId}.shared`;
 }
 
@@ -234,6 +254,7 @@ function renderTpl(text: string, vars: Record<string, string>): string {
 function buildConfig(t: TemplateDef, groupId: string, name: string, port: number, files: TemplateFile[]): ServiceGroupConfig {
   const main = files.find((f) => f.role === 'main');
   const stop = files.find((f) => f.role === 'stop');
+  const healthScript = files.find((f) => f.role === 'health');
   const shared = files.find((f) => f.role === 'shared');
   const clients = files.filter((f) => f.role === 'client').map((f) => f.name);
   if (!main) throw specError(`模板 ${t.id} 没有 main 脚本`);
@@ -243,6 +264,7 @@ function buildConfig(t: TemplateDef, groupId: string, name: string, port: number
       desc: t.summary.split(/[。\n]/)[0],
       main: { script: main.name, args: ['--port', String(port)] },
       stop: stop ? { script: stop.name, args: [] } : undefined,
+      probe: healthScript ? { script: healthScript.name, args: [] } : undefined,
       killPort: port,
       stopMode: 'auto',
       health: {

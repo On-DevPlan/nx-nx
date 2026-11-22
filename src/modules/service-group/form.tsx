@@ -25,6 +25,7 @@ export interface FormState {
   mainScript: string;
   mainArgs: string;
   stopScript: string;
+  probeScript: string;
   killPort: string;
   stopMode: StopMode;
   healthEnabled: boolean;
@@ -52,6 +53,7 @@ export function emptyForm(): FormState {
     mainScript: '',
     mainArgs: '',
     stopScript: '',
+    probeScript: '',
     killPort: '',
     stopMode: 'auto',
     // 默认值对齐模板 node-ping：端口 18080、HTTP /ping。
@@ -83,6 +85,7 @@ export function formFromConfig(c: GroupConfig): FormState {
     mainScript: c.main?.script ?? '',
     mainArgs: (c.main?.args ?? []).join(' '),
     stopScript: c.stop?.script ?? '',
+    probeScript: c.probe?.script ?? '',
     killPort: c.killPort ? String(c.killPort) : '',
     stopMode: c.stopMode ?? 'auto',
     healthEnabled: !!c.health,
@@ -137,8 +140,9 @@ export function configFromForm(id: string, f: FormState): Record<string, unknown
     name: f.name || id,
     desc: f.desc.trim() || undefined,
     cwd: f.cwd.trim() || undefined,
-    main: f.mainScript ? { script: f.mainScript, args: f.mainArgs.split(/\s+/).filter(Boolean) } : undefined,
+    main: f.mainScript ? { script: f.mainScript, args: splitArgsText(f.mainArgs) } : undefined,
     stop: f.stopScript ? { script: f.stopScript, args: [] } : undefined,
+    probe: f.probeScript ? { script: f.probeScript, args: [] } : undefined,
     killPort: num(f.killPort),
     stopMode: f.stopMode,
     health: f.healthEnabled
@@ -274,14 +278,23 @@ export function SgForm({ form, set, entryScripts, panelScripts }: Props) {
                   style={{ width: '50%' }}
                 />
               </Space.Compact>
+              <Select
+                value={form.probeScript || undefined}
+                placeholder="探活脚本（可选，留空用端口/HTTP 检测）"
+                onChange={(v) => set('probeScript', v ?? '')}
+                options={[
+                  { value: '', label: '（内置端口/HTTP 检测）' },
+                  ...entryScripts.map((s) => ({ value: s.name, label: s.name })),
+                ]}
+                style={{ width: '100%' }}
+              />
               <InputNumber
                 value={Number(form.healthReadyTimeoutMs) || undefined}
                 onChange={(v) => set('healthReadyTimeoutMs', v === null ? '' : String(v))}
                 min={1000}
                 max={600000}
                 step={1000}
-                addonBefore="启动就绪上限(ms)"
-                addonAfter="冷启动慢就调大（java -jar / go build）"
+                addonBefore="就绪上限(ms)"
                 style={{ width: '100%' }}
               />
               {/* 自愈开关放在设置页：首页只留探活/启动/停止三个按钮，

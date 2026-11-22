@@ -216,10 +216,11 @@ export default defineModule({
         op: { type: 'string', default: 'read', hint: 'read | save | create | delete' },
         name: { type: 'string', hint: '脚本名（不含 .mjs，不能带路径）' },
         content: { type: 'string', hint: 'save / create 的脚本全文' },
+        contentFile: { type: 'string', hint: '从本机文件读入脚本全文（AI 生成完整脚本时优先用这个）' },
       },
       schema: groupScriptOpInput,
     })(
-      (ctx) => service.groupScriptOp(ctx.id, ctx.op, ctx.name, ctx.content),
+      (ctx) => service.groupScriptOp(ctx.id, ctx.op, ctx.name, ctx.content, ctx.contentFile),
       (r) => {
         if (r.op === 'read') return `// ${r.groupId}/${r.name}  ${r.path}\n${r.content ?? ''}`;
         if (r.op === 'delete') return `已删除 ${r.groupId}/${r.name}: ${r.path}`;
@@ -327,14 +328,11 @@ export default defineModule({
       id: 'serviceGroup.run',
       cli: ['sg', 'run'],
       http: ['POST', '/api/service-groups/:id/run'],
-      summary: '一键运行测试组：空间 check → 按启动脚本启动 main → 等活性就绪 → clients / 测试脚本依次执行',
+      summary: '运行客户端流水线：按配置顺序执行 clients（不启动/停止服务）',
       args: ['id'],
-      flags: {
-        entry: { type: 'string', hint: '启动脚本版本名，如 预发；留空用上次或列表第一条' },
-      },
-      schema: startInput,
+      schema: idInput,
     })(
-      (ctx) => service.run(ctx.id, ctx.entry),
+      (ctx) => service.run(ctx.id),
       (r) => {
         const lines = [`${r.ok ? '✔' : '✘'} 流水线 ${r.groupId}:`];
         for (const s of r.steps) {

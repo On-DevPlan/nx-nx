@@ -14,7 +14,7 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 
 | 代号 | 类别 | 成员 |
 | --- | --- | --- |
-| **A** | 使用 SOP（已有能力怎么跑） | A01 脚本（长 / 短 / 共享面板） · A02 服务组（探活 / 自愈 / 流水线 / 空间） |
+| **A** | 使用 SOP（已有能力怎么跑） | A01 脚本（长 / 短 / 共享面板） · A02 服务组命令（探活 / 自愈 / 启动版本） · A03 服务模块（默认脚本 / 客户端流水线 / 共享数据） |
 | **B** | 生成 SOP（项目怎么造） | B01 模板（选型 / 预览 / 生成） · B02 初始化（装依赖 / 测试 / 起面板） |
 
 ## 场景路由（ref-map）
@@ -24,6 +24,7 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 | 写 / 跑 / 改一次性脚本 | `script list`、`script run`、`.mjs`、`@param` | 动手写脚本或运行前 | A01 | `references/A01-script.md` |
 | 跑短脚本 / 沙箱 / 变量堆 | `js sandbox`、`.short`、`js runs` | 纯计算、验算、看变量堆 | A01 | `references/A01-script.md` |
 | 起长驻服务 / 探活 / 自愈 | `sg`、`main`、`health`、`autoheal`、`stop` | 建组、排查失活或关停 | A02 | `references/A02-service.md` |
+| 自动生成 servicegroup / 服务脚本 / 扩展脚本 | `sg set`、`sg script --contentFile`、已有服务转服务组 | 照 SOP 产出五份脚本并 CLI 导入验证 | A03 | `references/A03-service-module.md` |
 | client 流水线 / 共享面板 / 空间 | `sg run`、`clients`、`shared`、`space.check` | 写业务请求、配闸门 | A02 | `references/A02-service.md` |
 | 选模板 / 看选项 / 预览 / 生成 | `template list`、`describe`、`preview`、`create` | 生成项目第一步 | B01 | `references/B01-template.md` |
 | 生成后装依赖 / 跑测试 / 起面板 | `pnpm install`、`pnpm test`、`pnpm dev`、`pnpm start` | 项目刚生成或初始化失败 | B02 | `references/B02-init.md` |
@@ -43,6 +44,7 @@ nx-nx js sandbox --code 'set("sum", [1,2,3].reduce((a,b)=>a+b,0))'
 
 # 长驻服务（细节见 A02）
 nx-nx sg init ping-demo
+nx-nx sg start ping-demo
 nx-nx sg run ping-demo
 nx-nx sg stop ping-demo
 ```
@@ -57,6 +59,7 @@ nx-nx sg stop ping-demo
 - 服务组脚本住在 `~/.nx-nx/services/groups/<id>/scripts/`，不属于全局脚本模块；`script list` 看不到它们，用 `sg script` 读写。
 - 多版本启动只维护 `launch.entries`（每版一套 script / args / env / port）；启动用 `--entry 版本名`，没有 `--values` 参数表单。
 - `.shared.mjs` 不能作入口运行——它只被 `import` 或服务组自动装载。
+- AI 生成完整服务脚本后，用 `sg script <id> --op create|save --name <名> --contentFile <路径>` 导入；不要拼多行 shell 字符串。
 - 自愈 watcher 只活在 `nx-nx serve` 进程里；没开 serve 时只能手动 `sg start` / `sg stop`。
 - 生成项目的端口在**创建时**探测并写进生成物；换端口要重新生成或同步改对应配置。
 

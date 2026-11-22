@@ -1,0 +1,39 @@
+{
+  "name": "nx-kv 面板服务",
+  "desc": "用 servicegroup 托管 nx-kv serve，并验证 HTTP 契约接口",
+  "cwd": "D:/a_js/js_proj/nx-kv",
+  "main": { "script": "nx-kv-panel-server", "args": [] },
+  "stop": { "script": "nx-kv-panel-stop", "args": [] },
+  "probe": { "script": "nx-kv-panel-health", "args": [] },
+  "killPort": 7878,
+  "stopMode": "auto",
+  "health": {
+    "kind": "http",
+    "host": "127.0.0.1",
+    "port": 7878,
+    "path": "/api/health",
+    "intervalMs": 3000,
+    "failThreshold": 2,
+    "readyTimeoutMs": 15000,
+    "onDead": "restart"
+  },
+  "shared": "nx-kv-panel.shared",
+  "space": { "panel": "nx-kv-panel.shared", "check": "checkUp" },
+  "clients": ["nx-kv-panel-client"],
+  "launch": {
+    "entries": [
+      {
+        "name": "默认",
+        "script": "nx-kv-panel-server",
+        "args": [],
+        "env": {
+          "NX_KV_CLI": "D:/a_js/js_proj/nx-kv/bin/kv.mjs",
+          "NX_KV_HOME": "D:/a_js/js_proj/nx-nx/.sg-nx-kv-home",
+          "NX_SERVE_NO_OPEN": "1"
+        },
+        "port": 7878,
+        "desc": "独立端口 + 独立数据目录，不碰已在 7877 的面板"
+      }
+    ]
+  }
+}

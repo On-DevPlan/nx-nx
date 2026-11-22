@@ -216,30 +216,36 @@ web/      React 壳
 
 ## 服务组（sg）：长驻服务 + 活性自愈 + 共享函数面板
 
-一个服务组 = 1 个主脚本（长驻服务，IO 重定向到日志）+ N 个 client 脚本（依次执行的请求方）+ 可选共享函数面板。
+一个服务 = 一组自己的脚本（启动 / 停止 / 探活 / 共享 / client）+ 一份配置 + 一份运行态。
+服务生命周期由服务自己管理；客户端流水线只按顺序执行 client。
 
-**面板分两页**：服务首页只保留「探活 / 启动 / 停止」三个动作、一段说明（`desc`）和最近日志；主脚本参数、活性检测、交付策略、流水线与共享面板都在「服务设置」里配置。
+**面板分两页**：服务首页保留「探活 / 启动 / 运行客户端 / 停止」、一段说明（`desc`）和最近日志；服务设置页分「服务脚本 / 客户端 / 共享数据 / 高级」四个 Tab。
 每个服务组有自己的 **cwd**（默认 `~/.nx-nx/services/groups/<组 id>`）：主脚本在这个目录里跑，client 的构建产物 / 请求样本 / 测试数据也落这里，互不串目录。
 
 ### 5 分钟跑通一个 node ping 服务（推荐入口）
 
 ```bash
-nx-nx sg init ping-demo     # 默认模板 node-ping：生成脚本 + 配置 + 下一步
-nx-nx sg run ping-demo      # 启动 → 等活性就绪 → client 打 /ping
-nx-nx sg stop ping-demo     # 关闭
+nx-nx sg init ping-demo     # 默认模板 node-ping：五个脚本 + 配置 + 下一步
+nx-nx sg start ping-demo    # 启动服务
+nx-nx sg check ping-demo    # 执行服务自己的探活脚本
+nx-nx sg run ping-demo      # 只运行 client：验证 /ping 与共享数据
+nx-nx sg stop ping-demo     # 执行停止脚本，必要时端口 / pid 兜底
 ```
 
 `sg init` 会在服务组自己的命名空间 `~/.nx-nx/services/groups/<组 id>/scripts/`
-下生成三个文件（不再写进全局 `assets/scripts/`，也不登记全局 manifest），并写好服务组配置：
+下生成五个文件（不再写进全局 `assets/scripts/`，也不登记全局 manifest），并写好服务组配置：
 
 | 文件 | 角色 | 内容 |
 | --- | --- | --- |
-| `ping-demo-server.mjs` | 主脚本 | 零依赖 Node HTTP 服务：`GET /ping` → `pong`、`GET /health` → JSON |
-| `ping-demo-client.mjs` | client | 请求 `/ping` 并断言 `pong`（基础设施来自共享面板） |
-| `ping-demo.shared.mjs` | 共享面板 | `BASE_URL` + `checkUp` 起飞闸门（装进管理空间） |
+| `ping-demo-server.mjs` | 主脚本 | Node HTTP：`/ping`、`/health`、`/api/users`、`/shutdown` |
+| `ping-demo-stop.mjs` | 停止脚本 | 请求 `/shutdown` 优雅退出 |
+| `ping-demo-health.mjs` | 探活脚本 | 请求 `/ping`，退出码 0=活，末行 JSON 给详情 |
+| `ping-demo-client.mjs` | client | 验证 `/ping`，再比对共享用户数据与服务接口 |
+| `ping-demo.shared.mjs` | 共享面板 | token、三条示例用户、请求配置与 `checkUp` 起飞闸门 |
 
 改 `ping-demo-server.mjs` 就能接自己的业务；换成 REST 接口可以参考 `--template node-api`。
-两者都是「能跑、能探活、能关」的完整闭环，不是一个只能启动的空壳。
+两者都是「能跑、能探活、能关」的完整闭环，不是一个只能启动的空壳。共享数据不是示例注释——
+`/api/users`、client 与 `sg space` 用的是同一份 `DEMO_USERS`。
 
 服务脚本只属于这个组：同名脚本在两个组里互不影响，Web 服务设置页的脚本选项也只列本组命名空间里的文件。
 存量组的旧脚本（原本在 `assets/scripts/`）会在第一次解析时惰性复制进组命名空间，之后以组内副本为准。
@@ -250,6 +256,19 @@ nx-nx sg script ping-demo --op save --name ping-demo-server --content "<全文>"
 nx-nx sg script ping-demo --op create --name extra-client --content "<全文>"
 nx-nx sg script ping-demo --op delete --name extra-client
 ```
+
+让 AI 生成完整脚本时用 `--contentFile`，不要拼多行 shell 字符串：
+
+```bash
+nx-nx sg script <id> --op create --name <id>-client --contentFile ./client.mjs
+```
+
+### AI 生成完整 servicegroup（SOP）
+
+直接用 CLI 建一个可运行的服务套件：写五份脚本 → `sg set` 写配置 → `sg script --contentFile`
+逐份导入 → `sg start/check/run/stop` 验证。完整动作清单看
+`nx-nx skill get nx-nx A03-service-module`；现成底座在
+`assets/examples/nx-kv-servicegroup/`（nx-kv 启动 + 五个 HTTP 接口验证）。
 
 ```bash
 nx-nx sg templates                                  # 看全部模板
@@ -288,38 +307,38 @@ nx-nx sg init my-svc --dry                          # 只看会生成什么，�
 - `port` 驱动 argv / 探活 / 停止三处，避免「启动 18081、探活盯 18080」；留空则从 `args` 里的 `--port` 推断。
 - 组内第一行是默认版本。Web 首页点「启动」弹出的是**版本列表**（不是参数表单），选一行确认即启动；本次版本记进运行态，自愈重启沿用。
 - 切换版本会先停旧进程再按新版本起，不会让旧端口上的进程继续跑；Web 服务运行中主按钮变成「切换版本」，选当前版本则保持不动。
-- 模板 `node-ping` / `node-api` 创建时自带「默认 / 预发 / 生产」三条启动脚本（端口 +0/+1/+2，配 `NODE_ENV`）；示例里的 `config/*.json` 只是示意，用自己的配置文件时把真实相对 / 绝对路径写进 `args`。在「服务设置 → 基础配置」的启动脚本列表里可以增删、排序、改参数。
+- 模板 `node-ping` / `node-api` 创建时自带「默认 / 预发 / 生产」三条启动脚本（端口 +0/+1/+2，配 `NODE_ENV`）；示例里的 `config/*.json` 只是示意，用自己的配置文件时把真实相对 / 绝对路径写进 `args`。在「服务设置 → 高级」的启动脚本列表里可以增删、排序、改参数。
 - CLI 等价写法：
 
 ```bash
 nx-nx sg start ping-demo --entry 预发
-nx-nx sg run ping-demo --entry 预发
 ```
 
-### 测试脚本组（工作流）：一个按钮跑完「启动 → 等就绪 → 请求测试 → 记日志」
+### 客户端流水线：只跑 client
 
-长服务负责一直跑，短 client 负责请求验证。服务设置页的「流水线」Tab 里可以把 client / 测试脚本选进一个组，按上下箭头排执行顺序；首页就会出现「运行测试组 (N)」按钮：
+长服务负责一直跑，短 client 负责请求验证。服务设置页的「客户端」Tab 里可以把 client 按顺序排列；首页出现「运行客户端 (N)」按钮：
 
-- 点按钮先从启动脚本列表里选一个版本，启动或复用服务，再依次执行组内脚本；服务已运行就直接复用，不会重复起进程。
+- 点按钮只执行这些 client，**不会启动或停止服务**；服务生命周期仍由 `sg start` / `sg check` / `sg stop` 控制。
 - 每个脚本都在服务的 cwd 里跑，退出码、耗时、stdout / stderr 追加到 `~/.nx-nx/services/logs/clients-<id>.log`。
 - client 里用 `send()` / `get()` 发的请求一请求一日志，落在 `~/.nx-nx/services/http-logs/<id>/`；日志抽屉的「HTTP 请求」能看到文件清单。
-- 执行完弹出逐步结果（空间闸门 / 启动 / 等活性 / 每个测试脚本），失败步骤直接标红；「查看执行日志」跳到 client 执行记录。
+- 执行完弹出逐步结果，失败步骤直接标红；「查看执行日志」跳到 client 执行记录。
 - 启动脚本的 `env` 与端口会传给 client：脚本里读 `NX_SERVICE_URL` / `NX_SERVICE_PORT` 就能跟着当前版本走，不会把模板里的默认端口写死。
 
 CLI 等价：
 
 ```bash
-nx-nx sg run ping-demo --entry 预发
+nx-nx sg run ping-demo
 ```
 
 ### 手工配置（已有自己的脚本时）
 
 ```bash
-# 创建（配置整组 JSON：main / stop / killPort / stopMode / health / shared / clients）
+# 创建（配置整组 JSON：main / stop / probe / killPort / stopMode / health / shared / clients）
 nx-nx sg set demo-group --config '{
   "name": "演示服务",
   "main":  { "script": "demo-server", "args": ["--port", "18999"] },
   "stop":  { "script": "demo-stop" },
+  "probe": { "script": "demo-health" },
   "killPort": 18999,
   "stopMode": "auto",
   "health": { "kind": "http", "port": 18999, "host": "127.0.0.1", "path": "/health",
@@ -328,21 +347,22 @@ nx-nx sg set demo-group --config '{
   "clients": ["demo-client"]
 }'
 
-nx-nx sg run demo-group    # 流水线：启动 main → 等活性就绪 → clients 依次执行
+nx-nx sg start demo-group   # 启动（过闸门）
+nx-nx sg run demo-group     # 客户端流水线：按顺序跑 clients
 nx-nx sg status demo-group # 运行态（pid / 活性 / 自愈计数）
-nx-nx sg check demo-group  # 立即活性检测 → { alive, detail }
+nx-nx sg check demo-group  # 执行探活脚本 → { alive, detail }
 nx-nx sg autoheal demo-group --state off  # 关自愈（仍监控，只记录不处理）
 nx-nx sg stop demo-group   # 按 stopMode 关闭（默认 auto：关停脚本 → 杀端口 → 杀 pid）
 nx-nx sg stop demo-group --mode port      # 本次直接杀端口占用进程
 nx-nx sg list / show / delete
 ```
 
-- **日常只有三个动作**：启动 / 关闭 / 自愈开关。关闭的走法由 `stopMode` 决定：
+- **日常四个动作**：启动 / 探活 / 运行客户端 / 关闭。关闭的走法由 `stopMode` 决定：
   `auto`（依次兜底，每步之后复核，清干净就收工）、`script`（只跑优雅关停脚本）、
   `port`（直接杀掉占用端口的进程）、`pid`（只杀运行态记录的进程）。`sg stop --mode` 可临时覆盖本次。
-- **活性自愈**：`nx-nx serve` 运行时内置 watcher 按间隔检测（端口/HTTP），连续失败达阈值自动重启主脚本并记入事件日志（`~/.nx-nx/services/logs/events-<id>.log`）；自愈是**开关**（`sg autoheal`），关掉只是不乱重启，检测照跑。serve 不在跑时可随时手动 `sg stop/start`。
+- **活性自愈**：`nx-nx serve` 运行时内置 watcher 按间隔检测；配了 `probe` 就执行组内探活脚本（退出码 0=活），否则用端口 / HTTP。连续失败达阈值自动重启主脚本并记入事件日志；自愈是**开关**（`sg autoheal`），关掉只是不乱重启，检测照跑。serve 不在跑时可随时手动 `sg stop/start`。
 - **启动就绪上限**：`health.readyTimeoutMs`（默认 20s）——`java -jar` / `go build` 这类冷启动慢的服务调大即可，流水线不再固定等 20 秒就判失败。
 - **共享函数面板**：`<name>.shared.mjs`（如 `demo.shared`）——「常量 = 函数 = {}」整体优先执行，不可作为入口直接运行；组内脚本执行前自动装载并输出**堆快照**（只显示可 JSON 表示的数据确认，函数报签名，Map/循环引用等只报类型，不泄露内部表示）。面板里可以定义 API token、随机数据工厂、以及 `serviceAlive(id)` 这类活性 check 函数。
 - **client-base 思想**：基础设施（send 封装、token、常量）放共享面板，业务请求单独一个 client 脚本文件。
-- 随包演示：`demo-server` / `demo-client` / `demo-stop` / `demo.shared`（`nx-nx sg run demo-group` 一键体验）。
-- 面板「服务」页的新建流程同一条路：选模板 → 预填 id/端口 → 创建即生成脚本与配置，空态还给出一条三步命令。
+- 面板「服务」页的新建流程同一条路：选模板 → 预填 id / 端口 → 创建即生成五个脚本与配置，没有半成品服务。
+- 完整模块说明：`nx-nx skill get nx-nx A03-service-module`；命令与排障看 `A02-service`。

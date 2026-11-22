@@ -11,7 +11,7 @@ import { spawn } from 'node:child_process';
 import { appendFileSync, mkdirSync, openSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  checkHealth,
+  checkGroupHealth,
   type CheckResult,
 } from './check.js';
 import {
@@ -152,7 +152,7 @@ export async function startGroup(
     };
   }
   if (health) {
-    const c = await checkHealth(health);
+    const c = await checkGroupHealth(g, health);
     if (c.alive) {
       patchRuntime(id, {
         status: 'running',
@@ -311,7 +311,7 @@ async function tickWatch(id: string): Promise<void> {
     // 启动版本被改掉/删掉时，退回配置里的 health；监控不能因为配置编辑而停摆。
   }
   if (!health) return;
-  const result: CheckResult = await checkHealth(health);
+  const result: CheckResult = await checkGroupHealth(g, health);
   const failStreak = result.alive ? 0 : rt.failStreak + 1;
   patchRuntime(id, {
     lastCheckAt: Date.now(),

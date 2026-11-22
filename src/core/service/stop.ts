@@ -24,6 +24,7 @@ import {
   type StopMode,
 } from './store.js';
 import { runnerPath } from '../script/paths.js';
+import { serviceGroupDir, serviceHttpLogsDir } from './paths.js';
 import { resolveServiceScript } from './scripts.js';
 
 export interface StopResult {
@@ -51,9 +52,14 @@ interface CmdResult {
   stderr: string;
 }
 
-function run(cmd: string, args: string[], timeoutMs: number): Promise<CmdResult> {
+function run(
+  cmd: string,
+  args: string[],
+  timeoutMs: number,
+  opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
+): Promise<CmdResult> {
   return new Promise((resolve) => {
-    execFile(cmd, args, { timeout: timeoutMs, encoding: 'utf8', windowsHide: true }, (err, stdout, stderr) => {
+    execFile(cmd, args, { timeout: timeoutMs, encoding: 'utf8', windowsHide: true, ...opts }, (err, stdout, stderr) => {
       const code = err ? (typeof (err as { code?: unknown }).code === 'number' ? (err as { code: number }).code : 1) : 0;
       resolve({ code, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') });
     });
@@ -145,10 +151,26 @@ function resolveScript(groupId: string, name: string): string {
 async function runStopScript(g: ServiceGroupConfig): Promise<string> {
   if (!g.stop) return '未配置关停脚本';
   try {
+    let launched: ReturnType<typeof resolveLaunch> | undefined;
+    try {
+      launched = resolveLaunch(g, loadRuntime(g.id).entry);
+    } catch {
+      // 启动版本被删时停止脚本仍能靠模板默认端口跑
+    }
+    const cwd = g.cwd || serviceGroupDir(g.id);
+    const port = launched?.port ?? g.killPort ?? g.health?.port;
+    const env: NodeJS.ProcessEnv = {
+      NX_SERVICE_DIR: cwd,
+      NX_HTTP_LOG_DIR: serviceHttpLogsDir(g.id),
+      ...(port
+        ? { NX_SERVICE_PORT: String(port), NX_SERVICE_URL: `http://${g.health?.host ?? '127.0.0.1'}:${port}` }
+        : {}),
+    };
     const r = await run(
       process.execPath,
       [runnerPath(), resolveScript(g.id, g.stop.script), ...g.stop.args],
       SCRIPT_TIMEOUT_MS,
+      { cwd, env },
     );
     return `关停脚本 ${g.stop.script} 退出码 ${r.code}`;
   } catch (err) {
@@ -213,7 +235,14 @@ export async function stopGroup(
     notes.push(await killRecordedPid(rt.pid));
   }
 
-  patchRuntime(id, { status: 'stopped', pid: undefined, failStreak: 0, alive: false });
+  patchRuntime(id, {
+    status: 'stopped',
+    pid: undefined,
+    failStreak: 0,
+    alive: false,
+    detail: '已停止',
+    lastCheckAt: undefined,
+  });
   const detail = notes.join('；') || '无动作';
   if (!opts.silent) appendEvent(id, `关闭（mode=${mode}）：${detail}`);
   return { stopped: true, mode, detail };

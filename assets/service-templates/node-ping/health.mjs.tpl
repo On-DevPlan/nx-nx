@@ -1,0 +1,15 @@
+// {{ID}} 的探活脚本：确认主脚本仍在响应，并输出可 JSON 表示的结果。
+// 退出码 0 = 活；非 0 = 失活。最后一行 JSON 会被面板作为检测详情展示。
+const base = process.env.NX_SERVICE_URL || 'http://127.0.0.1:' + (Number(process.env.NX_SERVICE_PORT) || {{PORT}});
+
+try {
+  const res = await fetch(base + '/ping', { signal: AbortSignal.timeout(3000) });
+  const body = (await res.text()).trim();
+  const alive = res.ok && body === 'pong';
+  console.log(JSON.stringify({ alive, detail: 'HTTP ' + res.status + ' @ ' + base + '/ping → ' + body }));
+  process.exitCode = alive ? 0 : 1;
+} catch (err) {
+  const detail = err instanceof Error ? err.message : String(err);
+  console.log(JSON.stringify({ alive: false, detail: base + '/ping 探测失败: ' + detail }));
+  process.exitCode = 1;
+}

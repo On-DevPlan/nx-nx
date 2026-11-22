@@ -111,9 +111,11 @@ export function serviceScriptRefs(g: ServiceGroupConfig): string[] {
   const refs = [
     g.main?.script,
     g.stop?.script,
+    g.probe?.script,
     g.shared,
     g.space?.panel,
     ...g.clients,
+    ...(g.launch?.entries ?? []).map((e) => e.script),
   ].filter((s): s is string => Boolean(s && String(s).trim()));
   return [...new Set(refs)];
 }

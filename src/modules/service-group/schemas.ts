@@ -76,4 +76,5 @@ export const groupScriptOpInput = z.object({
   op: z.enum(['read', 'save', 'create', 'delete']).default('read'),
   name: serviceScriptName.optional(),
   content: z.string().optional(),
+  contentFile: z.string().trim().min(1).optional(),
 });
