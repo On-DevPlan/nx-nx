@@ -10,6 +10,7 @@ import { runScript } from '../script/service.js';
 import { checkHealth } from './check.js';
 import { effectiveHealth, launchEnv, launchPort, type LaunchValues } from './launch.js';
 import { serviceGroupDir, serviceHttpLogsDir } from './paths.js';
+import { resolveServicePanel, resolveServiceScript } from './scripts.js';
 import { appendClientRecord } from './logs.js';
 import {
   getGroup,
@@ -90,12 +91,23 @@ export async function runPipeline(groupId: string, values?: LaunchValues): Promi
     startWatcher(groupId);
   }
 
-  // 3) client 脚本依次执行
+  // 3) client 脚本依次执行（脚本路径来自组命名空间，共享面板也是组内那份）
+  let sharedPanel: string | undefined;
+  if (g.shared) {
+    try {
+      sharedPanel = resolveServicePanel(g.id, g.shared).path;
+    } catch {
+      // 面板缺失不阻断整条流水线：client 自己会因为缺 BASE_URL 等报错，
+      // 那一步的错误会连同 stdout/stderr 一起进报告，定位更直接。
+      sharedPanel = undefined;
+    }
+  }
   for (const client of g.clients) {
     const started = Date.now();
     try {
-      const r = await runScript(client, {
-        shared: g.shared,
+      const clientPath = resolveServiceScript(g.id, client).path;
+      const r = await runScript(clientPath, {
+        shared: sharedPanel,
         // client 在服务自己的 cwd 里跑：构建产物、请求样本、测试数据都落在服务目录，
         // 不再散落在 serve 进程的当前目录。
         cwd: g.cwd || serviceGroupDir(g.id),

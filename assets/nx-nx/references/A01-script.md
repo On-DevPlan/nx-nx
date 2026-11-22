@@ -18,7 +18,9 @@ description: nx-nx 脚本场景 SOP——判脚本类型、列/读/建/改、@pa
 | 短脚本 | `*.short.mjs` | QuickJS 沙箱 | 否，走 `js sandbox` | 纯计算、数据整形、验算 |
 | 共享面板 | `*.shared.mjs` | 被装载 | 否 | 常量 / 函数 / API 封装，服务组自动装载 |
 
-`script list` 会列出全部脚本：短脚本带 `.short` 后缀、共享面板带 `.shared`；Web「脚本」页再按长 / 短 / 面板分区摆开。判错类型的典型报错是「走不了 Node 通道」或「.shared 不能作入口」。
+`script list` 会列出全部**全局脚本模块**：短脚本带 `.short` 后缀、共享面板带 `.shared`；Web「脚本」页再按长 / 短 / 面板分区摆开。判错类型的典型报错是「走不了 Node 通道」或「.shared 不能作入口」。
+
+**服务组脚本是另一套命名空间**：server / stop / client / shared 住在 `~/.nx-nx/services/groups/<组 id>/scripts/`，用 `sg script` 管理，不出现在 `script list` / 脚本页。两者完全分离——改全局脚本不会影响任何服务组，两个组的同名脚本也互不干扰。详见 [[A02-service]]。
 
 ## 2. 找脚本、看能力
 
@@ -134,6 +136,7 @@ nx-nx js runs --limit 10
 | 以为面板里也能用 `send` | 网络别名不进沙箱；沙箱要请求就出不去，改长脚本 |
 | `@param` 写在空行之后 | 参数区遇到空行即结束，声明会被忽略 |
 | 参数里有空格直接拼命令行 | 用 `--k=v` 等号连写，或由面板生成 token |
+| 在 `script list` 里找服务组脚本 | 服务脚本在组命名空间，用 `sg script` / `sg show`；见 [[A02-service]] |
 
 ## 10. 验收清单
 

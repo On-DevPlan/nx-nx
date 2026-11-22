@@ -8,16 +8,15 @@
 //
 // 文件布局：
 //   assets/service-templates/<模板 id>/*.tpl   —— .mjs 正文 + {{ID}} / {{PORT}} 占位
-//   assets/scripts/<脚本名>.mjs                —— 落盘后的运行目录（唯一真相源）
+//   ~/.nx-nx/services/groups/<id>/scripts/     —— 落盘后的组命名空间（运行真相源）
 //
 // 模板只负责「生成」，不负责运行：启停/探活/自愈仍走 core/service/runtime.ts。
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { badInput, conflict, specError } from '../errors/index.js';
-import { scriptsDir } from '../script/paths.js';
-import { upsertScriptManifest } from '../script/manifest.js';
-import { assertGroupId } from './paths.js';
+import { assertGroupId, serviceScriptsDir } from './paths.js';
+import { ensureServiceNamespace } from './scripts.js';
 import { loadGroups, normalizeGroup, saveGroups, type ServiceGroupConfig } from './store.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -31,7 +30,7 @@ interface TemplateFileSpec {
   tpl: string;
   role: TemplateRole;
   desc: string;
-  /** 登记进 manifest.json 的用法；{id} 会被替换成组 id */
+  /** 模板作者的用法说明；{id} 会被替换成组 id（只用于展示，不写 manifest） */
   usage?: string;
 }
 
@@ -172,7 +171,7 @@ export interface TemplateFile {
   name: string;
   role: TemplateRole;
   desc: string;
-  /** 登记进 manifest.json 的用法（{id} 已替换成组 id） */
+  /** 模板作者的用法说明（{id} 已替换成组 id；只用于展示，不写 manifest） */
   usage: string;
   path: string;
   content: string;
@@ -321,7 +320,7 @@ export function planTemplate(input: InitInput): TemplatePlan {
     const tplPath = join(root, spec.tpl);
     if (!existsSync(tplPath)) throw specError(`模板 ${t.id} 缺文件: ${tplPath}`);
     const nameOf = fileNameOf(spec.role, groupId);
-    const path = join(scriptsDir(), nameOf + '.mjs');
+    const path = join(serviceScriptsDir(groupId), nameOf + '.mjs');
     const content = renderTpl(readFileSync(tplPath, 'utf8'), vars);
     const exists = existsSync(path);
     return {
@@ -376,13 +375,15 @@ export function applyTemplate(input: InitInput): InitResult {
   if (!input.dryRun) {
     // 服务自己的 cwd 先建好：主脚本第一次启动前就存在，client 可以立即写产物。
     if (plan.config.cwd) mkdirSync(plan.config.cwd, { recursive: true });
+    // 组命名空间的 aliases / _ns / lib 跟脚本同目录：脚本里的相对 import 才成立。
+    ensureServiceNamespace(plan.groupId);
     for (const f of plan.files) {
       if (f.exists && f.same) {
         skipped.push(f.name);
         continue;
       }
       writeAtomic(f.path, f.content);
-      upsertScriptManifest({ name: f.name, description: f.desc, usage: f.usage });
+      // 服务脚本不登记全局 manifest：它只属于这个组，不该出现在「脚本模块」列表里。
       written.push(f.name);
     }
     saveGroups([...loadGroups().filter((g) => g.id !== plan.groupId), plan.config]);

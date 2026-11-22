@@ -11,7 +11,8 @@ export default async function globalSetup() {
   const home = join(root, '.e2e-home');
   rmSync(home, { recursive: true, force: true });
   mkdirSync(join(home, 'scripts'), { recursive: true });
-  // 模板生成的脚本会 import ./aliases.mjs；脚本目录必须是 assets/scripts 的副本。
+  // NX_NX_SCRIPTS 是模板 helper 的来源（aliases / _ns / lib）与旧组迁移来源；
+  // 服务脚本本身会落到 .e2e-home/.nx-nx/services/groups/<id>/scripts/ 下。
   cpSync(join(root, 'assets', 'scripts'), join(home, 'scripts'), { recursive: true });
   console.log('[e2e] 隔离数据目录已重建:', home);
 }

@@ -5,9 +5,13 @@
 //
 // 数据隔离：NX_NX_HOME 搬走服务组目录，NX_NX_SCRIPTS 换成临时脚本目录
 // （先把 assets/scripts 整份复制过去，runner 与别名模块才会在）。
+//
+// 服务脚本的落点已从全局 assets/scripts 改为组命名空间：
+//   <NX_NX_HOME>/.nx-nx/services/groups/<组>/scripts/
+// NX_NX_SCRIPTS 只作为「模板 helper 来源」与「旧组迁移来源」。
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -23,9 +27,22 @@ process.env.NX_NX_SCRIPTS = SCRIPTS;
 const { listTemplates, getTemplate, planTemplate, applyTemplate, templatesRoot } = await import(
   '../../src/core/service/templates.js'
 );
-const { loadGroups, saveGroups, loadRuntime } = await import('../../src/core/service/store.js');
+const { loadGroups, saveGroups, loadRuntime, normalizeGroup } = await import('../../src/core/service/store.js');
 const { startGroup, stopGroup } = await import('../../src/core/service/runtime.js');
 const { runPipeline } = await import('../../src/core/service/pipeline.js');
+const { listScripts } = await import('../../src/core/script/paths.js');
+const {
+  resolveServiceScript,
+  listServiceScripts,
+  createServiceScript,
+  readServiceScript,
+  saveServiceScript,
+  deleteServiceScript,
+} = await import('../../src/core/service/scripts.js');
+
+function groupScripts(id) {
+  return join(BASE, 'home', '.nx-nx', 'services', 'groups', id, 'scripts');
+}
 
 after(() => {
   rmSync(BASE, { recursive: true, force: true });
@@ -123,19 +140,29 @@ test('node-api 模板：带停服脚本，健康路径 /health', () => {
 
 // ---- 落盘 ----
 
-test('applyTemplate：脚本落盘、manifest 登记说明、组配置写入', () => {
+test('applyTemplate：脚本落进组命名空间、不登记全局 manifest、组配置写入', () => {
   const r = applyTemplate({ groupId: 'write-svc', templateId: 'node-ping', port: 18124 });
   assert.equal(r.written.length, 3);
-  const server = readFileSync(join(SCRIPTS, 'write-svc-server.mjs'), 'utf8');
+  const dir = groupScripts('write-svc');
+  const server = readFileSync(join(dir, 'write-svc-server.mjs'), 'utf8');
   assert.match(server, /\/ping/);
   assert.match(server, /pong/);
+  // 与脚本同目录的 helper 必须一起落盘，脚本里的 `./aliases.mjs` 才 import 得到。
+  assert.ok(existsSync(join(dir, 'aliases.mjs')));
+  assert.ok(existsSync(join(dir, '_ns.mjs')));
+  assert.ok(existsSync(join(dir, 'lib', 'http.mjs')));
   const config = loadGroups().find((g) => g.id === 'write-svc');
   assert.ok(config, '组配置应已写入');
   assert.equal(config.health?.port, 18124);
   assert.ok(config.cwd && existsSync(config.cwd), '服务自己的 cwd 应在创建时就建好');
   const manifest = JSON.parse(readFileSync(join(SCRIPTS, 'manifest.json'), 'utf8'));
-  const entry = manifest.scripts.find((s) => s.name === 'write-svc-server');
-  assert.ok(entry && entry.description.includes('/ping'), 'manifest 应登记脚本说明');
+  assert.equal(
+    manifest.scripts.some((s) => s.name.startsWith('write-svc')),
+    false,
+    '服务脚本不应出现在全局脚本 manifest',
+  );
+  // 全局脚本模块的列表也不能看见组内脚本。
+  assert.equal(listScripts().some((s) => s.name.startsWith('write-svc')), false);
 });
 
 test('applyTemplate 幂等：同名组已存在时报错；删掉配置后重跑只跳过相同脚本', () => {
@@ -159,9 +186,69 @@ test('applyTemplate --force：覆盖同名组与已存在的脚本', () => {
 test('applyTemplate --dry：只出计划，不落盘、不写配置', () => {
   const before = loadGroups().length;
   const r = applyTemplate({ groupId: 'dry-svc', dryRun: true });
-  assert.equal(existsSync(join(SCRIPTS, 'dry-svc-server.mjs')), false);
+  assert.equal(existsSync(join(groupScripts('dry-svc'), 'dry-svc-server.mjs')), false);
   assert.equal(loadGroups().length, before);
   assert.deepEqual(r.conflicts, []);
+});
+
+// ---- 命名空间隔离 ----
+
+test('隔离：两个组的同名脚本各自独立解析', () => {
+  applyTemplate({ groupId: 'iso-a', templateId: 'node-ping', port: 18201, force: true });
+  applyTemplate({ groupId: 'iso-b', templateId: 'node-ping', port: 18202, force: true });
+  // 两个组各自放一个同名 server 副本，内容不同。
+  writeFileSync(join(groupScripts('iso-a'), 'server.mjs'), '// a\n', 'utf8');
+  writeFileSync(join(groupScripts('iso-b'), 'server.mjs'), '// b\n', 'utf8');
+  const a = resolveServiceScript('iso-a', 'server');
+  const b = resolveServiceScript('iso-b', 'server');
+  assert.notEqual(a.path, b.path);
+  assert.equal(readFileSync(a.path, 'utf8'), '// a\n');
+  assert.equal(readFileSync(b.path, 'utf8'), '// b\n');
+  // 组列表只看自己命名空间里的文件。
+  assert.deepEqual(
+    listServiceScripts('iso-a').map((s) => s.name),
+    ['iso-a-client', 'iso-a-server', 'iso-a.shared', 'server'],
+  );
+});
+
+test('兼容：旧组引用的全局脚本第一次解析时惰性搬进组命名空间', () => {
+  writeFileSync(join(SCRIPTS, 'legacy-server.mjs'), 'log("legacy");\n', 'utf8');
+  const g = normalizeGroup(
+    {
+      name: '旧组',
+      main: { script: 'legacy-server', args: [] },
+      clients: [],
+    },
+    'legacy-group',
+  );
+  saveGroups([...loadGroups().filter((x) => x.id !== 'legacy-group'), g]);
+  const r = resolveServiceScript('legacy-group', 'legacy-server');
+  assert.equal(r.source, 'group');
+  assert.match(r.path, /services[\\/]groups[\\/]legacy-group[\\/]scripts[\\/]legacy-server\.mjs$/);
+  assert.equal(readFileSync(r.path, 'utf8'), 'log("legacy");\n');
+  // 全局那份还在（没被搬走），但之后服务只认组内副本。
+  assert.ok(existsSync(join(SCRIPTS, 'legacy-server.mjs')));
+  assert.equal(listServiceScripts('legacy-group').some((s) => s.name === 'legacy-server'), true);
+  assert.equal(listScripts().some((s) => s.name === 'legacy-server'), true);
+});
+
+test('组脚本 CRUD：只写本组命名空间；被配置引用的脚本不许删', () => {
+  applyTemplate({ groupId: 'crud-a', templateId: 'node-ping', port: 18211, force: true });
+  const created = createServiceScript({ groupId: 'crud-a', name: 'extra-client', content: 'export const X = 1;\n' });
+  assert.match(created.path, /services[\\/]groups[\\/]crud-a[\\/]scripts[\\/]extra-client\.mjs$/);
+  assert.equal(readServiceScript('crud-a', 'extra-client').content, 'export const X = 1;\n');
+  saveServiceScript('crud-a', 'extra-client', 'export const X = 2;\n');
+  assert.equal(readServiceScript('crud-a', 'extra-client').content, 'export const X = 2;\n');
+  // 主脚本仍被服务组配置引用，删除必须被拒——否则配置会指向不存在的文件。
+  assert.throws(() => deleteServiceScript('crud-a', 'crud-a-server'), /仍被服务组 crud-a 引用/);
+  deleteServiceScript('crud-a', 'extra-client');
+  assert.equal(existsSync(join(groupScripts('crud-a'), 'extra-client.mjs')), false);
+  // 包外脚本是只读的：能读、不能存、不能删。
+  const outside = join(BASE, 'outside-service.mjs');
+  writeFileSync(outside, 'export const OUTSIDE = true;\n', 'utf8');
+  assert.equal(readServiceScript('crud-a', outside).source, 'external');
+  assert.throws(() => saveServiceScript('crud-a', outside, 'x'), /包外脚本不可/);
+  assert.throws(() => deleteServiceScript('crud-a', outside), /包外脚本不可/);
 });
 
 // ---- 端到端：模板生成的脚本真的能跑 ----

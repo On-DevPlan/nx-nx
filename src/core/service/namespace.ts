@@ -13,6 +13,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { runnerPath, scriptsDir } from '../script/paths.js';
 import { serviceSpacesPath } from './paths.js';
+import { resolveServicePanel } from './scripts.js';
 import { getSpaceSession } from './space-session.js';
 import { readJsonFile, writeJsonAtomic } from './store-json.js';
 
@@ -85,11 +86,13 @@ export async function refreshSpaceIndex(
 
 /**
  * 面板脚本名 → 绝对路径。
- * 面板可以放在包内 assets/scripts/ 下（推荐），也可以是绝对路径（包外自管）。
+ * 有组上下文时走该组的命名空间；没给组才退回全局 assets/scripts（旧调用方兼容）。
+ * 面板也可以写绝对路径（包外自管，只读）。
  */
-export function resolvePanelPath(panel: string): string {
+export function resolvePanelPath(panel: string, groupId?: string): string {
   const name = String(panel ?? '').trim();
   if (!name) throw new Error('缺少空间面板名');
+  if (groupId) return resolveServicePanel(groupId, name).path;
   if (name.endsWith('.shared')) {
     const p = join(scriptsDir(), name + '.mjs');
     if (existsSync(p)) return p;

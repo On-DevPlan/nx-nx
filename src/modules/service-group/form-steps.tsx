@@ -79,7 +79,7 @@ export function StepsField({ clients, entryScripts, setClients, toggleClient, on
       />
       {onCreateClient && (
         <Button size="small" type="link" icon={<PlusOutlined />} onClick={onCreateClient} style={{ paddingLeft: 0 }}>
-          新建 client 脚本（持久化到 assets/scripts）
+          新建 client 脚本（写入当前服务组命名空间）
         </Button>
       )}
     </Form.Item>

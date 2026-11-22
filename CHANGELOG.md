@@ -1,5 +1,23 @@
 ## [Unreleased]
 
+### 服务脚本与脚本模块彻底分离（任务 #23）
+
+- **组级脚本命名空间**：每组一个 `~/.nx-nx/services/groups/<id>/scripts/`，server / stop /
+  client / shared 只住在这里；组内同时复制 `aliases.mjs`、`_ns.mjs`、`lib/`，
+  脚本里的相对 import 照常成立。服务脚本不再写入全局 `assets/scripts`，也不再登记全局 manifest。
+- **解析、编辑、删除全部按组收口**：`sg init` / `sg start` / `sg run` / `sg stop` /
+  空间闸门 / 共享面板 / 客户端执行都从组命名空间解析；新增 `sg script <id> --op
+  read|save|create|delete --name <名>`，包外绝对路径只读。
+- **存量组惰性迁移**：旧配置引用的全局脚本在第一次解析时复制进组命名空间，之后以组内副本为准；
+  全局那份保留但不参与服务运行。
+- **Web 服务设置页只列本组脚本**：新建 client 写组命名空间，不再调用全局 `script.list/create`；
+  文案改为「当前服务组命名空间」。
+- **空间注册表进程级共享**：`_ns.mjs` 的 registry 改为 `globalThis` 上的 `Symbol.for`，
+  解决组内 `_ns.mjs` 副本与 `_runner.mjs` 自带副本各记各的空间、`defineSpace` 空间识别不到的问题。
+- 测试新增：两组同名脚本各自解析、`sg init` 不写全局 manifest / 不出现在 `script list`、
+  旧组全局脚本惰性迁移、组内 CRUD 与被引用脚本禁删 / 包外脚本只读；
+  `pnpm test` + Playwright E2E 全绿。
+
 ### 随包 skill 重构为 A/B ref-map（任务 #22）
 
 - `SKILL.md` 从 27KB 大杂烩收敛为 64 行路由表：A 序列 = 脚本 / 服务使用 SOP，

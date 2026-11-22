@@ -15,7 +15,13 @@
 
 // ---- 空间注册表（进程内）----
 // 一个进程只装载一个面板；跨进程的索引由 core 侧维护。
-const registry = new Map();
+//
+// 用 globalThis 上的 Symbol 共享：服务组命名空间里的面板会 import 自己那份
+// _ns.mjs 副本，而 _runner.mjs 用的是包内那份。如果注册表是模块级 Map，
+// 两份副本各记各的，runner 就看不到面板 defineSpace 出来的空间。
+// Symbol.for 让不同路径的副本落在同一个进程级注册表上。
+const REGISTRY_KEY = Symbol.for('nx-nx.namespace.registry');
+const registry = (globalThis[REGISTRY_KEY] ??= new Map());
 
 // 空间对象的标记：core 侧靠它识别「这是空间，不是普通模块」
 const SPACE_MARK = '__isNamespace';

@@ -66,4 +66,14 @@ export interface GroupRuntime {
 export interface GroupView {
   config: GroupConfig;
   runtime: GroupRuntime;
+  /** show 时附带：该组命名空间里的脚本；list 不带（避免逐组扫描磁盘）。 */
+  scripts?: {
+    name: string;
+    path: string;
+    kind: 'long' | 'short' | 'shared';
+    shared: boolean;
+    source: 'group' | 'external';
+    size: number;
+    updatedAt: number;
+  }[];
 }

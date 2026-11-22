@@ -13,7 +13,7 @@ import {
 
 // ---- 配置模型 ----
 
-// 一步启动：脚本名（assets/scripts/ 下，可含 .shared）+ 参数
+// 一步启动：脚本名（组命名空间 services/groups/<id>/scripts 下，可含 .shared；包外脚本用绝对路径）+ 参数
 export interface StepConfig {
   script: string;
   args: string[];

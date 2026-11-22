@@ -19,7 +19,7 @@ nx-nx sg check ping-demo         # 立即探活：{ alive, detail }
 nx-nx sg stop ping-demo          # 关闭
 ```
 
-`sg init` 生成三个脚本：`<id>-server.mjs`（`GET /ping` → `pong`）、`<id>-client.mjs`（请求 /ping）、`<id>.shared.mjs`（`BASE_URL` + `checkUp` 闸门），并写好 main / health / killPort / shared / space.check / clients。`sg templates` 看模板，`--dry` 只看计划不落盘。
+`sg init` 生成三个脚本：`<id>-server.mjs`（`GET /ping` → `pong`）、`<id>-client.mjs`（请求 /ping）、`<id>.shared.mjs`（`BASE_URL` + `checkUp` 闸门），并写好 main / health / killPort / shared / space.check / clients。脚本落在**该组自己的命名空间** `~/.nx-nx/services/groups/<id>/scripts/`，不写全局 `assets/scripts/`、不登记全局 manifest。`sg templates` 看模板，`--dry` 只看计划不落盘。
 
 ## 2. 一个服务组由什么组成
 
@@ -28,6 +28,7 @@ nx-nx sg stop ping-demo          # 关闭
 | 主脚本 | 长驻服务；node 起 HTTP，或在 node 里 `run('java', ['-jar', …])` / `go run` | `main: { script, args }` |
 | 活性检测 | 端口可连（`port`）或 HTTP 响应（`http`，状态码 < 500 算活） | `health` |
 | client 脚本 | 每个文件一个业务领域，流水线里依次执行 | `clients: []` |
+| 脚本命名空间 | 本组的 server / stop / client / shared 都只住在这里，与全局脚本模块隔离 | `~/.nx-nx/services/groups/<id>/scripts/` |
 | 共享面板 | 常量 + 函数 + API 封装，组内脚本执行前自动装载 | `shared` |
 
 可选字段：`stop`（优雅关停脚本）、`killPort`（兜底杀端口）、`stopMode`（默认 `auto`）、`desc`（首页说明）、`cwd`（服务自己的工作目录，默认 `~/.nx-nx/services/groups/<id>`）、`space`（管理空间与起飞闸门）、`launch`（启动参数与预设）。
@@ -59,6 +60,10 @@ nx-nx sg set my-svc --config '{
 ```
 
 - `sg set` 是**整组覆盖**，不是局部 patch；改前先 `sg show <id> --json` 拿现状。
+- 配置里的脚本名默认按**本组命名空间**解析：`<组 id>/scripts/<名字>.mjs`。已有脚本先放进命名空间：
+  `nx-nx sg script my-svc --op create --name my-server --content "<全文>"`。
+- 写绝对路径可以引用包外脚本（只读，不能在命名空间里编辑 / 删除）；相对路径不接受。
+- 存量组如果脚本名原本在全局 `assets/scripts/`，第一次解析会惰性复制进组命名空间；之后服务只认组内副本。
 - health 默认：`intervalMs 5000` / `failThreshold 3` / `readyTimeoutMs 20000` / `onDead restart`；模板通常写 3000 / 2。
 - java / go 冷启动慢，把 `readyTimeoutMs` 放宽到 60000 级别。
 
@@ -70,6 +75,7 @@ nx-nx sg set my-svc --config '{
 | `sg init <id>` | 按模板建组（生成脚本 + 配置） |
 | `sg list` / `sg show <id>` | 列表 / 配置 + 运行态详情 |
 | `sg set <id> --config <JSON>` | 创建或整组更新配置 |
+| `sg script <id> --op read/save/create/delete --name <名> [--content <全文>]` | 组命名空间内脚本读写（不碰全局脚本模块） |
 | `sg start <id> [--values JSON]` | 启动主脚本（先过闸门） |
 | `sg stop <id> [--mode auto\|script\|port\|pid]` | 关闭，模式见下 |
 | `sg autoheal <id> --state on\|off` | 自愈开关（监控不停） |
@@ -153,6 +159,7 @@ nx-nx sg set my-svc --config '{
 | client 执行记录 | `~/.nx-nx/services/logs/clients-<组>.log` |
 | HTTP 全量请求 / 响应 | `~/.nx-nx/services/http-logs/<组>/` |
 | 服务自己的工作目录 | `~/.nx-nx/services/groups/<组>/` |
+| 服务脚本命名空间 | `~/.nx-nx/services/groups/<组>/scripts/`（aliases / _ns / lib 随组复制） |
 | 配置 / 运行态 | `~/.nx-nx/service-groups.json` · `~/.nx-nx/services/runtime.json` |
 | 空间索引 / serve 落点 | `~/.nx-nx/services/spaces.json` · `~/.nx-nx/serve.json` |
 
@@ -169,9 +176,13 @@ nx-nx sg set my-svc --config '{
 | `checkUp` 里查本服务是否活着 | 循环依赖，永远 false；只判上游依赖 |
 | 端口被别的进程占用还选 `port` 模式 | 会误杀；改 `pid` 模式只杀本组记录的进程 |
 | 把 `.shared.mjs` 当入口跑 | 只被自动装载 / import；见 [[A01-script]] |
+| 把服务脚本写进全局 `assets/scripts/` | 服务只从组命名空间解析；用 `sg script` 写，或让旧组走一次惰性迁移 |
+| 在「脚本」页找服务组脚本 | `script list` 只管全局脚本模块；服务脚本在 `sg show` / `sg script` / 服务设置页 |
 
 ## 11. 验收清单
 
+- [ ] `sg init` 生成的脚本落在组命名空间，`script list` 里不出现这些脚本
+- [ ] 两个组放同名 server / client / shared，各自启动与 client 执行互不干扰
 - [ ] `sg init` 生成的脚本与配置能直接 `sg run`，client 有成功输出
 - [ ] `sg check` 启动后 `alive=true`，`sg stop` 后端口关闭
 - [ ] `sg show` 的 pid / 活性 / 自愈次数与实际一致

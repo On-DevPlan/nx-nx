@@ -14,7 +14,7 @@ import * as service from './service.js';
 import { formatSpace, formatSpaceCall } from './space-text.js';
 import { formatInit, formatTemplates } from './template-text.js';
 import { formatGroupList, formatGroupShow } from './group-text.js';
-import { initInput, setInput, startInput, stopInput, autohealInput, spaceCallInput, idInput, statusInput } from './schemas.js';
+import { initInput, setInput, startInput, stopInput, autohealInput, spaceCallInput, idInput, statusInput, groupScriptOpInput } from './schemas.js';
 
 export default defineModule({
   id: 'service-group',
@@ -203,6 +203,27 @@ export default defineModule({
         }
         if (!lines.length) lines.push('（该服务组还没有日志）');
         return lines.join('\n');
+      },
+    ),
+
+    defineAction({
+      id: 'serviceGroup.script',
+      cli: ['sg', 'script'],
+      http: ['POST', '/api/service-groups/:id/script'],
+      summary: '组内脚本入口：--op read/save/create/delete（全部在服务组命名空间内，不碰全局脚本模块）',
+      args: ['id'],
+      flags: {
+        op: { type: 'string', default: 'read', hint: 'read | save | create | delete' },
+        name: { type: 'string', hint: '脚本名（不含 .mjs，不能带路径）' },
+        content: { type: 'string', hint: 'save / create 的脚本全文' },
+      },
+      schema: groupScriptOpInput,
+    })(
+      (ctx) => service.groupScriptOp(ctx.id, ctx.op, ctx.name, ctx.content),
+      (r) => {
+        if (r.op === 'read') return `// ${r.groupId}/${r.name}  ${r.path}\n${r.content ?? ''}`;
+        if (r.op === 'delete') return `已删除 ${r.groupId}/${r.name}: ${r.path}`;
+        return `已${r.op === 'create' ? '创建' : '保存'} ${r.groupId}/${r.name}: ${r.path}`;
       },
     ),
 

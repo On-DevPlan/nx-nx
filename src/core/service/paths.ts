@@ -33,9 +33,14 @@ export function serviceHttpLogsDir(groupId: string): string {
 }
 
 // 每组的运行工作目录（cwd）：服务自己的 client / 产物 / 临时文件落这里。
-// 脚本正文仍从 assets/scripts 解析；cwd 是「这个服务自己的空间」，不参与脚本寻址。
 export function serviceGroupDir(groupId: string): string {
   return join(SERVICES_DIR, 'groups', groupId);
+}
+
+// 每组的脚本命名空间：服务脚本只住在这里，和全局「脚本模块」的 assets/scripts 完全分离。
+// 放在 groupDir/scripts 而不是 cwd 下：cwd 可被用户改成业务目录，脚本归属不能跟着漂。
+export function serviceScriptsDir(groupId: string): string {
+  return join(serviceGroupDir(groupId), 'scripts');
 }
 
 // 管理空间索引（空间 = 共享面板被装载后的可管理实体）

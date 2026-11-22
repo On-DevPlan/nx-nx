@@ -75,3 +75,16 @@ export const spaceCallInput = z.object({
     }, '--args 必须是 JSON 数组')
     .optional(),
 });
+
+// 服务组命名空间内的脚本名：不允许路径，只允许组内的一层名字。
+export const serviceScriptName = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, '脚本名只能含字母/数字/./_/-，且不能以符号开头');
+
+export const groupScriptOpInput = z.object({
+  id: groupId,
+  op: z.enum(['read', 'save', 'create', 'delete']).default('read'),
+  name: serviceScriptName.optional(),
+  content: z.string().optional(),
+});

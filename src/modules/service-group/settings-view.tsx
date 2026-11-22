@@ -27,7 +27,9 @@ export default function ServiceSettingsView() {
   const toast = useToast();
   const { dialog, node: dialogNode } = useDialog();
   const qc = useQueryClient();
-  const [scripts, setScripts] = useState<{ name: string; shared: boolean }[]>([]);
+  const [scripts, setScripts] = useState<
+    { name: string; shared: boolean; kind: 'long' | 'short' | 'shared'; source: 'group' | 'external' }[]
+  >([]);
   const [selected, setSelected] = useState<string | null>(ui.serviceId || null);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [busy, setBusy] = useState<string | null>(null);
@@ -36,7 +38,6 @@ export default function ServiceSettingsView() {
   const [createTemplate, setCreateTemplate] = useState<string | undefined>(undefined);
   const [clientOpen, setClientOpen] = useState(false);
   const [clientName, setClientName] = useState('');
-  const [clientDesc, setClientDesc] = useState('');
   const [clientCode, setClientCode] = useState('');
 
   const listQuery = useQuery({
@@ -57,13 +58,6 @@ export default function ServiceSettingsView() {
   const groups: GroupView[] = listQuery.data?.groups ?? [];
   const current = groups.find((g) => g.config.id === selected) ?? null;
 
-  useEffect(() => {
-    if (!boot) return;
-    client['script.list']({})
-      .then((r) => setScripts(r.scripts.map((s) => ({ name: s.name, shared: s.shared }))))
-      .catch(() => {});
-  }, [client, boot]);
-
   const select = useCallback(
     async (id: string) => {
       setSelected(id);
@@ -71,6 +65,7 @@ export default function ServiceSettingsView() {
       try {
         const r = await client['serviceGroup.show']({ id });
         setForm(formFromConfig(r.config));
+        setScripts((r.scripts ?? []).map((s) => ({ name: s.name, shared: s.shared, kind: s.kind, source: s.source })));
       } catch (e: unknown) {
         setErr(String((e as { message?: string })?.message || e));
       }
@@ -95,7 +90,7 @@ export default function ServiceSettingsView() {
   };
 
   // 新建 client 的默认值：名字带服务前缀、内容是一个能跑的请求样例。
-  // 脚本正文落 assets/scripts（持久化），运行时 cwd 是该服务自己的目录。
+  // 脚本正文落当前组的命名空间（与全局脚本模块隔离），运行时 cwd 是该服务自己的目录。
   const openClient = () => {
     if (!selected) return;
     let n = `${selected}-client`;
@@ -103,7 +98,6 @@ export default function ServiceSettingsView() {
     while (scripts.some((s) => s.name === n)) n = `${selected}-client-${i++}`;
     const port = current?.config.health?.port ?? 18080;
     setClientName(n);
-    setClientDesc(`服务 ${selected} 的 client：请求 / 验证 / 构建`);
     setClientCode(
       [
         `// ${n} —— ${selected} 的 client 脚本（请求 / 验证 / 构建都放这里）。`,
@@ -128,20 +122,20 @@ export default function ServiceSettingsView() {
     }
     setBusy('client');
     try {
-      await client['script.create']({
+      await client['serviceGroup.script']({
+        id: selected,
+        op: 'create',
         name,
-        description: clientDesc,
-        usage: `nx-nx script run ${name}（服务 ${selected} 的 client）`,
         content: clientCode,
       });
-      const r = await client['script.list']({});
-      setScripts(r.scripts.map((s) => ({ name: s.name, shared: s.shared })));
+      const view = await client['serviceGroup.show']({ id: selected });
+      setScripts((view.scripts ?? []).map((s) => ({ name: s.name, shared: s.shared, kind: s.kind, source: s.source })));
       setForm((prev) => ({
         ...prev,
         clients: prev.clients.includes(name) ? prev.clients : [...prev.clients, name],
       }));
       setClientOpen(false);
-      toast(`已创建并加入流水线：${name}（点「保存配置」后生效）`);
+      toast(`已在服务命名空间创建并加入流水线：${name}（点「保存配置」后生效）`);
     } catch (e: unknown) {
       toast('新建 client 失败: ' + String((e as { message?: string })?.message || e));
     } finally {
@@ -226,7 +220,7 @@ export default function ServiceSettingsView() {
       clients: prev.clients.includes(name) ? prev.clients.filter((c) => c !== name) : [...prev.clients, name],
     }));
 
-  const entryScripts = scripts.filter((s) => !s.shared);
+  const entryScripts = scripts.filter((s) => !s.shared && s.kind === 'long');
   const panelScripts = scripts.filter((s) => s.shared);
   const working = busy !== null;
 
@@ -384,18 +378,13 @@ export default function ServiceSettingsView() {
       >
         <Space direction="vertical" size={8} style={{ width: '100%' }}>
           <Typography.Text type="secondary">
-            脚本会持久化到 assets/scripts；运行时的工作目录是服务自己的 cwd（<Typography.Text code>NX_SERVICE_DIR</Typography.Text>）。
+            脚本只写进当前服务组的命名空间（<Typography.Text code>~/.nx-nx/services/groups/{selected}/scripts</Typography.Text>），与全局脚本模块完全隔离；运行时 cwd 仍是服务自己的目录（<Typography.Text code>NX_SERVICE_DIR</Typography.Text>）。
           </Typography.Text>
           <Input
             addonBefore="脚本名"
             value={clientName}
             onChange={(e) => setClientName(e.target.value)}
             className="mono"
-          />
-          <Input
-            addonBefore="说明"
-            value={clientDesc}
-            onChange={(e) => setClientDesc(e.target.value)}
           />
           <Input.TextArea
             value={clientCode}

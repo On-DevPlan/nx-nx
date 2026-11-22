@@ -11,6 +11,13 @@ import {
 } from '../../core/service/store.js';
 import { assertGroupId } from '../../core/service/paths.js';
 import {
+  createServiceScript,
+  deleteServiceScript,
+  listServiceScripts,
+  readServiceScript,
+  saveServiceScript,
+} from '../../core/service/scripts.js';
+import {
   runtimeSnapshot,
   setAutoHeal,
   startGroup,
@@ -53,6 +60,8 @@ export interface ServiceGroupView {
     /** 上一次启动实际使用的参数（端口 / 环境 / 配置文件）。 */
     launch?: Record<string, string>;
   };
+  /** show 时附带：该组命名空间里的脚本（list 不逐组扫描，避免 N 次磁盘读）。 */
+  scripts?: ReturnType<typeof listServiceScripts>;
 }
 
 export function listGroups(): ServiceGroupView[] {
@@ -93,6 +102,7 @@ export function showGroup(id: unknown): ServiceGroupView {
       logFile: rt.logFile,
       launch: rt.launch,
     },
+    scripts: listServiceScripts(g.id),
   };
 }
 
@@ -209,7 +219,7 @@ export async function spaceIntrospect(id: unknown): Promise<SpaceActionResult> {
   const s = groupSpace(id);
   if (!s) throw new Error(`服务组 ${assertGroupId(id)} 未绑定管理空间（shared / space.panel 都没配）`);
   const gid = assertGroupId(id);
-  const panelPath = resolvePanelPath(s.panel);
+  const panelPath = resolvePanelPath(s.panel, gid);
   // serve 在跑时，命令作用在它那个常驻空间上（命令与界面是同一个实体）；
   // serve 不可达就退回本地会话。
   const r = (await remoteSpaceAction(gid, 'introspect')) ?? (await introspectSpace(panelPath));
@@ -241,7 +251,7 @@ export async function spaceCall(
   const name = String(method ?? '');
   const remote = await remoteSpaceAction(gid, 'call', { method: name, args });
   if (remote) return remote;
-  return callSpaceMethod(resolvePanelPath(s.panel), name, args);
+  return callSpaceMethod(resolvePanelPath(s.panel, gid), name, args);
 }
 
 // 空间的堆快照（只含可 JSON 表示的数据确认）
@@ -271,7 +281,7 @@ export async function hubOverview(id: unknown): Promise<HubOverview> {
   const s = groupSpace(gid);
   let methods: string[] = [];
   if (s) {
-    const r = await introspectSpace(resolvePanelPath(s.panel));
+    const r = await introspectSpace(resolvePanelPath(s.panel, gid));
     if (r.ok) methods = (r.methods ?? []).map((m) => m.name);
   }
   return {
@@ -293,6 +303,47 @@ export async function hubOverview(id: unknown): Promise<HubOverview> {
     space: s ? { panel: s.panel, check: s.check, methods } : null,
     nextCommand: `nx-nx sg run ${g.id}`,
   };
+}
+
+// ---- 组命名空间里的脚本 ----
+//
+// 服务脚本属于「这个组」，不属于全局脚本模块：
+//   列表 / 读取 / 编辑 / 新建 / 删除都按组收口，`script list` 永远不会看到它们。
+
+export interface GroupScriptOpResult {
+  groupId: string;
+  op: 'read' | 'save' | 'create' | 'delete';
+  name?: string;
+  path?: string;
+  content?: string;
+  source?: 'group' | 'external';
+}
+
+// 组内脚本的四个动作收在一个入口：它们操作的是同一个命名空间，
+// 不必为每个动作各开一条 HTTP 路由（路由表越短，越不容易撞车）。
+export function groupScriptOp(id: unknown, op: unknown, name?: unknown, content?: unknown): GroupScriptOpResult {
+  const gid = assertGroupId(id);
+  const action = String(op ?? 'read') as GroupScriptOpResult['op'];
+  if (!['read', 'save', 'create', 'delete'].includes(action)) {
+    throw new Error(`--op 只能是 read / save / create / delete（收到 ${String(op)}）`);
+  }
+  if (name === undefined || name === null || String(name).trim() === '') {
+    throw new Error(`--op ${action} 需要 --name`);
+  }
+  if (action === 'read') {
+    const r = readServiceScript(gid, name);
+    return { groupId: gid, op: action, name: r.name, path: r.path, content: r.content, source: r.source };
+  }
+  if (action === 'save') {
+    const r = saveServiceScript(gid, name, content);
+    return { groupId: gid, op: action, name: r.name, path: r.path, content: r.content, source: r.source };
+  }
+  if (action === 'create') {
+    const r = createServiceScript({ groupId: gid, name, content });
+    return { groupId: gid, op: action, name: r.name, path: r.path, content: r.content, source: r.source };
+  }
+  const r = deleteServiceScript(gid, name);
+  return { groupId: gid, op: action, name: r.name, path: r.path };
 }
 
 // ---- 模板（上手引导的唯一入口）----

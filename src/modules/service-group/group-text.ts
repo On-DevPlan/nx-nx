@@ -1,4 +1,5 @@
 // 服务组列表 / 详情的文本输出（从 index.ts 拆出，避免单文件超行数上限）。
+import { serviceScriptsDir } from '../../core/service/paths.js';
 import type { GroupView } from './types.js';
 
 const CONFIG_HINT = `--config '{
@@ -53,6 +54,7 @@ export function formatGroupShow(r: GroupView): string {
     `  自愈: ${c.health ? (c.health.onDead === 'restart' ? '开启（失活即重启）' : '关闭（只记录）') : '(无检测，不可用)'}`,
     `  shared: ${c.shared ?? '(无)'}`,
     `  clients: ${c.clients.length ? c.clients.join(', ') : '(无)'}`,
+    `  脚本命名空间: ${serviceScriptsDir(c.id)}${r.scripts ? `（${r.scripts.length} 个）` : ''}`,
     `  自愈次数: ${rt.restarts} · 连续失败: ${rt.failStreak}`,
     rt.detail ? `  最近检测: ${rt.detail}` : '',
     rt.lastEvent ? `  最近事件: ${rt.lastEvent}` : '',

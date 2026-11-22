@@ -23,7 +23,8 @@ import {
   type ServiceGroupConfig,
   type StopMode,
 } from './store.js';
-import { runnerPath, scriptsDir } from '../script/paths.js';
+import { runnerPath } from '../script/paths.js';
+import { resolveServiceScript } from './scripts.js';
 
 export interface StopResult {
   stopped: boolean;
@@ -126,14 +127,9 @@ export function stopPortOf(g: ServiceGroupConfig, values?: LaunchValues): number
   return launchPort(g, values) ?? g.killPort ?? effectiveHealth(g, values)?.port;
 }
 
-/** 关停脚本的绝对路径（assets/scripts 定位，与 cwd 无关） */
-function resolveScript(name: string): string {
-  const base = scriptsDir();
-  const p = join(base, name.replace(/\.mjs$/, '') + '.mjs');
-  if (existsSync(p)) return p;
-  const alt = join(process.cwd(), name);
-  if (existsSync(alt)) return alt;
-  throw new Error(`关停脚本不存在: ${name}（找过 ${p} 与 ${alt}）`);
+/** 关停脚本的绝对路径（组命名空间定位，与 cwd 无关） */
+function resolveScript(groupId: string, name: string): string {
+  return resolveServiceScript(groupId, name).path;
 }
 
 async function runStopScript(g: ServiceGroupConfig): Promise<string> {
@@ -141,7 +137,7 @@ async function runStopScript(g: ServiceGroupConfig): Promise<string> {
   try {
     const r = await run(
       process.execPath,
-      [runnerPath(), resolveScript(g.stop.script), ...g.stop.args],
+      [runnerPath(), resolveScript(g.id, g.stop.script), ...g.stop.args],
       SCRIPT_TIMEOUT_MS,
     );
     return `关停脚本 ${g.stop.script} 退出码 ${r.code}`;

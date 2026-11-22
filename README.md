@@ -35,6 +35,7 @@ cd ../nx-zz && pnpm install && pnpm start
 | `nx-nx script save <脚本名> --content <全文>` | 保存脚本源码（先写临时文件再改名） |
 | `nx-nx script create --name <名> [--description ...]` | 新建脚本并登记到 manifest |
 | `nx-nx script delete <脚本名>` | 删除脚本并从 manifest 移除 |
+| `nx-nx sg script <组 id> --op read/save/create/delete --name <名> [--content ...]` | 服务组命名空间内的脚本读写（不碰全局脚本模块） |
 | `nx-nx script run <脚本名\|路径> [--参数 值...] [--panel <面板>]` | 跑内置脚本或任意 `.mjs` 脚本（可先装载共享面板，变量堆随结果返回） |
 | `nx-nx js sandbox <名\|--code 片段> [--panel 面板] [--args a,b]` | 在沙箱（QuickJS 虚拟机）里跑短脚本：无 fs / 无网络，产出变量堆 |
 | `nx-nx js runs [--limit N]` | 最近的短脚本运行台账 |
@@ -54,6 +55,11 @@ nx-nx script run sync-nx-skills --root D:\code\a_js\proj
 **Web 面板的「脚本」页**与这些命令同源：左侧选脚本（按「长脚本 / 短脚本 / 共享面板」分区），
 中间 CodeMirror 编辑源码（Ctrl/Cmd+S 保存），右侧看输出（ANSI 着色 · 虚拟滚动）、
 变量堆、内置函数与运行台账；运行前自动保存当前编辑内容。`nx-nx serve` 后进左侧「脚本」。
+
+**边界**：`script list / read / save / create / delete` 只管全局脚本模块（`assets/scripts/`）。
+服务组的 server / stop / client / shared 是另一套命名空间：
+`~/.nx-nx/services/groups/<组 id>/scripts/`，用 `sg script` 读写，`script list` 不会列出来。
+这样改一个服务脚本不会误伤别的组，也不会把服务脚本当一次性脚本跑。
 
 ### 长脚本与短脚本（两条执行通道）
 
@@ -111,6 +117,9 @@ assets/scripts/
 - 脚本只许用「内置全局函数 + node: 内置」，不许再 import 内部模块 → 脚本与项目
   之间只有这一份契约，改项目不会连带改脚本；
 - 脚本跑在**自己的子进程**里：全局副作用与崩溃都被关在那个进程里。
+
+服务组脚本不在这棵树下：每组在 `~/.nx-nx/services/groups/<id>/scripts/` 有自己的一份
+`aliases.mjs` / `_ns.mjs` / `lib/` 副本，服务运行只认这份副本。
 
 ## 写一个新模板
 
@@ -220,7 +229,8 @@ nx-nx sg run ping-demo      # 启动 → 等活性就绪 → client 打 /ping
 nx-nx sg stop ping-demo     # 关闭
 ```
 
-`sg init` 会在 `assets/scripts/` 下生成三个文件，并写好服务组配置：
+`sg init` 会在服务组自己的命名空间 `~/.nx-nx/services/groups/<组 id>/scripts/`
+下生成三个文件（不再写进全局 `assets/scripts/`，也不登记全局 manifest），并写好服务组配置：
 
 | 文件 | 角色 | 内容 |
 | --- | --- | --- |
@@ -230,6 +240,16 @@ nx-nx sg stop ping-demo     # 关闭
 
 改 `ping-demo-server.mjs` 就能接自己的业务；换成 REST 接口可以参考 `--template node-api`。
 两者都是「能跑、能探活、能关」的完整闭环，不是一个只能启动的空壳。
+
+服务脚本只属于这个组：同名脚本在两个组里互不影响，Web 服务设置页的脚本选项也只列本组命名空间里的文件。
+存量组的旧脚本（原本在 `assets/scripts/`）会在第一次解析时惰性复制进组命名空间，之后以组内副本为准。
+
+```bash
+nx-nx sg script ping-demo --op read --name ping-demo-server
+nx-nx sg script ping-demo --op save --name ping-demo-server --content "<全文>"
+nx-nx sg script ping-demo --op create --name extra-client --content "<全文>"
+nx-nx sg script ping-demo --op delete --name extra-client
+```
 
 ```bash
 nx-nx sg templates                                  # 看全部模板

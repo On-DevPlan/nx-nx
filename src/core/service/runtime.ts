@@ -8,7 +8,7 @@
 //   watcher 定时器活在 serve 进程里 —— `nx-nx serve` 不在跑时只做检测不自动重启
 //   （CLI 的 sg start/stop 随时可手动用）。
 import { spawn } from 'node:child_process';
-import { existsSync, appendFileSync, mkdirSync, openSync } from 'node:fs';
+import { appendFileSync, mkdirSync, openSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   checkHealth,
@@ -29,8 +29,9 @@ import { appendEvent } from './logs.js';
 import { pidAlive, stopGroup as stopProcesses, type StopResult } from './stop.js';
 import { serviceHttpLogsDir, serviceGroupDir, serviceLogsDir } from './paths.js';
 import { applyLaunchArgs, effectiveHealth, launchEnv, launchPort, normalizeLaunchValues, type LaunchValues } from './launch.js';
-import { checkSpace, resolvePanelPath } from './namespace.js';
-import { runnerPath, scriptsDir } from '../script/paths.js';
+import { checkSpace } from './namespace.js';
+import { runnerPath } from '../script/paths.js';
+import { resolveServicePanel, resolveServiceScript } from './scripts.js';
 
 // 每组一个定时器（serve 进程内）
 const watchers = new Map<string, ReturnType<typeof setInterval>>();
@@ -92,7 +93,7 @@ export async function spaceGate(g: ServiceGroupConfig): Promise<SpaceGateResult 
   const method = cfg.check || DEFAULT_CHECK_METHOD;
   let panelPath: string;
   try {
-    panelPath = resolvePanelPath(panel);
+    panelPath = resolveServicePanel(g.id, panel).path;
   } catch (err) {
     return { method, alive: false, detail: err instanceof Error ? err.message : String(err) };
   }
@@ -160,7 +161,7 @@ export async function startGroup(
   const cwd = g.cwd || serviceGroupDir(g.id);
   mkdirSync(cwd, { recursive: true });
 
-  const target = resolveMainScript(g.main.script);
+  const target = resolveMainScript(g.id, g.main.script);
   const args = applyLaunchArgs(g, g.main.args, values);
   const child = spawn(
     process.execPath,
@@ -188,23 +189,16 @@ export async function startGroup(
   return { started: true, pid: child.pid, logFile, detail: '已启动（日志见 ' + logFile + '）' };
 }
 
-// 主脚本名 → 绝对路径。用 scriptsDir()（包内 assets 定位，与 cwd 无关——
-// serve 进程的 cwd 可能是任何目录）。
-function resolveMainScript(name: string): string {
-  const base = scriptsDir();
-  const p = join(base, name.replace(/\.mjs$/, '') + '.mjs');
-  if (existsSync(p)) return p;
-  const alt = join(process.cwd(), name);
-  if (existsSync(alt)) return alt;
-  throw new Error(`主脚本不存在: ${name}（找过 ${p} 与 ${alt}）`);
+// 主脚本名 → 组命名空间里的绝对路径（与 serve 进程的 cwd 无关）。
+function resolveMainScript(groupId: string, name: string): string {
+  return resolveServiceScript(groupId, name).path;
 }
 
 // 组内脚本执行时的环境：共享面板路径 + serve 端口（check 函数要用）
 function sharedEnv(g: ServiceGroupConfig, values?: LaunchValues): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
   if (g.shared) {
-    const p = join(scriptsDir(), g.shared.endsWith('.mjs') ? g.shared : g.shared + '.mjs');
-    if (existsSync(p)) env['NX_SHARED_PANEL'] = p;
+    env['NX_SHARED_PANEL'] = resolveServicePanel(g.id, g.shared).path;
   }
   if (process.env.NX_NX_SERVE_PORT) env['NX_NX_SERVE_PORT'] = process.env.NX_NX_SERVE_PORT;
   // client 脚本的「一请求一日志」按组隔离
