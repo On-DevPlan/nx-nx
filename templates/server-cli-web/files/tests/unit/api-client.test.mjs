@@ -20,6 +20,7 @@ const zodActions = registry.actions.filter((a) => Array.isArray(a.fields));
 test('单通道：全部 action（业务 + 平台）都是 @action 收集的 zod 契约', () => {
   const ids = zodActions.map((a) => a.id).sort();
   assert.deepEqual(ids, [
+    'events',
     'help',
     'home.bootstrap',
     'home.greet',
@@ -34,7 +35,8 @@ test('单通道：全部 action（业务 + 平台）都是 @action 收集的 zod
     'skill.list',
     'version',
   ]);
-  // 平台命令（serve/help/version）无 http，不进 apiclient；全部 action 都带 fields
+  // 平台命令（serve/help/version）无 http，不进 apiclient；events 是 SSE（stream）
+  // 也不进 typed client；全部 action 都带 fields
   assert.equal(registry.actions.length, zodActions.length);
 });
 
@@ -57,6 +59,9 @@ test('生成物覆盖每条带 HTTP 的 zod action（id 可被「面板入口」
   const src = readFileSync(join(ROOT, 'src', 'web', 'frontend', 'api', 'client.generated.ts'), 'utf8');
   for (const a of zodActions) {
     if (!a.http) continue;
+    // stream action（SSE）不在 typed client 里——它不返回 data，前端用
+    // EventSource 直连（api/live.ts）；其余带 http 的必须各有一个方法
+    if (a.stream) continue;
     assert.ok(src.includes(`action: ${a.id}`), `生成物缺 ${a.id} 的方法`);
   }
 });

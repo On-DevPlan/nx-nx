@@ -7,6 +7,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { api } from './api/client.js';
+import { useLiveTopic } from './api/live.js';
 import type { CommandEntry } from '../../runtime/help.js';
 
 // bootstrap 数据形状（与 modules/home 的 bootstrap() 返回一致）
@@ -60,6 +61,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // 导航摆法（分组 / 隐藏 / 顺序）与主题一起拿；失败不阻塞面板其余部分
     refreshSettings().catch(() => {});
   }, [refreshBoot, refreshSettings]);
+
+  // 变更通知标准（开箱示范）：store 有写入（任何 HTTP action 落盘）→ SSE 推送
+  // → 全局面板状态自动刷新。单页面要细粒度刷新时，在自己页面里
+  // useLiveTopic('<topic>', refetch) 即可。
+  useLiveTopic('store', refreshSettings);
 
   const value = useMemo(
     () => ({ boot, settings, refreshBoot, refreshSettings }),

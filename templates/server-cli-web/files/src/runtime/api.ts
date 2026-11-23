@@ -110,6 +110,13 @@ export class ApiRouter {
           }
         }
         const parsed = parseInput(action.input, raw, usage);
+        // stream 模式：把 req/res/url 透传给 run，让 action 自己接管响应（SSE 等）。
+        // 必须在 parse 之后注入——zod v4 默认剥未知键，__raw 先塞会被校验丢掉。
+        if (action.stream) {
+          const payload = { ...(parsed as Record<string, unknown>), __raw: { req, res, url } };
+          await action.run(payload, { transport: 'http' });
+          return;
+        }
         const data = await action.run(parsed, { transport: 'http' });
         sendJson(res, 200, { ok: true, data });
       } catch (err) {

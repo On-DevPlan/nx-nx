@@ -48,7 +48,9 @@ export function clientMethodNames(actions: ZodBoundAction[]): Map<string, string
  */
 /** 生成前端 apiclient 的 TS 源码（type-only 引类：zod 运行时不进浏览器包）。 */
 export function generateClientSource(actions: ZodBoundAction[]): string {
-  const withHttp = actions.filter((a) => a.http);
+  // stream action 不进 typed client：SSE 不是 req/resp 形状（请求挂起不返回
+  // data），方法签名表达不了「推送流」——前端用 EventSource 直连（见 api/live.ts）。
+  const withHttp = actions.filter((a) => a.http && !a.stream);
   const methodNames = clientMethodNames(withHttp);
 
   // 按模块分组收集 action 类（清单的再导出）——入参与出参的类型锚点全在类上：

@@ -16,6 +16,7 @@
 import fsp from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { storePathFromEnv } from './paths.js';
+import { publish } from './events.js';
 
 // 项目自己的存储结构。改这里即可扩展，老数据由 normalize 自动补齐。
 export interface NavGroup {
@@ -116,8 +117,11 @@ export class JsonStore {
     }
   }
 
-  /** 原子写：先写临时文件再改名，进程中断不会留下半个文件。 */
-  async save(next: StoreState, explicitPath?: string): Promise<StoreState> {
+  /**
+   * 原子写：先写临时文件再改名，进程中断不会留下半个文件。
+   * 成功落盘后广播变更通知（变更通知标准：写入即 publish，面板据此自动刷新）。
+   */
+  async save(next: StoreState, explicitPath?: string, topic = 'store'): Promise<StoreState> {
     const p = explicitPath || storePathFromEnv();
     const data = normalize(next);
     await fsp.mkdir(dirname(p), { recursive: true });
@@ -130,17 +134,22 @@ export class JsonStore {
     } catch {
       this.cacheMtime = -1;
     }
+    // 测试显式指了临时路径时也广播——同进程的监听方（测试）需要收到；
+    // 面板的 SSE 在另一进程/另一路径语义下自然收不到，不受影响。
+    publish(topic);
     return data;
   }
 
   /**
    * 读-改-写事务：fn 直接修改传入的深拷贝 store；fn 抛错则不落盘。
    * 这条语义很重要——半个事务写进磁盘比不写更糟。
+   * topic 是变更通知的主题（缺省 'store'）；细粒度主题（如 'settings'）
+   * 由调用方按业务域传。
    */
-  async mutate<T>(fn: (s: StoreState) => T, explicitPath?: string): Promise<T | StoreState> {
+  async mutate<T>(fn: (s: StoreState) => T, explicitPath?: string, topic = 'store'): Promise<T | StoreState> {
     const cur = structuredClone(await this.load(explicitPath));
     const result = fn(cur);
-    await this.save(cur, explicitPath);
+    await this.save(cur, explicitPath, topic);
     return result === undefined ? cur : result;
   }
 

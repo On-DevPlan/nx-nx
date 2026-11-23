@@ -90,21 +90,9 @@ export class CliApp {
   }
 
   // 匹配命令：把声明路径与 argv 前缀逐 token 比较，选最长匹配。
-  //
-  // 逐 token 比较（而非只取「开头连续的非 flag token」）是必需的——有些命令路径
-  // 本身就含 flag，例如 `skill install --force demo` 里 demo 本该是位置参数。
-  // 最长优先则让 ['skill','central','add'] 压过 ['skill','central']，子命令与别名因此共存。
+  // 实现在模块级 resolveCommand（纯函数，别名回环测试直接调用）。
   private resolveCommand(argv: string[]): { cmd: ZodBoundAction; rest: string[] } | null {
-    let best: { cmd: ZodBoundAction; len: number } | null = null;
-    for (const cmd of this.commands) {
-      for (const path of cliPathsOf(cmd)) {
-        if (path.length > argv.length || path.length <= (best?.len ?? -1)) continue;
-        if (path.every((seg, i) => seg === argv[i])) {
-          best = { cmd, len: path.length };
-        }
-      }
-    }
-    return best ? { cmd: best.cmd, rest: argv.slice(best.len) } : null;
+    return resolveCommand(this.commands, argv);
   }
 
   // zod 通道输入解析：位置参数按 fields 声明顺序消费 argv，其余是 --flag；
@@ -158,6 +146,27 @@ export class CliApp {
 export const cliApp = new CliApp(registry);
 
 // ---- zod 通道的输入解析（模块级纯函数，单测直接调用） ----
+
+// 匹配命令：把声明路径与 argv 前缀逐 token 比较，选最长匹配。
+//
+// 逐 token 比较（而非只取「开头连续的非 flag token」）是必需的——有些命令路径
+// 本身就含 flag，例如 `skill install --force demo` 里 demo 本该是位置参数。
+// 最长优先则让 ['skill','central','add'] 压过 ['skill','central']，子命令与别名因此共存。
+export function resolveCommand(
+  commands: readonly ZodBoundAction[],
+  argv: string[],
+): { cmd: ZodBoundAction; rest: string[] } | null {
+  let best: { cmd: ZodBoundAction; len: number } | null = null;
+  for (const cmd of commands) {
+    for (const path of cliPathsOf(cmd)) {
+      if (path.length > argv.length || path.length <= (best?.len ?? -1)) continue;
+      if (path.every((seg, i) => seg === argv[i])) {
+        best = { cmd, len: path.length };
+      }
+    }
+  }
+  return best ? { cmd: best.cmd, rest: argv.slice(best.len) } : null;
+}
 
 // 解析剩余 token。布尔 flag 不吞下一个 token —— 否则 `skill install --force demo`
 // 会把 force 解析成字符串 'demo'，而 demo 本该是位置参数。

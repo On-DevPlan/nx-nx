@@ -67,6 +67,8 @@ export interface ActionMeta {
   // 参数用 any：渲染函数普遍要读结果字段，给 unknown 会让属性访问整片红。
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 见上；eslint 对 any 仅警告
   render?: (result: any, ctx?: any) => string | Promise<string>;
+  /** SSE 类动作：true 时 HTTP 侧把 req/res/url 经 input.__raw 透传给 run，action 接管响应 */
+  stream?: boolean;
 }
 
 /** 装饰器元数据表：方法函数 → 声明。WeakMap 不阻止方法被 GC。 */
@@ -127,6 +129,8 @@ export interface ZodBoundAction extends BoundAction {
   fields: FieldDesc[];
   input: ZodType;
   render?: (result: any, ctx?: any) => string | Promise<string>;
+  /** SSE 类动作标记（见 ActionMeta.stream）。 */
+  stream?: boolean;
   /** 绑定的 action 类名（codegen 按它从清单 type-only 引类）；tsc 编译后类名不变形（无压缩）。 */
   className: string;
   /** 类上的方法名（= 装饰的属性名，统一为 'run'）。 */
@@ -183,6 +187,7 @@ export function zodActionsOf(instance: object): ZodBoundAction[] {
       fields,
       input: meta.input,
       render: meta.render,
+      stream: meta.stream,
       module: moduleId,
       className: instance.constructor.name,
       method: name,

@@ -4,6 +4,34 @@
   "action": null,
   "children": [
     {
+      "name": "events",
+      "path": [
+        "events"
+      ],
+      "action": {
+        "id": "events",
+        "module": "platform",
+        "summary": "变更通知流：数据写入即推送（SSE 长连接；CLI 等价 NDJSON）",
+        "usage": "events",
+        "http": "GET /api/events"
+      },
+      "children": []
+    },
+    {
+      "name": "watch",
+      "path": [
+        "watch"
+      ],
+      "action": {
+        "id": "events",
+        "module": "platform",
+        "summary": "变更通知流：数据写入即推送（SSE 长连接；CLI 等价 NDJSON）",
+        "usage": "watch",
+        "http": "GET /api/events"
+      },
+      "children": []
+    },
+    {
       "name": "help",
       "path": [
         "help"
