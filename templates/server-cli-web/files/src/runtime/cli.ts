@@ -56,7 +56,7 @@ export class CliApp {
       }
 
       const input = this.parseInput(cmd, tail);
-      const data = await cmd.run(input);
+      const data = await cmd.run(input, { transport: 'cli' });
       await this.emit(cmd, data, json, input as Record<string, unknown>);
     } catch (err) {
       this.fail(err, json);

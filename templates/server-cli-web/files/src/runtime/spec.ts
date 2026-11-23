@@ -20,7 +20,7 @@ export function cliPathsOf(action: { cli?: unknown }): string[][] {
 
 // ---- 用法串生成：从 fields 反推，help 因此不可能与实际命令脱节 ----
 
-export function usageOf(action: { cli?: unknown; fields?: FieldDesc[] }): string {
+export function usageOf(action: { cli?: unknown; fields?: readonly FieldDesc[] }): string {
   const fields = action.fields ?? [];
   const [path] = cliPathsOf(action);
   const parts: string[] = [APP_NAME, ...(path || [])];

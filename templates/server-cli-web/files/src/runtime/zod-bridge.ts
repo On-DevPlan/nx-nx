@@ -32,6 +32,12 @@ export interface FieldDesc {
   required: boolean;
   default?: unknown;
   enumValues?: string[];
+  /**
+   * 字段说明（schema 上的 .describe()）：help 的参数含义、cli-tree 的字段说明、
+   * OpenAPI/Swagger 与 MCP inputSchema 的参数描述都从这一处派生。
+   * 字段描述纪律是「action 语义要强」的基石——describeInput 的消费方不应再各自造文案。
+   */
+  desc?: string;
 }
 
 interface Unwrapped {
@@ -94,6 +100,19 @@ function enumValuesOf(inner: unknown): string[] {
 }
 
 /**
+ * 取字段 schema 上的说明（.describe()）。zod v4 把描述登记在 schema 实例的
+ * `description` 属性上——外壳（optional/default）与内层都查一遍：
+ * `.describe()` 挂在链上哪一环取决于书写顺序，两处都看才不丢。
+ */
+function descriptionOf(field: unknown, inner: unknown): string | undefined {
+  for (const s of [field, inner]) {
+    const d = (s as { description?: unknown } | undefined)?.description;
+    if (typeof d === 'string' && d.trim()) return d;
+  }
+  return undefined;
+}
+
+/**
  * 把 action 的 input schema 拆成逐字段说明（CLI 与 HTTP 共用同一份）。
  *
  * **顺序很重要**：位置参数按 `args` 的声明顺序消费 argv，不是按 schema 字段顺序。
@@ -122,6 +141,7 @@ export function describeInput(input: ZodType, args: readonly string[] = []): Fie
       required: !optional && defaultValue === undefined,
       default: defaultValue,
       enumValues: kind === 'enum' ? enumValuesOf(inner) : undefined,
+      desc: descriptionOf(field, inner),
     });
   }
   return out;

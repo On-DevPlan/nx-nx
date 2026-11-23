@@ -5,24 +5,26 @@
 import { z } from 'zod';
 import { readFileSync } from 'node:fs';
 import { action } from '../../../runtime/action-decorator.js';
-import { ActionBase } from '../../../runtime/action-base.js';
+import { ActionBase, type ActionInput } from '../../../runtime/action-base.js';
 import { APP_NAME, APP_DESC, APP_TITLE, STORE_ENV, storePathFromEnv } from '../../../core/paths.js';
 import { commandEntry, type CommandEntry } from '../../../runtime/help.js';
-import { homeBootstrapInput } from '../schemas.js';
 
 const VERSION = (
   JSON.parse(readFileSync(new URL('../../../../package.json', import.meta.url), 'utf8')) as { version: string }
 ).version;
 
-export class BootstrapAction extends ActionBase {
+/** home.bootstrap 的入参契约（无参数）。 */
+const input = z.object({});
+
+export class BootstrapAction extends ActionBase<typeof input> {
   @action({
     id: 'home.bootstrap',
     cli: ['bootstrap', 'show'],
     http: ['GET', '/api/bootstrap'],
     summary: '一次取齐面板启动所需的全部上下文',
-    input: homeBootstrapInput,
+    input,
   })
-  async bootstrap(_ctx: z.output<typeof homeBootstrapInput>): Promise<{
+  override async run(_ctx: ActionInput<this['_input']>): Promise<{
     app: { name: string; title: string; description: string; version: string };
     storePath: string;
     storeEnv: string;

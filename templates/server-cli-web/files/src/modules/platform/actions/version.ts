@@ -5,23 +5,25 @@
 import { z } from 'zod';
 import { readFileSync } from 'node:fs';
 import { action } from '../../../runtime/action-decorator.js';
-import { ActionBase } from '../../../runtime/action-base.js';
+import { ActionBase, type ActionInput } from '../../../runtime/action-base.js';
 
 const VERSION = (
   JSON.parse(readFileSync(new URL('../../../../package.json', import.meta.url), 'utf8')) as { version: string }
 ).version;
 
-const versionInput = z.object({});
+/** version 的入参契约（无参数）。 */
+const input = z.object({});
 
-export class VersionAction extends ActionBase {
+export class VersionAction extends ActionBase<typeof input> {
   @action({
     id: 'version',
     cli: ['version'],
+    http: null,
     summary: '显示版本',
-    input: versionInput,
+    input,
     render: (v) => v,
   })
-  version() {
+  override run(_ctx: ActionInput<this['_input']>) {
     return VERSION;
   }
 }

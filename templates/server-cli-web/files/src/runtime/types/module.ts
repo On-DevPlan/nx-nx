@@ -14,21 +14,25 @@ export interface AnyModule {
 }
 
 /**
- * 模块基类。子类用只读字段声明 id / title，用 @action 装饰方法声明 action：
+ * 模块基类。子类用只读字段声明 id / title，装配 ActionBase 子类：
  *
+ *   const greetInput = z.object({ name: z.string().describe('要问候的名字') });
+ *   export class GreetAction extends ActionBase<typeof greetInput> {
+ *     @action({ id: 'home.greet', cli: ['greet'], http: ['POST', '/api/greet'],
+ *               args: ['name'], input: greetInput })
+ *     override async run(ctx: ActionInput<this['_input']>) { … }
+ *   }
  *   export class HomeModule extends ModuleBase {
  *     readonly id = 'home';
  *     readonly title = '首页';
  *     readonly order = 1;
- *     @action({ id: 'home.greet', cli: ['greet'], http: ['POST', '/api/greet'],
- *               args: ['name'], input: homeGreetInput, output: homeGreetOutput })
- *     greet(ctx: z.output<typeof homeGreetInput>) { return this.svc.greet(ctx.name); }
- *
- *     override readonly actions = zodActionsOf(this);   // 字段放最后
+ *     override readonly actions = zodActionsOf(new GreetAction(container)); // 字段放最后
  *   }
  *
- * - 业务逻辑不写在模块里：模块只做「声明 + 装配」，编排调服务类（HomeService 等）；
- * - actions 字段放最后：zodActionsOf(this) 读取 this.id，声明顺序保证它已初始化；
+ * - 业务逻辑不写在模块里：模块只做「装配」，编排调服务类（HomeService 等）；
+ * - action 是「一条一个文件」的 ActionBase 子类（actions/<名>.ts），
+ *   模块 index.ts 只把它们的实例收进 zodActionsOf；
+ * - actions 字段放最后：zodActionsOf 读实例原型，声明顺序保证装配清晰；
  * - readonly 字段保住字面量类型（`readonly id = 'home'` 的类型就是 'home'）。
  */
 export abstract class ModuleBase {

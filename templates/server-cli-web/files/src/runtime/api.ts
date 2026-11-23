@@ -110,7 +110,7 @@ export class ApiRouter {
           }
         }
         const parsed = parseInput(action.input, raw, usage);
-        const data = await action.run(parsed);
+        const data = await action.run(parsed, { transport: 'http' });
         sendJson(res, 200, { ok: true, data });
       } catch (err) {
         // 错误码 → HTTP 状态只在这一处映射（core/errors 提供表）

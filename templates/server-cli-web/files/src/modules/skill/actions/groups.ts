@@ -1,17 +1,21 @@
 // skill.groups —— 列出每个 group 含哪些 skill。
+//
+// 契约（zod schema）就声明在本文件里——入参类型由基类泛型模板封装。
 import { z } from 'zod';
 import { action } from '../../../runtime/action-decorator.js';
-import { ActionBase } from '../../../runtime/action-base.js';
+import { ActionBase, type ActionInput } from '../../../runtime/action-base.js';
 import * as skills from '../../../core/skills/index.js';
-import { skillGroupsInput } from '../schemas.js';
 
-export class SkillGroupsAction extends ActionBase {
+/** skill.groups 的入参契约（无参数）。 */
+const input = z.object({});
+
+export class SkillGroupsAction extends ActionBase<typeof input> {
   @action({
     id: 'skill.groups',
     cli: ['skill', 'groups'],
     http: ['GET', '/api/skill-groups'],
     summary: '列出每个 group 含哪些 skill',
-    input: skillGroupsInput,
+    input,
     render: (r) => {
       const lines = [];
       for (const [key, g] of Object.entries<{ skills: string[]; summary?: string }>(r.groups)) {
@@ -21,7 +25,7 @@ export class SkillGroupsAction extends ActionBase {
       return `group 清单（来源: ${r.source}）\n` + lines.join('\n');
     },
   })
-  async groups(_ctx: z.output<typeof skillGroupsInput>) {
+  override async run(_ctx: ActionInput<this['_input']>) {
     const manifest = await skills.loadGroups();
     return { source: manifest.source, groups: manifest.groups, warning: manifest.warning };
   }

@@ -18,10 +18,10 @@ test('greet: 计数递增，loud 时整句大写', async () => {
   const { GreetAction } = await import('../../src/modules/home/actions/greet.ts');
   const { container } = await import('../../src/runtime/container.ts');
   const act = new GreetAction(container);
-  const a = await act.greet({ name: '甲' });
+  const a = await act.run({ name: '甲' });
   assert.equal(a.count, 1);
   assert.match(a.greeting, /甲/);
-  const b = await act.greet({ name: '乙', loud: true });
+  const b = await act.run({ name: '乙', loud: true });
   assert.equal(b.count, 2);
   assert.equal(b.greeting, b.greeting.toUpperCase());
 });

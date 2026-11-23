@@ -1,21 +1,31 @@
 // skill.install —— 安装 skill、整组 skill 或全部 skill。
 //
 // 互斥校验在这里（不是散在 action 层）：name / --group / --all 三者只能给一个。
+//
+// 契约（zod schema）就声明在本文件里——入参类型由基类泛型模板封装。
 import { z } from 'zod';
 import { action } from '../../../runtime/action-decorator.js';
-import { ActionBase } from '../../../runtime/action-base.js';
+import { ActionBase, type ActionInput } from '../../../runtime/action-base.js';
 import * as skills from '../../../core/skills/index.js';
 import { badInput } from '../../../core/errors/index.js';
-import { skillInstallInput } from '../schemas.js';
 
-export class InstallAction extends ActionBase {
+/** skill.install 的入参契约。 */
+const input = z.object({
+  name: z.string().optional().describe('要安装的 skill 名（与 --group / --all 互斥）'),
+  all: z.boolean().optional().describe('安装全部内置 skill（与 name / --group 互斥）'),
+  group: z.string().optional().describe('按 groups.json 的组名整组安装（与 name / --all 互斥）'),
+  to: z.string().optional().describe('安装目标目录（缺省 ~/.claude/skills）'),
+  force: z.boolean().optional().describe('目标已存在且内容不同时强制覆盖'),
+});
+
+export class InstallAction extends ActionBase<typeof input> {
   @action({
     id: 'skill.install',
     cli: ['skill', 'install'],
     http: ['POST', '/api/skill-install'],
     summary: '安装 skill、整组 skill 或全部 skill',
     args: ['name'],
-    input: skillInstallInput,
+    input,
     render: (r) => {
       if ('group' in r && Array.isArray(r.skills)) {
         const label = r.group === '*' ? '全部 skill' : `group ${r.group}`;
@@ -34,7 +44,7 @@ export class InstallAction extends ActionBase {
       return `${r.replaced ? '已替换' : '已安装'}: ${r.path}（${r.files} 个文件）`;
     },
   })
-  async install(ctx: z.output<typeof skillInstallInput>) {
+  override async run(ctx: ActionInput<this['_input']>) {
     const opts = {
       to: ctx.to == null ? undefined : String(ctx.to),
       force: ctx.force === true,

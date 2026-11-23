@@ -1,4 +1,4 @@
-// serve —— 启动 Web 面板（长驻；不写 http 即纯 CLI，面板里没有它的入口）。
+// serve —— 启动 Web 面板（长驻；http 显式 null = 纯 CLI，面板里没有它的入口）。
 //
 // 端口占用处理：上面已经是本项目的面板 → 直接打开浏览器（不重复启动）；
 // 是别的服务 → 顺延到下一个空闲端口再起自己的面板。两种情况都开浏览器，
@@ -6,26 +6,27 @@
 import { z } from 'zod';
 import { readFileSync } from 'node:fs';
 import { action } from '../../../runtime/action-decorator.js';
-import { ActionBase } from '../../../runtime/action-base.js';
+import { ActionBase, type ActionInput } from '../../../runtime/action-base.js';
 import { APP_NAME, DEFAULT_PORT, storePathFromEnv } from '../../../core/paths.js';
 
 const VERSION = (
   JSON.parse(readFileSync(new URL('../../../../package.json', import.meta.url), 'utf8')) as { version: string }
 ).version;
 
-const serveInput = z.object({
-  port: z.number().optional(),
-  'no-open': z.boolean().optional(),
+const input = z.object({
+  port: z.number().optional().describe('HTTP 端口（默认取生成时探测的空闲端口）'),
+  'no-open': z.boolean().optional().describe('不自动打开浏览器'),
 });
 
-export class ServeAction extends ActionBase {
+export class ServeAction extends ActionBase<typeof input> {
   @action({
     id: 'serve',
     cli: ['serve'],
+    http: null,
     summary: '启动 Web 面板（默认 :{{port}}；--port N 改端口；--no-open 不开浏览器；端口上已是本面板则直接打开它；NX_SERVE_NO_OPEN=1 全局不开浏览器）',
-    input: serveInput,
+    input,
   })
-  async serve(ctx: z.output<typeof serveInput>): Promise<never> {
+  override async run(ctx: ActionInput<this['_input']>): Promise<never> {
     // 动态 import：server → registry → 本模块，静态引入会在装载期成环。
     const { startServer } = await import('../../../runtime/server.js');
     const { openBrowser } = await import('../../../core/open.js');

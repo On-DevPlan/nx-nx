@@ -1,17 +1,21 @@
 // skill.list —— 列出可装的 skill 与 group。
+//
+// 契约（zod schema）就声明在本文件里——入参类型由基类泛型模板封装。
 import { z } from 'zod';
 import { action } from '../../../runtime/action-decorator.js';
-import { ActionBase } from '../../../runtime/action-base.js';
+import { ActionBase, type ActionInput } from '../../../runtime/action-base.js';
 import * as skills from '../../../core/skills/index.js';
-import { skillListInput } from '../schemas.js';
 
-export class SkillListAction extends ActionBase {
+/** skill.list 的入参契约（无参数）。 */
+const input = z.object({});
+
+export class SkillListAction extends ActionBase<typeof input> {
   @action({
     id: 'skill.list',
     cli: ['skill', 'list'],
     http: ['GET', '/api/skills'],
     summary: '列出可装的 skill 与 group',
-    input: skillListInput,
+    input,
     render: (r) => {
       const lines = ['可装的 skill:'];
       for (const n of r.skills) lines.push('  ' + n + (n === r.defaultGroup ? '  （默认 install）' : ''));
@@ -20,7 +24,7 @@ export class SkillListAction extends ActionBase {
       return lines.join('\n');
     },
   })
-  async list(_ctx: z.output<typeof skillListInput>) {
+  override async run(_ctx: ActionInput<this['_input']>) {
     const [names, manifest] = await Promise.all([
       skills.bundledSkillNames(),
       skills.loadGroups(),

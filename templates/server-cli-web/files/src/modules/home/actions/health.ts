@@ -1,20 +1,25 @@
 // home.health —— 存储自检：触碰一次存储（读出来原样写回），验证整条读写链路。
+//
+// 契约（zod schema）就声明在本文件里——入参类型由基类泛型模板封装；
+// 本文件只做「声明 + 实现」，业务在服务层。
 import { z } from 'zod';
 import { action } from '../../../runtime/action-decorator.js';
-import { ActionBase } from '../../../runtime/action-base.js';
+import { ActionBase, type ActionInput } from '../../../runtime/action-base.js';
 import { storePathFromEnv } from '../../../core/paths.js';
-import { homeHealthInput } from '../schemas.js';
 
-export class HealthAction extends ActionBase {
+/** home.health 的入参契约（无参数）。 */
+const input = z.object({});
+
+export class HealthAction extends ActionBase<typeof input> {
   @action({
     id: 'home.health',
     cli: ['health'],
     http: ['GET', '/api/health'],
     summary: '自检：存储目录是否可写',
-    input: homeHealthInput,
+    input,
     render: (r) => (r.status === 'ok' ? `正常 · 存储 ${r.storePath}` : `异常 · ${r.reason}`),
   })
-  async health(_ctx: z.output<typeof homeHealthInput>) {
+  override async run(_ctx: ActionInput<this['_input']>) {
     const store = this.deps.get('store');
     try {
       const s = await store.load();

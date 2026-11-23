@@ -1,7 +1,7 @@
 // 平台模块：平台命令（serve / help / version）——它们也是 action，只是不写 http（纯 CLI）。
 //
 // **模块的形状：一条 action 一个文件**——
-//   actions/<名>.ts   声明（@action 元数据）与实现同文件；契约常量在 ../schemas.ts
+//   actions/<名>.ts   声明（@action 元数据）、契约（zod schema）与实现同文件
 //   actions/_manifest.generated.ts   codegen 产物：收进本目录所有 ActionBase 子类
 //   index.ts（本文件）只做装配：模块元信息 + 用容器把清单里的类建成 action
 //

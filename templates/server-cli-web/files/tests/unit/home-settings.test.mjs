@@ -37,22 +37,22 @@ test('默认设置：带一个「工作台」关系分组（侧栏壳开箱就�
   const s = await store.load();
   assert.deepEqual(s.settings.navGroups, [{ title: '工作台', views: ['home', 'board'] }]);
   assert.deepEqual(s.settings.navHidden, []);
-  const got = await home.getSettings();
+  const got = await home.run();
   assert.deepEqual(Object.keys(got).sort(), ['schema', 'settings'], 'getSettings 只返回设置与说明，不再带页面清单');
 });
 
 test('navGroups：含 home 的分组原样落盘，不被 order / 字典序重排', async () => {
   withStore();
   const { set, store } = await loadModules();
-  await set.setSettings({ set: { navGroups: [{ title: '系统', views: ['home'] }] } });
+  await set.run({ set: { navGroups: [{ title: '系统', views: ['home'] }] } });
   assert.deepEqual((await store.load()).settings.navGroups, [{ title: '系统', views: ['home'] }]);
 });
 
 test('navGroups：PATCH 只改传入项（改主题不影响已存分组）', async () => {
   withStore();
   const { set, store } = await loadModules();
-  await set.setSettings({ set: { navGroups: [{ title: '系统', views: ['home'] }] } });
-  await set.setSettings({ set: { theme: 'dark' } });
+  await set.run({ set: { navGroups: [{ title: '系统', views: ['home'] }] } });
+  await set.run({ set: { theme: 'dark' } });
   const s = await store.load();
   assert.deepEqual(s.settings.navGroups, [{ title: '系统', views: ['home'] }]);
   assert.equal(s.settings.theme, 'dark');
@@ -70,7 +70,7 @@ test('navGroups 校验：坏形状 / 缺组名 / 跨组重复 —— 都拒绝�
   ];
   for (const [navGroups, re] of cases) {
     await assert.rejects(
-      set.setSettings({ set: { navGroups } }),
+      set.run({ set: { navGroups } }),
       (e) => e.code === 'INVALID_INPUT' && re.test(e.message),
       `应拒绝: ${JSON.stringify(navGroups)}`,
     );
@@ -82,34 +82,34 @@ test('后端不校验页面存在性：任意 id、空分组都接受（前端�
   withStore();
   const { set, store } = await loadModules();
 
-  await set.setSettings({ set: { navGroups: [{ title: 'A', views: ['no_such_page'] }] } });
+  await set.run({ set: { navGroups: [{ title: 'A', views: ['no_such_page'] }] } });
   assert.deepEqual((await store.load()).settings.navGroups, [{ title: 'A', views: ['no_such_page'] }]);
 
-  await set.setSettings({ set: { navGroups: [{ title: 'B', views: [] }] } });
+  await set.run({ set: { navGroups: [{ title: 'B', views: [] }] } });
   assert.deepEqual((await store.load()).settings.navGroups, [{ title: 'B', views: [] }], '空分组允许暂存');
 
-  await set.setSettings({ set: { navHidden: 'whatever' } });
+  await set.run({ set: { navHidden: 'whatever' } });
   assert.deepEqual((await store.load()).settings.navHidden, ['whatever']);
 });
 
 test('navHidden：数组 / 逗号串 / JSON 串都认，并去重保序', async () => {
   withStore();
   const { set, store } = await loadModules();
-  await set.setSettings({ set: { navHidden: 'home' } });
+  await set.run({ set: { navHidden: 'home' } });
   assert.deepEqual((await store.load()).settings.navHidden, ['home']);
-  await set.setSettings({ set: { navHidden: 'a,b,a' } });
+  await set.run({ set: { navHidden: 'a,b,a' } });
   assert.deepEqual((await store.load()).settings.navHidden, ['a', 'b'], '逗号串去重保序');
-  await set.setSettings({ set: { navHidden: '["x","y"]' } });
+  await set.run({ set: { navHidden: '["x","y"]' } });
   assert.deepEqual((await store.load()).settings.navHidden, ['x', 'y'], 'JSON 串');
 });
 
 test('theme：只认 light / dark / auto，坏值拒绝', async () => {
   withStore();
   const { set, store } = await loadModules();
-  await set.setSettings({ set: { theme: 'dark' } });
+  await set.run({ set: { theme: 'dark' } });
   assert.equal((await store.load()).settings.theme, 'dark');
   await assert.rejects(
-    set.setSettings({ set: { theme: 'blue' } }),
+    set.run({ set: { theme: 'blue' } }),
     (e) => e.code === 'INVALID_INPUT' && /light \/ dark \/ auto/.test(e.message),
   );
 });
@@ -117,14 +117,14 @@ test('theme：只认 light / dark / auto，坏值拒绝', async () => {
 test('未知设置项 / 空 patch 都明确报错', async () => {
   withStore();
   const { set } = await loadModules();
-  await assert.rejects(set.setSettings({ set: { 不存在的项: 1 } }), /未知设置项/);
-  await assert.rejects(set.setSettings({}), /至少要给一项/);
+  await assert.rejects(set.run({ set: { 不存在的项: 1 } }), /未知设置项/);
+  await assert.rejects(set.run({}), /至少要给一项/);
 });
 
 test('--dry-run 只演练不落盘', async () => {
   withStore();
   const { set, store } = await loadModules();
-  const r = await set.setSettings({ set: { navGroups: [{ title: '系统', views: ['home'] }] }, 'dry-run': true });
+  const r = await set.run({ set: { navGroups: [{ title: '系统', views: ['home'] }] }, 'dry-run': true });
   assert.equal(r.status, 'skipped');
   assert.deepEqual(
     (await store.load()).settings.navGroups,
@@ -137,11 +137,11 @@ test('navOrder：可排序；坏 JSON 拒绝', async () => {
   withStore();
   const { set, store } = await loadModules();
 
-  const a = await set.setSettings({ set: { navOrder: 'home' } });
+  const a = await set.run({ set: { navOrder: 'home' } });
   assert.deepEqual(a.settings.navOrder, ['home']);
 
   await assert.rejects(
-    set.setSettings({ set: { navOrder: '[bad json' } }),
+    set.run({ set: { navOrder: '[bad json' } }),
     (e) => e.code === 'INVALID_INPUT',
   );
   assert.deepEqual((await store.load()).settings.navOrder, ['home'], '校验失败不得落盘');
@@ -150,7 +150,7 @@ test('navOrder：可排序；坏 JSON 拒绝', async () => {
 test('renderSettings：打印摆法，且说明页面清单来自前端', async () => {
   withStore();
   const { home, mod } = await loadModules();
-  const d = await home.getSettings();
+  const d = await home.run();
   const text = mod.renderSettings(d);
   assert.match(text, /隐藏 \d+ 个/);
   assert.match(text, /前端路由树/, '要明确告诉人：页面清单不在后端');

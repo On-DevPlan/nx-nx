@@ -4,6 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { APP_NAME, STORE_ENV, storePathFromEnv } from '../core/paths.js';
 import { cliPathsOf, usageOf } from './spec.js';
+import type { FieldDesc } from './zod-bridge.js';
 
 /** 命令条目来源的公共形状（registry action 与 help 自身都满足）。 */
 interface HelpCommand {
@@ -12,6 +13,8 @@ interface HelpCommand {
   cli?: readonly string[] | readonly (readonly string[])[];
   http?: readonly [string, string] | null;
   summary?: string;
+  /** 逐字段说明（zod .describe()）：printCommandHelp 的「参数:」段从这里派生。 */
+  fields?: readonly FieldDesc[];
 }
 
 const VERSION = (
@@ -98,6 +101,10 @@ export function renderHelp(entries: CommandEntry[], topic?: unknown): string {
 
 // `nx-nx <命令> --help`：只打印这一条，而不是整个模块——
 // 之前这里传的是 cmd.cli[0]，对别名 action（cli 是数组的数组）会拼出 "bundled,list"。
+//
+// 「参数:」段逐字段渲染 .describe() 的说明——字段描述纪律（每个输入字段必带描述）
+// 的直接受益者：help 不可能与实际参数脱节，参数含义也不再需要人脑维护第二份。
+// 对齐列格式对齐主流开源 CLI（commander / oclif 的 usage 风格）。
 export function printCommandHelp(cmd: HelpCommand): void {
   const lines: string[] = [usageOf(cmd)];
   if (cmd.summary) lines.push('    ' + cmd.summary);
@@ -109,5 +116,18 @@ export function printCommandHelp(cmd: HelpCommand): void {
   if (aliases.length) lines.push('别名: ' + aliases.join('  ·  '));
   if (cmd.http) lines.push('对应路由: ' + cmd.http[0] + ' ' + cmd.http[1]);
   lines.push('所属模块: ' + (cmd.module || 'platform'));
+
+  const fields = [...(cmd.fields ?? [])];
+  if (fields.length) {
+    lines.push('参数:');
+    const labels = fields.map((f) => (f.positional ? f.name : '--' + f.name));
+    const width = Math.max(...labels.map((l) => l.length));
+    for (let i = 0; i < fields.length; i++) {
+      const f = fields[i]!;
+      const opt = f.positional ? '' : f.required ? ' 必填' : '';
+      const kind = f.kind === 'boolean' && !f.positional ? '' : ' <' + f.kind + '>';
+      lines.push('  ' + labels[i]!.padEnd(width + 2) + (f.desc || '') + kind + opt);
+    }
+  }
   console.log(lines.join('\n'));
 }

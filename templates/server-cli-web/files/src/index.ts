@@ -17,5 +17,5 @@ export { CliApp, runCli } from './runtime/cli.js';
 
 // IoC 与 action 基类
 export { Container, container } from './runtime/container.js';
-export { ActionBase } from './runtime/action-base.js';
+export { ActionBase, type ActionInput, type ActionRunMeta } from './runtime/action-base.js';
 export { action, zodActionsOf } from './runtime/action-decorator.js';
