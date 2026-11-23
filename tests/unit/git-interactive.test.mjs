@@ -18,6 +18,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
 
+// CI 会启用 ANSI 颜色：`搜索:` 与查询词之间夹着颜色重置序列，
+// 直接对原始输出做正则会让「看到 prfeat 后按回车」永远等不到。
+const stripAnsi = (text) => text.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '');
+
 /**
  * 装上假 TTY，跑一条 CLI 命令，**看到提示才发按键**。
  *
@@ -57,7 +61,7 @@ async function runInFakeTty(argv, steps) {
   let step = 0;
   const poll = setInterval(() => {
     if (step >= steps.length) return;
-    const text = chunks.join('');
+    const text = stripAnsi(chunks.join(''));
     if (steps[step].wait.test(text)) {
       fakeIn.write(steps[step].keys);
       step += 1;
