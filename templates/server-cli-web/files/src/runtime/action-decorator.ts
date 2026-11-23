@@ -56,6 +56,8 @@ export interface ActionMeta {
   summary?: string;
   /** 位置参数字段名（按声明顺序消费 argv） */
   args?: readonly string[];
+  /** 尾部收参：剩余全部位置参数收进这个字段（schema 里应是 z.array(...)） */
+  restArg?: string;
   /** 输入 schema：CLI 与 HTTP 共用的真相源（运行时校验 + 归一化的依据）。 */
   input: ZodType;
   /**
@@ -119,6 +121,8 @@ export interface ZodBoundAction extends BoundAction {
   summary?: string;
   /** 位置参数字段名（describeInput 的排序依据） */
   args?: readonly string[];
+  /** 尾部收参字段名（剩余位置参数全收进来） */
+  restArg?: string;
   /** 逐字段说明（收集时用 describeInput 算好一次，CLI/HTTP/usage/codegen 共用） */
   fields: FieldDesc[];
   input: ZodType;
@@ -154,7 +158,7 @@ export function zodActionsOf(instance: object): ZodBoundAction[] {
 
     const args = meta.args ?? [];
     if (meta.http) {
-      const declared = new Set(args);
+      const declared = new Set([...args, ...(meta.restArg ? [meta.restArg] : [])]);
       for (const p of routeParams(meta.http[1])) {
         if (!declared.has(p)) {
           throw new Error(
@@ -175,6 +179,7 @@ export function zodActionsOf(instance: object): ZodBoundAction[] {
       http: meta.http,
       summary: meta.summary,
       args,
+      restArg: meta.restArg,
       fields,
       input: meta.input,
       render: meta.render,

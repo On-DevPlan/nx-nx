@@ -20,7 +20,7 @@ export function cliPathsOf(action: { cli?: unknown }): string[][] {
 
 // ---- 用法串生成：从 fields 反推，help 因此不可能与实际命令脱节 ----
 
-export function usageOf(action: { cli?: unknown; fields?: readonly FieldDesc[] }): string {
+export function usageOf(action: { cli?: unknown; fields?: readonly FieldDesc[]; restArg?: string }): string {
   const fields = action.fields ?? [];
   const [path] = cliPathsOf(action);
   const parts: string[] = [APP_NAME, ...(path || [])];
@@ -30,6 +30,8 @@ export function usageOf(action: { cli?: unknown; fields?: readonly FieldDesc[] }
   for (const f of fields.filter((x) => x.positional)) {
     parts.push(f.required ? `<${f.name}>` : `[${f.name}]`);
   }
+  // 尾部收参：剩余全部位置参数收进 restArg 字段（schema 里是数组）
+  if (action.restArg) parts.push(`<${action.restArg}...>`);
   for (const f of fields.filter((x) => !x.positional)) {
     if (f.kind === 'boolean') {
       parts.push(f.required ? `--${f.name}` : `[--${f.name}]`);

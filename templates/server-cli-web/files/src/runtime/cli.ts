@@ -107,68 +107,12 @@ export class CliApp {
     return best ? { cmd: best.cmd, rest: argv.slice(best.len) } : null;
   }
 
-  // 解析剩余 token。布尔 flag 不吞下一个 token —— 否则 `skill install --force demo`
-  // 会把 force 解析成字符串 'demo'，而 demo 本该是位置参数。
-  // 布尔集合从 schema 字段推出（kind === 'boolean' 的非位置字段）。
-  private parseRest(rest: string[], fields: FieldDesc[], bools: Set<string>): { positionals: string[]; flags: Record<string, unknown> } {
-    const positionals: string[] = [];
-    const flags: Record<string, unknown> = {};
-    for (let i = 0; i < rest.length; i++) {
-      const a = rest[i]!;
-      if (!a.startsWith('--')) {
-        positionals.push(a);
-        continue;
-      }
-      const eq = a.indexOf('=');
-      if (eq > 2) {
-        this.setFlag(flags, a.slice(2, eq), a.slice(eq + 1));
-        continue;
-      }
-      const key = a.slice(2);
-      const next = rest[i + 1];
-      if (!bools.has(key) && next !== undefined && !next.startsWith('--')) {
-        this.setFlag(flags, key, next);
-        i++;
-      } else {
-        flags[key] = true;
-      }
-    }
-    return { positionals, flags };
-  }
-
-  // 同名 flag 出现多次 → 收成数组（`--set a=1 --set b=2`）。
-  // 不这么做的话后者会静默覆盖前者——`--set` / `--hidden` 这类可重复 flag 全靠它。
-  private setFlag(flags: Record<string, unknown>, key: string, value: unknown): void {
-    const prev = flags[key];
-    if (prev === undefined) flags[key] = value;
-    else if (Array.isArray(prev)) prev.push(value);
-    else flags[key] = [prev, value];
-  }
-
   // zod 通道输入解析：位置参数按 fields 声明顺序消费 argv，其余是 --flag；
   // 文本值经 normalizeCliValue 归一化成 schema 期待的形状，最后 zod 校验
   // （错误带「用法:」前缀——对 agent 的分类契约）。未知 flag 当场报错。
+  // 实现在模块级 parseZodChannel（纯函数，单测直接调用）。
   private parseInput(cmd: ZodBoundAction, tail: string[]): unknown {
-    const bools = new Set(cmd.fields.filter((f) => !f.positional && f.kind === 'boolean').map((f) => f.name));
-    const { positionals, flags } = this.parseRest(tail, cmd.fields, bools);
-    const usage = usageOf(cmd);
-
-    const positionalFields = cmd.fields.filter((f) => f.positional);
-    if (positionals.length > positionalFields.length) {
-      throw badInput(`多余的参数: ${positionals.slice(positionalFields.length).join(' ')}（用法见 ${APP_NAME} help）`);
-    }
-
-    const raw: Record<string, unknown> = {};
-    positionalFields.forEach((f, i) => {
-      const v = positionals[i];
-      if (v !== undefined) raw[f.name] = normalizeCliValue(f, v);
-    });
-    for (const [k, v] of Object.entries(flags)) {
-      const f = cmd.fields.find((x) => x.name === k);
-      if (!f) throw badInput(`未知参数 --${k}（用法: ${usage}）`);
-      raw[k] = normalizeCliValue(f, v);
-    }
-    return parseInput(cmd.input, raw, usage);
+    return parseZodChannel(cmd, tail);
   }
 
   // ---- 输出 ----
@@ -212,6 +156,80 @@ export class CliApp {
 
 /** 全项目唯一 CLI 实例（与 registry 单例配套）。 */
 export const cliApp = new CliApp(registry);
+
+// ---- zod 通道的输入解析（模块级纯函数，单测直接调用） ----
+
+// 解析剩余 token。布尔 flag 不吞下一个 token —— 否则 `skill install --force demo`
+// 会把 force 解析成字符串 'demo'，而 demo 本该是位置参数。
+// 布尔集合从 schema 字段推出（kind === 'boolean' 的非位置字段）。
+export function parseRest(rest: string[], fields: FieldDesc[], bools: Set<string>): { positionals: string[]; flags: Record<string, unknown> } {
+  const positionals: string[] = [];
+  const flags: Record<string, unknown> = {};
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i]!;
+    if (!a.startsWith('--')) {
+      positionals.push(a);
+      continue;
+    }
+    const eq = a.indexOf('=');
+    if (eq > 2) {
+      setFlag(flags, a.slice(2, eq), a.slice(eq + 1));
+      continue;
+    }
+    const key = a.slice(2);
+    const next = rest[i + 1];
+    if (!bools.has(key) && next !== undefined && !next.startsWith('--')) {
+      setFlag(flags, key, next);
+      i++;
+    } else {
+      flags[key] = true;
+    }
+  }
+  return { positionals, flags };
+}
+
+// 同名 flag 出现多次 → 收成数组（`--set a=1 --set b=2`）。
+// 不这么做的话后者会静默覆盖前者——`--set` / `--hidden` 这类可重复 flag 全靠它。
+function setFlag(flags: Record<string, unknown>, key: string, value: unknown): void {
+  const prev = flags[key];
+  if (prev === undefined) flags[key] = value;
+  else if (Array.isArray(prev)) prev.push(value);
+  else flags[key] = [prev, value];
+}
+
+// 位置参数按 fields 声明顺序消费；restArg 收剩余全部（整组交给数组字段归一化）。
+export function parseZodChannel(cmd: ZodBoundAction, tail: readonly string[]): unknown {
+  const bools = new Set(cmd.fields.filter((f) => !f.positional && f.kind === 'boolean').map((f) => f.name));
+  const { positionals, flags } = parseRest([...tail], cmd.fields, bools);
+  const usage = usageOf(cmd);
+
+  const positionalFields = cmd.fields.filter((f) => f.positional);
+  // 多余位置参数只在「没有尾部收参」时才是错误；声明了 restArg 则剩余全部收进
+  // 该字段（不设上限——参考实现这里留了一个 restCount=1 的隐性截断，因零使用方
+  // 从未暴露；按「收剩余全部」的文档语义修正）
+  if (!cmd.restArg && positionals.length > positionalFields.length) {
+    throw badInput(`多余的参数: ${positionals.slice(positionalFields.length).join(' ')}（用法见 ${APP_NAME} help）`);
+  }
+
+  const raw: Record<string, unknown> = {};
+  positionalFields.forEach((f, i) => {
+    const v = positionals[i];
+    if (v !== undefined) raw[f.name] = normalizeCliValue(f, v);
+  });
+  if (cmd.restArg) {
+    const rest = positionals.slice(positionalFields.length);
+    if (rest.length) {
+      const f = cmd.fields.find((x) => x.name === cmd.restArg);
+      raw[cmd.restArg] = f ? normalizeCliValue(f, rest) : rest;
+    }
+  }
+  for (const [k, v] of Object.entries(flags)) {
+    const f = cmd.fields.find((x) => x.name === k);
+    if (!f) throw badInput(`未知参数 --${k}（用法: ${usage}）`);
+    raw[k] = normalizeCliValue(f, v);
+  }
+  return parseInput(cmd.input, raw, usage);
+}
 
 // 兼容入口：bin/nx-nx.mjs 与既有调用方都用它。
 export async function runCli(argv: string[]): Promise<void> {

@@ -44,9 +44,9 @@ export class Registry {
     //
     // 方向性约定：
     //   - 每条 action 都必须有 cli —— 保证「Web 上能做的，CLI 都能做」
-    //   - http 缺省 = 纯 CLI（@action 装饰器里不写 http 就是有意不给面板入口；
-    //     面板入口的硬闸在 tests/unit/registry.test.mjs 的「非 GET 操作必须有
-    //     面板入口」——非 GET 的 action 必须在前端被引用到）
+    //   - http 是**显式两态**：要么 [METHOD, PATTERN]，要么字面 null（纯 CLI）。
+    //     不写（undefined）是装载错误——「有意不给面板入口」与「忘了写」在
+    //     类型层分不开，这里强制作者把话说全（对齐 nx-kv 的两态纪律）
     //   - 声明了 http 却没有 cli 同样启动即失败
     const seenIds = new Set<string>();
     const seenCli = new Set<string>();
@@ -64,15 +64,14 @@ export class Registry {
       }
 
       const http = a.http;
+      if (http === undefined) {
+        throw new Error(`action 的 http 未声明（纯 CLI 写 http: null，面板入口写 [METHOD, PATTERN]）: ${a.id}`);
+      }
       if (http) {
-        const [method, pattern] = http as [string, string];
+        const [method, pattern] = http;
         const httpKey = method + ' ' + pattern;
         if (seenHttp.has(httpKey)) throw new Error(`HTTP 路由重复: ${httpKey}（action ${a.id}）`);
         seenHttp.add(httpKey);
-      } else {
-        // http 缺省 = 纯 CLI（@action 装饰器不写 http 就是有意不给面板入口）
-        if (!a.run) throw new Error(`action 缺少 run: ${a.id}`);
-        continue;
       }
 
       if (!a.run) throw new Error(`action 缺少 run: ${a.id}`);
