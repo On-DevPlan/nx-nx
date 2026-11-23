@@ -1,4 +1,4 @@
-// 面板表单模型（src/modules/scaffold/option-form.ts）的测试。
+// 面板表单模型（src/web/frontend/page/scaffold/option-form.ts）的测试。
 //
 // 这个模块是 core/templates.ts 的**前端镜像**：面板用它决定「预览文件 / 生成项目」
 // 两个按钮能不能点。两边规则一旦漂移，后果分两头——
@@ -18,7 +18,7 @@ import { listTemplates, resolveVars } from '../../src/core/templates.js';
 // tsx 以「经典 JSX 运行时」转译 .tsx（根 tsconfig 只是 references，没有 jsx 设置），
 // 因此直接渲染组件时需要 React 在全局。Vite/tsc 那边走 react-jsx 自动注入，不受影响。
 globalThis.React = React;
-const { OptionField } = await import('../../src/modules/scaffold/option-field.js');
+const { OptionField } = await import('../../src/web/frontend/page/scaffold/option-field.js');
 import {
   blockingIssues,
   describeIssues,
@@ -26,7 +26,7 @@ import {
   splitOptions,
   suggestProjectName,
   validateOption,
-} from '../../src/modules/scaffold/option-form.js';
+} from '../../src/web/frontend/page/scaffold/option-form.js';
 import { sampleValues } from './sample-values.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -169,7 +169,7 @@ test('留空不报红，格式错才在行内报错', () => {
 test('回归：面板不得再按具体选项名门禁', () => {
   // 这条锁的是 bug 的形状而不是行为：mono-gf 的 name、std-a-lang 的 lang 都不叫
   // letters，一旦有人图省事写回 `!letters`，按钮立刻对不上模板。
-  const src = readFileSync(join(ROOT, 'src', 'modules', 'scaffold', 'view.tsx'), 'utf8');
+  const src = readFileSync(join(ROOT, 'src', 'web', 'frontend', 'page', 'scaffold', 'view.tsx'), 'utf8');
   assert.ok(!src.includes('请先填项目字母'), '写死的「项目字母」提示该回来了');
   assert.ok(
     !/disabled=\{[^}]*\bletters\b/.test(src),

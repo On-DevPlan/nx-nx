@@ -11,15 +11,17 @@
 import { defineModules } from './types/module.js';
 import type { ActionShape } from './types/action.js';
 import { cliPathsOf } from './spec.js';
+import { getFlow } from '../core/terminal/flows.js';
 import system from '../modules/system/index.js';
 import template from '../modules/template/index.js';
 import skill from '../modules/skill/index.js';
 import script from '../modules/script/index.js';
 import serviceGroup from '../modules/service-group/index.js';
+import git from '../modules/git/index.js';
 
 // 编译期：defineModules 对模块/action id、CLI/HTTP 键查重 + 路由歧义检测；
 // 运行时：按 order 排序。
-export const MODULES = defineModules([system, template, skill, script, serviceGroup]);
+export const MODULES = defineModules([system, template, skill, script, serviceGroup, git]);
 
 export interface BoundAction {
   id: string;
@@ -67,4 +69,20 @@ for (const a of ACTIONS) {
   }
 
   if (!a.run) throw new Error(`action 缺少 run: ${a.id}`);
+
+  // 交互流程自检：声明了 interactive.flow 就必须真的登记过。
+  // 功能域在装载时 registerFlow（见 core/terminal/flows.ts），
+  // 声明了却没登记的流程是**无法触达的死代码**，要在启动时就暴露，
+  // 而不是等用户敲到那条命令才炸。
+  const interactive = (a as { interactive?: { flow?: string } }).interactive;
+  if (interactive !== undefined) {
+    if (!interactive || typeof interactive.flow !== 'string' || !interactive.flow) {
+      throw new Error(`action 的 interactive 必须形如 { flow: 'xxx' }: ${a.id}`);
+    }
+    if (!getFlow(interactive.flow)) {
+      throw new Error(
+        `action ${a.id} 声明了未登记的交互流程: ${interactive.flow}（先在功能域里 registerFlow）`
+      );
+    }
+  }
 }

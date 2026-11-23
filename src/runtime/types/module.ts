@@ -31,14 +31,15 @@ export function defineModule<const M>(
 }
 
 // ---- 元组工具：查重 ----
-
-export type Includes<T extends readonly unknown[], V> = T extends readonly [infer H, ...infer R]
-  ? [H] extends [V]
-    ? [V] extends [H]
-      ? true
-      : Includes<R, V>
-    : Includes<R, V>
-  : false;
+//
+// Includes 用 Extract 而不是逐元素条件展开：后者是 O(n) 的分配式条件类型，
+// 元素一多（60 条 action）就会把 TS 的实例化预算打爆
+// （实测报 "Type instantiation is excessively deep"）。
+// 语义等价：这里参与查重的全是字符串字面量，
+// 「Seen 里有没有 V」==「Seen 的联合类型里能不能 Extract 出 V」。
+export type Includes<T extends readonly unknown[], V> = [Extract<T[number], V>] extends [never]
+  ? false
+  : true;
 
 export type Dup<T extends readonly unknown[], Seen extends readonly unknown[] = []> = T extends readonly [
   infer H,

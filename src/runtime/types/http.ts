@@ -76,7 +76,25 @@ export type OverlapKey<A extends string, B extends string> = [MethodOfKey<A>] ex
   : false;
 
 // 对路由键元组做双重遍历，产出所有歧义对（无歧义则 never）。
-export type AmbiguousPairs<Ps extends readonly string[], I extends unknown[] = []> = I['length'] extends Ps['length']
+//
+// **为什么要分桶**：段数不同的两条路由永远匹配不到同一批 URL，
+// 所以只有「同段数」的路由才可能歧义。原实现对全表做 O(n²) 的映射类型展开，
+// 路由一多（50+）就会把 TS 的类型实例化预算打爆
+// （实测报 "Type instantiation is excessively deep"）。
+// 现在先按段数分桶，桶内再两两比对——桶通常只有几条，代价降一个数量级，
+// 判定口径与原来完全一致。
+type LenOfKey<K extends string> = Segs<PatternOfKey<K>>['length'];
+
+type Bucket<Ps extends readonly string[], L extends number> = Ps extends readonly [
+  infer H extends string,
+  ...infer R extends readonly string[],
+]
+  ? LenOfKey<H> extends L
+    ? [H, ...Bucket<R, L>]
+    : Bucket<R, L>
+  : [];
+
+type AmbiguousInBucket<Ps extends readonly string[], I extends unknown[] = []> = I['length'] extends Ps['length']
   ? never
   : Ps[I['length'] & number] extends infer P extends string
     ?
@@ -87,5 +105,24 @@ export type AmbiguousPairs<Ps extends readonly string[], I extends unknown[] = [
                 ? `${P} ≈ ${Ps[J]}`
                 : never;
           }[number]
-        | AmbiguousPairs<Ps, [...I, 1]>
+        | AmbiguousInBucket<Ps, [...I, 1]>
     : never;
+
+/** 表中出现过的段数（去重）。 */
+type DistinctLens<
+  Ps extends readonly string[],
+  Acc extends number[] = [],
+> = Ps extends readonly [infer H extends string, ...infer R extends readonly string[]]
+  ? LenOfKey<H> extends Acc[number]
+    ? DistinctLens<R, Acc>
+    : DistinctLens<R, [...Acc, LenOfKey<H>]>
+  : Acc;
+
+type AmbiguousAcrossLens<
+  Ps extends readonly string[],
+  Ls extends number[],
+> = Ls extends readonly [infer L extends number, ...infer R extends number[]]
+  ? AmbiguousInBucket<Bucket<Ps, L>> | AmbiguousAcrossLens<Ps, R>
+  : never;
+
+export type AmbiguousPairs<Ps extends readonly string[]> = AmbiguousAcrossLens<Ps, DistinctLens<Ps>>;

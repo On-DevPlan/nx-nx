@@ -1,6 +1,6 @@
 {
   "name": "nx-nx",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "description": "nx 系列项目生成器 — 把 server-cli-web 骨架物化成项目：CLI 与 Web 面板同源，TypeScript 模板带编译期类型安全",
   "type": "module",
   "bin": {
@@ -23,8 +23,10 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "node scripts/clean-dist.mjs && tsc -b --force tsconfig.node.json && vite build",
-    "typecheck": "tsc -b tsconfig.node.json tsconfig.web.json",
+    "build": "node scripts/clean-dist.mjs && pnpm run gen && tsc -b --force tsconfig.node.json && vite build",
+    "typecheck": "pnpm run gen && tsc -b tsconfig.node.json tsconfig.web.json",
+    "gen:actions": "node --import tsx scripts/gen-actions.mjs",
+    "gen": "pnpm run gen:actions",
     "dev": "node --import tsx scripts/dev.mjs",
     "dev:vite": "vite --host 127.0.0.1",
     "dev:serve": "node --import tsx src/runtime/cli.ts serve --no-open",
@@ -52,6 +54,7 @@
   "license": "MIT",
   "dependencies": {
     "@ant-design/icons": "^6.3.4",
+    "@clack/prompts": "^1.9.0",
     "@codemirror/lang-javascript": "^6.2.5",
     "@tanstack/react-query": "^5.107.1",
     "@uiw/react-codemirror": "^4.25.12",

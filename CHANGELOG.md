@@ -1,3 +1,70 @@
+## [0.19.0] - 2026-11-23
+
+### git 新增 purge-files：按正则找出大文件并从历史里抹掉
+
+- **新操作 `nx-nx git purge-files`**（危险）：填一个快照 commit（默认 HEAD）与一个文件正则
+  → 列出匹配到的文件与体积 → 勾选要清除的文件 → 重写**从文件创建点往后**的整段历史。
+  目标文件从历史与工作区一起消失，提交标题 / 作者 / 时间不变，只有 hash 会变。
+- **不给 `--files` 时只扫描不动历史**：CLI 直连默认是安全的；真要重写必须显式 `--force`
+  （交互式走「敲 `PURGE-HISTORY`」那一关）。
+- **重写范围按「文件的创建点」算**，不是按 HEAD —— 文件是很久以前加进来的，
+  只重写 HEAD 那一个提交等于没删。
+- **改名链自动展开**：文件改过名时（`a/x.docx` → `b/x.docx`），旧路径也一起清——
+  否则同一个 blob 还挂在老路径下，照样能从历史里下到。
+- **默认连 tag 一起重写**（`--scope all`，可用 `--scope branch` 收窄）：文件常常还挂在老 tag
+  的树里，只改当前分支的话从 `raw/<tag>/<路径>` 照样能下到。重写用
+  `filter-branch --tag-name-filter cat`，并把标签一起强推。
+- **逐个 ref 复查**：重写完把所有分支与标签的树挨个查一遍，确认没有 ref 还挂着目标文件。
+- 底层 `src/core/git/purge.ts`：快照列文件与体积（`ls-tree -r -l -z`）、正则匹配（忽略大小写）、
+  跨改名追路径与创建点、`filter-branch --index-filter` 重写、`gc` 回收磁盘空间。
+- 交互式提问前会先给出**文件清单预览**（文件 + 体积）——新增 `OperationField.preview` 钩子。
+- **修掉一个真 bug**：clack 的 text 提示是「先 validate 再 finalize」，默认值在 finalize 才补上，
+  于是「有默认值 + 有校验规则」的字段在直接敲回车时会被判成空值（正则字段直接报「正则不能为空」）。
+  现在 `core/terminal/prompts.ts` 让默认值参与校验，并把规则抽成可单测的 `valueForValidation`。
+- 新增 `tests/unit/git-purge.test.mjs`（15 条）：扫描、正则、只扫描不改历史、无 `--force` 拒绝、
+  重写后文件从历史消失、变空提交被剪掉、`--keep-empty`、路径安全、工作区不干净拒绝、
+  改名链展开、`scope=all` 清 tag、`scope=branch` 保留 tag。
+
+### 前后端彻底分离 + action 自动生成规范 + git 模块（任务 #26）
+
+**架构纠正**（仓库此前落后于它自己的模板）：
+
+- **视图全归前端**：27 个 `.tsx` 从 `src/modules/**` 搬到 `src/web/frontend/page/<域>/`。
+  后端模块目录里不再有视图文件，也不再反向 import 前端组件。
+  `tests/unit/layering.test.mjs` 用五条断言钉住：后端无 `.tsx`、后端不 import 前端、
+  前端不**值**导入后端、core 不依赖上层、前端注册表指向的文件真实存在。
+  模块目录里重复定义的 `types.ts` 并入 `core/service/store.ts`——前后端共用一个真相源。
+- **一条 action 一个文件**：55 条 action 全部拆进 `src/modules/<域>/actions/<名>.ts`，
+  声明、契约（zod schema）与实现同文件；模块 `index.ts` 只做装配。
+  清单由 `scripts/gen-actions.mjs` 生成（`_manifest.generated.ts`，`as const` 保留字面量元组），
+  **加一条 action = 新建一个文件 + 跑 `pnpm gen`**。
+  `tests/unit/gen-freshness.test.mjs` 现场重生成再逐字比对，改了忘生成当场红。
+- **四方一致测试**：`tests/unit/registry-consistency.test.mjs` 断言 action ↔ CLI ↔ HTTP ↔
+  前端视图一致（每条 action 都有 CLI、CLI 路径能被运行器解析回自己、路由唯一且无结构性歧义、
+  视图调用的 `/api` 路径都有对应路由）。
+- **zod 导入规范**：值用 `import { z } from 'zod'`，类型用 `import type { z, ZodType } from 'zod'`；
+  命名空间导入被 lint 禁止。
+- 修掉 `src/runtime/types/http.ts` 路由歧义检测的 O(n²) 展开（按段数分桶，桶内比对），
+  它在路由变多后会把 TS 的类型实例化预算打爆。
+
+**git 模块**（迁移自 `gitlike` 的设计）：
+
+- `nx-nx git i` 进入**渐进式交互菜单**：按分组折叠的搜索列表（打字过滤、↑↓ 移动、回车选中），
+  详情面板写「什么时候用」与等价命令；参数只问需要人拍板的——能从仓库现状推导的自动采用；
+  危险操作必须原样敲出确认文字。
+- 十个操作：status / prfeat / cherry-pick / abort / resolve-conflicts /
+  migrate-workspace / migrate-with-memory / extract-commits / cleanup-history / force-push。
+- 交互与直连**跑同一份实现**（`src/modules/git/ops/`），两条路径不会跑偏。
+- 事务安全契约照搬 gitlike 不打折：有冲突时 `abort` 拒绝自动中止（必须显式 `--force`），
+  混合冲突类型拒绝统一策略，`cleanup-history` 执行前强制备份 `.git` 并在失败时给出备份路径。
+- 修了 gitlike 原版的一个真 bug：`git checkout <不存在的分支>` 不会自动建分支，
+  导致 `migrate-workspace` 在目标分支不存在时整条流程失败——现在会先建再切。
+- 修掉终端层一个会让交互**卡死**的 bug：搜索提示收尾时 `rl.close()` 会把 stdin 暂停，
+  后面接手的文本输入框再也收不到按键（用户看到提示框却敲不动）。
+- git 模块 CLI 优先：只有两个只读 HTTP 端点，改分支 / 重写历史这类动作不做成面板一键按钮。
+
+
+
 ## [0.18.0] - 2026-11-22
 
 ### AI 生成完整 servicegroup：CLI 底座与 nx-kv 案例

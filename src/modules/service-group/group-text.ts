@@ -1,7 +1,7 @@
 // 服务组列表 / 详情的文本输出（从 index.ts 拆出，避免单文件超行数上限）。
 import { serviceScriptsDir } from '../../core/service/paths.js';
 import { resolveLaunch } from '../../core/service/launch.js';
-import type { GroupView } from './types.js';
+import type { GroupView } from '../../core/service/store.js';
 
 const CONFIG_HINT = `--config '{
   "main": { "script": "my-server", "args": ["--port", "18080"] },

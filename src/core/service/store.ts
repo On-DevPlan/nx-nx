@@ -112,6 +112,31 @@ export function defaultRuntime(): GroupRuntime {
   return { status: 'stopped', failStreak: 0, restarts: 0 };
 }
 
+// 组内脚本的摘要（面板展示用；list 不带，避免逐组扫盘）。
+export interface GroupScriptSummary {
+  name: string;
+  path: string;
+  kind: 'long' | 'short' | 'shared';
+  shared: boolean;
+  source: 'group' | 'external';
+  size: number;
+  updatedAt: number;
+}
+
+/**
+ * 服务组的对外视图：配置 + 运行态 + （可选）组内脚本清单。
+ *
+ * 放在 core 而不是模块目录里：后端的文案渲染与前端的页面都消费它，
+ * 两边共用同一个真相源——之前模块目录里另有一份 types.ts 重复定义，
+ * 迟早与 store.ts 的形状漂移。
+ */
+export interface GroupView {
+  config: ServiceGroupConfig;
+  runtime: GroupRuntime;
+  /** show 时附带：该组命名空间里的脚本；list 不带（避免逐组扫描磁盘）。 */
+  scripts?: GroupScriptSummary[];
+}
+
 // ---- 配置读写 ----
 
 export function loadGroups(): ServiceGroupConfig[] {

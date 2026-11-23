@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-const { splitArgsText, joinArgsText } = await import('../../src/modules/service-group/args-text.js');
+const { splitArgsText, joinArgsText } = await import('../../src/web/frontend/page/service-group/args-text.js');
 
 test('参数文本：空白拆分，引号包住的空格保持在同一项', () => {
   assert.deepEqual(splitArgsText('--port 18080 --config config/staging.json'), [

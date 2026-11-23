@@ -57,6 +57,16 @@ export default tseslint.config(
       'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'no-var': 'error',
       'prefer-const': 'error',
+      // zod 的导入形态统一：值用 `import { z } from 'zod'`，类型用 `import type { z, ZodType } from 'zod'`。
+      // 命名空间导入（import * as z）拿不到 zod 的类型推导，且各文件写法不一致时很难搜。
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "ImportNamespaceSpecifier[source.value='zod']",
+          message:
+            "zod 一律用 `import { z } from 'zod'`（只要类型时用 `import type { z, ZodType } from 'zod'`）。",
+        },
+      ],
     },
   },
 
@@ -94,6 +104,7 @@ export default tseslint.config(
       'src/modules/skill/**/*.{ts,tsx}',
       'src/modules/script/**/*.{ts,tsx}',
       'src/modules/service-group/**/*.{ts,tsx}',
+      'src/modules/git/**/*.{ts,tsx}',
     ],
     plugins: { '@typescript-eslint': tseslint.plugin },
     rules: {
@@ -108,11 +119,41 @@ export default tseslint.config(
                 '../skill/*', '../skill/**',
                 '../script/*', '../script/**',
                 '../service-group/*', '../service-group/**',
+                '../git/*', '../git/**',
                 '../system/*', '../system/**',
               ],
               allowTypeImports: true,
               message:
                 '模块之间不得做值依赖；共享逻辑请下沉到 core/（类型引用允许 import type）。',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // 后端模块：不得出现视图、不得依赖前端、不得引入 UI 库。
+    //
+    // 这条约束的价值：前端代码一旦躺在 src/modules/ 下，就会顺手 import ../../core/xxx
+    // 与 ../../runtime/xxx 的**值**，把 node 侧代码拖进浏览器包；反过来后端又会
+    // import 前端组件，形成环。「视图归前端」这条规矩一旦破，坏得很快也很难查。
+    //
+    // 配套的硬保证在 tests/unit/layering.test.mjs：src/modules 下不允许出现
+    // .tsx/.jsx 文件（lint 只能拦住「引了 react」，拦不住「一个纯 tsx 文件」）。
+    files: ['src/modules/**/*.{ts,tsx}'],
+    plugins: { '@typescript-eslint': tseslint.plugin },
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['react', 'react-dom', 'antd', '@ant-design/icons', 'lucide-react'],
+              message: '后端模块不得引入 UI 库——视图归 src/web/frontend/ 管。',
+            },
+            {
+              group: ['**/web/frontend/**', '../web/**', '../../web/**'],
+              message: '后端模块不得依赖前端——依赖只能向下（core ← modules ← runtime）。',
             },
           ],
         },
@@ -127,7 +168,7 @@ export default tseslint.config(
   },
 
   {
-    // 前端（含 modules/scaffold 下的视图 tsx）：这条规则价值最高——
+    // 前端（含 src/web/frontend 下的页面）：这条规则价值最高——
     // 把 Node 侧代码值导入视图，Vite 会把 node: 内置模块一起打进浏览器包。
     //
     // 关键：Node 侧的**类型**导入是允许的（typed client 的类型由注册表推出），

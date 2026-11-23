@@ -14,7 +14,7 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 
 | 代号 | 类别 | 成员 |
 | --- | --- | --- |
-| **A** | 使用 SOP（已有能力怎么跑） | A01 脚本（长 / 短 / 共享面板） · A02 服务组命令（探活 / 自愈 / 启动版本） · A03 服务模块（默认脚本 / 客户端流水线 / 共享数据） |
+| **A** | 使用 SOP（已有能力怎么跑） | A01 脚本（长 / 短 / 共享面板） · A02 服务组命令（探活 / 自愈 / 启动版本） · A03 服务模块（默认脚本 / 客户端流水线 / 共享数据） · A04 git 工作流（交互式 / 分支迁移 / 冲突处理） |
 | **B** | 生成 SOP（项目怎么造） | B01 模板（选型 / 预览 / 生成） · B02 初始化（装依赖 / 测试 / 起面板） |
 
 ## 场景路由（ref-map）
@@ -26,6 +26,7 @@ description: 当用户要「用 nx-nx 生成一个 CLI + Web 面板项目」「�
 | 起长驻服务 / 探活 / 自愈 | `sg`、`main`、`health`、`autoheal`、`stop` | 建组、排查失活或关停 | A02 | `references/A02-service.md` |
 | 自动生成 servicegroup / 服务脚本 / 扩展脚本 | `sg set`、`sg script --contentFile`、已有服务转服务组 | 照 SOP 产出五份脚本并 CLI 导入验证 | A03 | `references/A03-service-module.md` |
 | client 流水线 / 共享面板 / 空间 | `sg run`、`clients`、`shared`、`space.check` | 写业务请求、配闸门 | A02 | `references/A02-service.md` |
+| git 分支迁移 / 抽提交 / 解冲突 | `git i`、`git extract-commits`、`git abort`、`git resolve-conflicts` | 动分支结构或处理冲突前 | A04 | `references/A04-git.md` |
 | 选模板 / 看选项 / 预览 / 生成 | `template list`、`describe`、`preview`、`create` | 生成项目第一步 | B01 | `references/B01-template.md` |
 | 生成后装依赖 / 跑测试 / 起面板 | `pnpm install`、`pnpm test`、`pnpm dev`、`pnpm start` | 项目刚生成或初始化失败 | B02 | `references/B02-init.md` |
 

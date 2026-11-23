@@ -9,6 +9,7 @@ import {
   loadRuntime,
   normalizeGroup,
   saveGroups,
+  type GroupView,
   type ServiceGroupConfig,
 } from '../../core/service/store.js';
 import { assertGroupId } from '../../core/service/paths.js';
@@ -48,26 +49,14 @@ import {
   type ServiceTemplateMeta,
 } from '../../core/service/templates.js';
 
-export interface ServiceGroupView {
-  config: ServiceGroupConfig;
-  runtime: {
-    status: string;
-    pid?: number;
-    alive?: boolean;
-    detail?: string;
-    lastCheckAt?: number;
-    failStreak: number;
-    restarts: number;
-    lastEvent?: string;
-    logFile?: string;
-    /** 上一次启动实际使用的启动脚本版本。 */
-    entry?: string;
-    /** 上一次实际使用的监听端口。 */
-    port?: number;
-  };
-  /** show 时附带：该组命名空间里的脚本（list 不逐组扫描，避免 N 次磁盘读）。 */
-  scripts?: ReturnType<typeof listServiceScripts>;
-}
+/**
+ * 服务组的对外视图。
+ *
+ * 直接用 core 的 GroupView——那份是后端文案渲染与前端页面共同消费的真相源；
+ * 这里此前另有一份形状几乎相同、runtime.status 还被放宽成 string 的定义，
+ * 两份迟早漂移（真漂移过一次：status 从联合类型退化成 string，编译期就报红）。
+ */
+export type ServiceGroupView = GroupView;
 
 export function listGroups(): ServiceGroupView[] {
   return loadGroups().map((g) => {

@@ -5,7 +5,7 @@
 // 新增命令只需在所属模块的 actions 里加一条。
 import { readFileSync } from 'node:fs';
 import { APP_NAME, APP_TITLE, DEFAULT_PORT, storePathFromEnv } from '../core/paths.js';
-import { toErrorPayload, exitCodeOf, badInput } from '../core/errors/index.js';
+import { toErrorPayload, exitCodeOf, badInput, specError } from '../core/errors/index.js';
 import { ACTIONS } from './registry.js';
 import {
   cliPathsOf,
@@ -37,6 +37,7 @@ interface AnyCommand {
   args?: readonly ArgEntry[];
   flags?: Record<string, FlagSpec>;
   openFlags?: boolean;
+  interactive?: { flow: string };
   run?: (ctx: Record<string, unknown>, meta?: TransportMeta) => unknown;
   render?: (result: unknown, ctx?: Record<string, unknown>) => unknown;
 }
@@ -341,6 +342,20 @@ export async function runCli(argv: string[]): Promise<void> {
     assertKnownFlags(flags, cmd);
     const input = { ...mapPositionals(positionals, cmd), ...flags };
     const ctx = applySpec(cmd as unknown as ActionShape, input);
+
+    // 交互式 action：真 TTY 下改走会话通道（接管 stdin 的 raw 模式），
+    // 由功能域登记的流程渲染；--json / 管道 / CI 下不抢终端，
+    // 继续走 run 的只读快照（行为可脚本化）。
+    const flowName = (cmd as unknown as ActionShape).interactive?.flow;
+    if (flowName && !json && process.stdin.isTTY === true && process.stdout.isTTY === true) {
+      const { getFlow } = await import('../core/terminal/flows.js');
+      const factory = getFlow(flowName);
+      if (!factory) throw specError(`未登记的交互流程: ${flowName}`);
+      const outcome = await factory(ctx as Record<string, unknown>);
+      await emit(cmd, outcome?.data, json, ctx as Record<string, unknown>);
+      return;
+    }
+
     const data = await cmd.run?.(ctx as Record<string, unknown>, { transport: 'cli' });
     await emit(cmd, data, json, ctx as Record<string, unknown>);
   } catch (err) {

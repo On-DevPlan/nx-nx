@@ -108,6 +108,16 @@ export interface ActionShape {
   flags?: Record<string, FlagSpec>;
   openFlags?: boolean;
   /**
+   * 交互式流程声明。
+   *
+   * 声明了它，这条命令在**真 TTY** 下改走会话通道（接管 stdin 的 raw 模式），
+   * 由功能域登记的流程渲染帧；`--json` / 管道 / CI 下不抢终端，
+   * 继续走 run 的只读快照（行为可脚本化）。
+   *
+   * flow 必须在 core/terminal/flows.ts 里登记过——装载期自检盯着（registry.ts）。
+   */
+  interactive?: { flow: string };
+  /**
    * 可选的 zod 输入契约：CLI 与 HTTP 的**同一条**运行时闸门。
    *
    * flags/args 描述的是「命令行长什么样」（help、强转、缺参提示），schema 描述
