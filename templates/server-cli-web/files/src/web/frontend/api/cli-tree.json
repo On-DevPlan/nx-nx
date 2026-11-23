@@ -4,20 +4,6 @@
   "action": null,
   "children": [
     {
-      "name": "serve",
-      "path": [
-        "serve"
-      ],
-      "action": {
-        "id": "serve",
-        "module": "platform",
-        "summary": "启动 Web 面板（默认 :7920；--port N 改端口；--no-open 不开浏览器；端口上已是本面板则直接打开它；NX_SERVE_NO_OPEN=1 全局不开浏览器）",
-        "usage": "serve",
-        "http": null
-      },
-      "children": []
-    },
-    {
       "name": "help",
       "path": [
         "help"
@@ -25,8 +11,22 @@
       "action": {
         "id": "help",
         "module": "platform",
-        "summary": "显示帮助（可跟模块名或命令组，如 nx-zz help home）",
+        "summary": "显示帮助（可跟模块名或命令组，如 {{name}} help home）",
         "usage": "help",
+        "http": null
+      },
+      "children": []
+    },
+    {
+      "name": "serve",
+      "path": [
+        "serve"
+      ],
+      "action": {
+        "id": "serve",
+        "module": "platform",
+        "summary": "启动 Web 面板（默认 :{{port}}；--port N 改端口；--no-open 不开浏览器；端口上已是本面板则直接打开它；NX_SERVE_NO_OPEN=1 全局不开浏览器）",
+        "usage": "serve",
         "http": null
       },
       "children": []
@@ -70,48 +70,6 @@
       ]
     },
     {
-      "name": "routes",
-      "path": [
-        "routes"
-      ],
-      "action": {
-        "id": "home.routes",
-        "module": "home",
-        "summary": "列出 CLI 命令与 HTTP 路由的对照表",
-        "usage": "routes",
-        "http": "GET /api/routes"
-      },
-      "children": []
-    },
-    {
-      "name": "health",
-      "path": [
-        "health"
-      ],
-      "action": {
-        "id": "home.health",
-        "module": "home",
-        "summary": "自检：存储目录是否可写",
-        "usage": "health",
-        "http": "GET /api/health"
-      },
-      "children": []
-    },
-    {
-      "name": "greet",
-      "path": [
-        "greet"
-      ],
-      "action": {
-        "id": "home.greet",
-        "module": "home",
-        "summary": "打个招呼（演示动作：问候次数累计进本机存储）",
-        "usage": "greet",
-        "http": "POST /api/greet"
-      },
-      "children": []
-    },
-    {
       "name": "setting",
       "path": [
         "setting"
@@ -151,6 +109,48 @@
       ]
     },
     {
+      "name": "greet",
+      "path": [
+        "greet"
+      ],
+      "action": {
+        "id": "home.greet",
+        "module": "home",
+        "summary": "打个招呼（演示动作：问候次数累计进本机存储）",
+        "usage": "greet",
+        "http": "POST /api/greet"
+      },
+      "children": []
+    },
+    {
+      "name": "health",
+      "path": [
+        "health"
+      ],
+      "action": {
+        "id": "home.health",
+        "module": "home",
+        "summary": "自检：存储目录是否可写",
+        "usage": "health",
+        "http": "GET /api/health"
+      },
+      "children": []
+    },
+    {
+      "name": "routes",
+      "path": [
+        "routes"
+      ],
+      "action": {
+        "id": "home.routes",
+        "module": "home",
+        "summary": "列出 CLI 命令与 HTTP 路由的对照表",
+        "usage": "routes",
+        "http": "GET /api/routes"
+      },
+      "children": []
+    },
+    {
       "name": "skill",
       "path": [
         "skill"
@@ -158,17 +158,17 @@
       "action": null,
       "children": [
         {
-          "name": "list",
+          "name": "get",
           "path": [
             "skill",
-            "list"
+            "get"
           ],
           "action": {
-            "id": "skill.list",
+            "id": "skill.get",
             "module": "skill",
-            "summary": "列出可装的 skill 与 group",
-            "usage": "skill list",
-            "http": "GET /api/skills"
+            "summary": "导出 skill 文档（并幂等安装）",
+            "usage": "skill get",
+            "http": "GET /api/skill-content"
           },
           "children": []
         },
@@ -188,21 +188,6 @@
           "children": []
         },
         {
-          "name": "get",
-          "path": [
-            "skill",
-            "get"
-          ],
-          "action": {
-            "id": "skill.get",
-            "module": "skill",
-            "summary": "导出 skill 文档（并幂等安装）",
-            "usage": "skill get",
-            "http": "GET /api/skill-content"
-          },
-          "children": []
-        },
-        {
           "name": "install",
           "path": [
             "skill",
@@ -214,6 +199,21 @@
             "summary": "安装 skill、整组 skill 或全部 skill",
             "usage": "skill install",
             "http": "POST /api/skill-install"
+          },
+          "children": []
+        },
+        {
+          "name": "list",
+          "path": [
+            "skill",
+            "list"
+          ],
+          "action": {
+            "id": "skill.list",
+            "module": "skill",
+            "summary": "列出可装的 skill 与 group",
+            "usage": "skill list",
+            "http": "GET /api/skills"
           },
           "children": []
         }

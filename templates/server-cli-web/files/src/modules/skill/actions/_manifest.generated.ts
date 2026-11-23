@@ -18,3 +18,9 @@ export const ACTIONS: readonly (new (deps: Container) => ActionBase)[] = [
   InstallAction,
   SkillListAction,
 ];
+
+// 再导出类本身：前端 apiclient 的返回类型从这里 type-only 引用（实现即契约）。
+export { SkillGetAction };
+export { SkillGroupsAction };
+export { InstallAction };
+export { SkillListAction };
