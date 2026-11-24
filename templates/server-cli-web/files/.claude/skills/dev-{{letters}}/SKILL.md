@@ -15,6 +15,7 @@ description: {{name}} 的开发者 skill（项目级，.claude/skills/dev-{{lett
 | 代号 | 干什么时读 | 一句话 |
 | --- | --- | --- |
 | `A01` | 加页面 / 改导航 / 加一种版式 / 改面板路由 | 新建 `routes/<名>.ts` + `pages/<名>/index.tsx` 即完成登记，零全局改动 |
+| `A02` | 加 action / 改 action 契约 | 一条 action 一个文件：内联 zod 契约 + `ActionBase<typeof input>` + `override run(ctx: ActionInput<this['_input']>)` |
 
 ## 序列约定
 
@@ -26,27 +27,34 @@ description: {{name}} 的开发者 skill（项目级，.claude/skills/dev-{{lett
 
 - 架构：一条 action 同时派生 CLI 命令与 HTTP 路由；Web 上能做的，CLI 都能做
 - **action 单一声明通道：@action 装饰器（zod schema 即契约）**：一条 action 一个文件
-  `actions/<名>.ts`——类继承 `ActionBase`，方法上标 `@action`，声明与实现同文件；
-  契约常量放同域 `schemas.ts`（命名约定 `<camelCase(actionId)>Input/Output`）。
+  `actions/<名>.ts`——类继承 `ActionBase<typeof input>`，**契约（zod schema）内联在
+  本文件**，方法统一 `override async run(ctx: ActionInput<this['_input']>)`：
+  入参类型由基类泛型推导（不手写 `z.output`），出参由实现推断（**实现即契约**）。
   **IoC 自动注册**：依赖经容器取（`this.deps.get<JsonStore>('store')`），
   action 类清单由 `pnpm gen:actions` 扫 `actions/` 目录生成，模块 `index.ts` 不手工
   列举——**加一条 action = 新建一个文件 + 跑一次 `pnpm gen`，index.ts 零改动**。
   `pnpm gen:api` 刷新前端 apiclient（新鲜度由 `tests/unit/api-client.test.mjs` 对账）。
-  债：`:param ⊆ args` 检查在收集期红；handler 入参手写 `z.output<typeof schema>`。
+  装载期自检：`:param ⊆ args`、http 两态（缺省 undefined 即报错，纯 CLI 写 `http: null`）。
   前端 action 调用一律走生成的 apiclient（`createApiClient({ request })`，
-  request 适配 `api()`）——typed client 已移除。
+  request 适配 `api()`）。
+- **每个输入字段必须带 `.describe()`**：字段描述同时喂 help 的「参数:」段、
+  cli-tree 的字段说明、OpenAPI/Swagger 的参数 description、以及未来的 MCP
+  inputSchema。漏写 → `tests/unit/field-descriptions.test.mjs` 当场红。
+  **字段描述纪律 = MCP 通道的前置基础设施**。
 - 命令（项目根执行）：
   - `pnpm dev` —— vite + 后端 tsx 直跑源码，改码即生效
   - `pnpm typecheck` —— 只跑类型检查
-  - `pnpm test` —— lint（含行数/字符数限制）+ typecheck + build + smoke + unit
+  - `pnpm test` —— 行数门禁 + lint（字符数限制）+ typecheck + build + smoke + unit
+  - `pnpm check:lines` —— 单文件行数门禁（≤600 干净 / 601-800 必须登记 /
+    >800 严禁；登记在 `scripts/line-lint-registry.json`，只许降不许升）
   - `pnpm start` —— 构建并启动面板
 - 代码地图（**前后端是两条目录线，不是同一个模块目录里的两半**）：
   - `src/runtime/` —— CLI / HTTP / 路由注册与参数校验；`types/` 是 action 与模块的类型契约
   - `src/core/` —— 存储（JsonStore 类）、路径、端口等通用能力（Node 侧）
   - `src/modules/<域>/` —— **后端**业务模块：
-    `actions/<名>.ts`（**一条 action 一个文件**：@action 声明 + 实现同文件，
-    类继承 `ActionBase`）、`actions/_manifest.generated.ts`（codegen 收进本目录
-    所有 action 类）、`schemas.ts`（zod 契约）、`index.ts`（只做装配）。
+    `actions/<名>.ts`（**一条 action 一个文件**：@action 声明 + zod 契约 + 实现同文件，
+    类继承 `ActionBase<typeof input>`）、`actions/_manifest.generated.ts`（codegen 收进
+    本目录所有 action 类）、`index.ts`（只做装配）。
     **不包含任何 tsx**
   - `src/web/frontend/routes/` —— 路由声明：一条路由一个 `<名>.ts`（`contract.ts` 是公共契约，
     页面发现时被排除）
@@ -82,7 +90,20 @@ description: {{name}} 的开发者 skill（项目级，.claude/skills/dev-{{lett
 - **serve 端用类组织（OOP）**：action 类继承 `ActionBase`，依赖经 IoC 容器取
   （`this.deps.get('store')`），模块 index.ts 只做装配；无状态的纯函数保持模块级。
   action 装配层保持 @action 声明式——那是类型系统的基础，不要类化。
-- 新增 action 必须同时声明 `cli` 与 `http`；确属纯 CLI（`serve` / `server` / `skill` 前缀之外）要写 `http: null, web: false`——`local/action-parity` 与启动期注册表都会拦
+- 新增 action 必须同时声明 `cli` 与 `http`；确属纯 CLI（serve / help / version 这类）
+  要显式写 `http: null`——**不写（undefined）会在装载期报错**（两态纪律：
+  「有意不给面板入口」与「忘了写」在启动瞬间必须分得开）
+- **别名**：一条命令要多个路径时写 `cli: [['events'], ['watch']]`（数组的数组）；
+  usage/help 只用第一条主路径，别名在 `help <命令>` 的「别名:」行列出
+- **尾部收参**：`restArg: '<字段名>'` 把剩余位置参数整组收进该字段
+  （schema 里应是 `z.array(...)`），usage 渲染 `<字段名...>`
+- **SSE 类动作**：`stream: true` 时 HTTP 侧把 req/res/url 经 `input.__raw` 透传、
+  action 自己接管响应；CLI 侧同一条 run 按 `meta.transport` 分流（见 `platform/live.ts`）
+- **变更通知标准**：store 写入即 `publish(topic)`（`core/events.ts`），面板经
+  `/api/events`（SSE）收到后自行刷新——通知**不带业务 payload**。
+  注意边界：总线是**进程内**的，CLI 写 store 时面板收不到通知
+- **跨域**：默认放行全部；收紧用 `serve --allow-origin <来源>`。面板只绑 127.0.0.1，
+  暴露到公网时真正的边界是隧道自身的访问控制
 - **不要给"只是给面板拉个列表"的读接口硬凑 CLI 命令**：先想清楚它是不是该做成 action。
   纯展示数据（静态文案、前端路由推导出的清单）不需要 action。
 - 类型契约优先改 `src/runtime/types/`，再改实现；不要让实现反推类型

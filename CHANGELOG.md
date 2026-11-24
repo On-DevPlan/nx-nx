@@ -1,3 +1,33 @@
+## [0.20.0] - 2026-11-24
+
+### server-cli-web 模板：action 层回移植 nx-kv 的先进机制
+
+模板的 action 层此前停在 0.10.0 形态（命名方法 + 手写 `z.output` + 模块级
+`schemas.ts`），本次对齐 nx-kv 的模板形态，并把「action 语义要强」落到可机器
+检查的地基上。
+
+- **泛型化**：action 类继承 `ActionBase<typeof input>`，handler 统一
+  `override run(ctx: ActionInput<this['_input']>)`——入参类型由基类泛型推导
+  （不再手写 `z.output`），出参由实现推断（实现即契约）。
+- **契约内联**：每条 action 的 zod schema 收进自己的文件，删除模块级 `schemas.ts`。
+- **字段级描述（MCP 前置基础设施）**：每个输入字段可带 `.describe()`，同时喂
+  help 的「参数:」段、cli-tree、OpenAPI 与将来的 MCP inputSchema；缺描述在
+  测试期即红（`field-descriptions.test.mjs`）。
+- **OpenAPI 文档 + Swagger 面板页**：`GET /api/api-docs`（CLI `api doc`）从
+  action 声明自动生成 OpenAPI 3.1；面板「API 文档」页在 Swagger UI 的 CDN
+  不可达时降级为内置渲染（面板常在离线环境跑）。
+- **变更通知标准**：store 写入即广播，HTTP 侧走 SSE（`GET /api/events`，别名
+  `watch`），CLI 侧走 NDJSON；通知不带业务 payload，前端收到即自行刷新。
+  边界已写进文档：总线是进程内的，CLI 写 store 时面板收不到通知。
+- **CORS**：标准跨域头 + OPTIONS 预检取代「Origin 必须是本机」的 403 白名单
+  （后者会误伤走内网穿透访问自己面板的场景）；收紧来源用 `serve --allow-origin`。
+- **命令行别名**：一条命令支持多个路径；尾部收参（restArg）；http 显式两态
+  （纯 CLI 必须写 `http: null`，缺省在装载期报错）。
+- **行数门禁**：`pnpm check:lines` —— ≤600 干净 / 601-800 必须登记 / >800 严禁，
+  登记只许降不许升；eslint max-lines 降为提示级，硬闸门交给 check-lines。
+- 修复：模板入库生成物与生成器输出漂移（干净检出下 apiclient 对账是红的）；
+  codegen 对无 body 字段的非 GET action 会引用未定义变量。
+
 ## [0.19.0] - 2026-11-23
 
 ### git 新增 purge-files：按正则找出大文件并从历史里抹掉
