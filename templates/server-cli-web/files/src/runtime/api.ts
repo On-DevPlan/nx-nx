@@ -8,8 +8,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { compileRoute, usageOf } from './spec.js';
 import { normalizeCliValue, parseInput } from './zod-bridge.js';
 import type { ZodBoundAction } from './action-decorator.js';
-import { toErrorPayload, httpStatusOf, CODES } from '../core/errors/index.js';
-import type { ErrorCode } from '../core/errors/index.js';
+import { toErrorPayload, httpStatusOf } from '../core/errors/index.js';
 import type { CompiledRoute } from './spec.js';
 
 interface RouteEntry {
@@ -75,15 +74,6 @@ export class ApiRouter {
       const m = route.regex.exec(url.pathname);
       if (!m) continue;
 
-      if (method !== 'GET' && method !== 'HEAD' && !this.originAllowed(req)) {
-        sendJson(res, 403, {
-          ok: false,
-          error: '跨站请求被拒绝（面板仅接受本机来源）',
-          code: CODES.BLOCKED satisfies ErrorCode,
-        });
-        return;
-      }
-
       try {
         // 单一通道：路由参数 / query / body 里的值统一过 normalizeCliValue
         // （route 与 query 天然是字符串；body 的 JSON 值归一化是幂等的），
@@ -142,19 +132,5 @@ export class ApiRouter {
     }
     if (!chunks.length) return {};
     return JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>;
-  }
-
-  // 跨站防护。服务虽然只绑 127.0.0.1，但用户浏览器里的任意页面都能向它发起请求——
-  // 少了这道校验，一个恶意网页就能 POST /api/repos/scan 或 DELETE /api/repos/:id。
-  // 浏览器发跨域请求必带 Origin，非浏览器客户端（curl / agent / 测试）不带，故放行。
-  private originAllowed(req: IncomingMessage): boolean {
-    const origin = req.headers.origin;
-    if (!origin) return true;
-    try {
-      const h = new URL(origin).hostname;
-      return h === '127.0.0.1' || h === 'localhost' || h === '::1';
-    } catch {
-      return false;
-    }
   }
 }

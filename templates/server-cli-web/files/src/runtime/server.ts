@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import fsp from 'node:fs/promises';
 import { ApiRouter, sendJson } from './api.js';
 import { registry } from './registry.js';
+import { corsHeaders, isPreflight, parseAllowOrigin, preflightHeaders, type AllowOrigin } from './cors.js';
 import { DEFAULT_PORT } from '../core/paths.js';
 import { asAbsolutePath, type AbsolutePath } from '../core/brand.js';
 
@@ -33,7 +34,11 @@ const MIME: Record<string, string> = {
 };
 
 export class PanelServer {
-  constructor(private api: ApiRouter) {}
+  constructor(
+    private api: ApiRouter,
+    /** 跨域放行策略（见 runtime/cors.ts）：缺省放行全部，收紧用 --allow-origin */
+    private allow: AllowOrigin = { all: true, list: [] },
+  ) {}
 
   /** 起服务并返回底层 http.Server（调用方要读 address() 与 close()）。 */
   start({ port = DEFAULT_PORT, host = '127.0.0.1' }: { port?: number; host?: string } = {}): Promise<
@@ -51,6 +56,17 @@ export class PanelServer {
   private async dispatch(req: IncomingMessage, res: ServerResponse): Promise<void> {
     try {
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+
+      // CORS 头：静态页与 /api 都带。预检（OPTIONS + Access-Control-Request-Method）
+      // 直接 204 回，不进路由——跨源请求要的是「浏览器放行」的答复，不是业务数据。
+      for (const [k, v] of Object.entries(corsHeaders(req, this.allow))) res.setHeader(k, v);
+      if (url.pathname.startsWith('/api/') && isPreflight(req)) {
+        for (const [k, v] of Object.entries(preflightHeaders(req, this.allow))) res.setHeader(k, v);
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
       if (url.pathname.startsWith('/api/')) {
         await this.api.handle(req, res, url);
         return;
@@ -94,12 +110,15 @@ export class PanelServer {
 export interface StartServerOptions {
   port?: number;
   host?: string;
+  /** 跨域放行来源（逗号分隔，支持 * 通配）；缺省放行全部。见 runtime/cors.ts */
+  allowOrigin?: string;
 }
 
 // 兼容入口：cmdServe（CliApp.serve）与编程调用方都用它。
 // 每次调用都用当前注册表新建 ApiRouter——路由表是构造期产物，注册表变了要重编译。
-export function startServer({ port, host }: StartServerOptions = {}): Promise<
+export function startServer({ port, host, allowOrigin }: StartServerOptions = {}): Promise<
   HttpServer<typeof IncomingMessage, typeof ServerResponse>
 > {
-  return new PanelServer(new ApiRouter(registry.actions)).start({ port, host });
+  const allow = parseAllowOrigin(allowOrigin);
+  return new PanelServer(new ApiRouter(registry.actions), allow).start({ port, host });
 }

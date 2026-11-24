@@ -96,6 +96,7 @@ export function renderHelp(entries: CommandEntry[], topic?: unknown): string {
   lines.push('通用:');
   lines.push('  --json    机器可读输出（agent 模式）');
   lines.push('  --store   本次运行覆盖存储路径');
+  lines.push('  serve --allow-origin <来源>   收紧面板的跨域来源（逗号分隔，缺省放行全部）');
   return lines.join('\n');
 }
 

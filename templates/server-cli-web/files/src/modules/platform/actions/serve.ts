@@ -16,6 +16,7 @@ const VERSION = (
 const input = z.object({
   port: z.number().optional().describe('HTTP 端口（默认取生成时探测的空闲端口）'),
   'no-open': z.boolean().optional().describe('不自动打开浏览器'),
+  'allow-origin': z.string().optional().describe('跨域放行来源（逗号分隔，支持 * 通配；缺省放行全部）'),
 });
 
 export class ServeAction extends ActionBase<typeof input> {
@@ -23,7 +24,7 @@ export class ServeAction extends ActionBase<typeof input> {
     id: 'serve',
     cli: ['serve'],
     http: null,
-    summary: '启动 Web 面板（默认 :{{port}}；--port N 改端口；--no-open 不开浏览器；端口上已是本面板则直接打开它；NX_SERVE_NO_OPEN=1 全局不开浏览器）',
+    summary: '启动 Web 面板（默认 :{{port}}；--port N 改端口；--no-open 不开浏览器；--allow-origin 收紧跨域来源；端口上已是本面板则直接打开它；NX_SERVE_NO_OPEN=1 全局不开浏览器）',
     input,
   })
   override async run(ctx: ActionInput<this['_input']>): Promise<never> {
@@ -38,7 +39,7 @@ export class ServeAction extends ActionBase<typeof input> {
 
     let server: Awaited<ReturnType<typeof startServer>>;
     try {
-      server = await startServer({ port: desiredPort, host });
+      server = await startServer({ port: desiredPort, host, allowOrigin: ctx['allow-origin'] });
     } catch (err) {
       if (!err || (err as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw err;
 
@@ -58,7 +59,7 @@ export class ServeAction extends ActionBase<typeof input> {
       console.log(
         `端口 ${desiredPort} 已被占用（占用者: ${describeOccupant(decision.occupant)}），改用 ${decision.port}`
       );
-      server = await startServer({ port: decision.port, host });
+      server = await startServer({ port: decision.port, host, allowOrigin: ctx['allow-origin'] });
     }
 
     const bound = server.address();

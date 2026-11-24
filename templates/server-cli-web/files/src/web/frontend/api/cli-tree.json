@@ -77,7 +77,7 @@
       "action": {
         "id": "serve",
         "module": "platform",
-        "summary": "启动 Web 面板（默认 :{{port}}；--port N 改端口；--no-open 不开浏览器；端口上已是本面板则直接打开它；NX_SERVE_NO_OPEN=1 全局不开浏览器）",
+        "summary": "启动 Web 面板（默认 :{{port}}；--port N 改端口；--no-open 不开浏览器；--allow-origin 收紧跨域来源；端口上已是本面板则直接打开它；NX_SERVE_NO_OPEN=1 全局不开浏览器）",
         "usage": "serve",
         "http": null
       },
