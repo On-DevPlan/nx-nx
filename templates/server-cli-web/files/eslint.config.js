@@ -75,9 +75,11 @@ export default tseslint.config(
     },
     rules: {
       eqeqeq: ['error', 'smart'],
-      // 文件行数上限：防止单文件持续膨胀。跳过空行与注释，统计的是有效代码行；
-      // 上限 600；新增代码前先看看目标文件是否已逼近上限，超限应先拆分文件。
-      'max-lines': ['error', { max: 600, skipBlankLines: true, skipComments: true }],
+      // 文件行数上限（**提示级**）：真正的闸门是 scripts/check-lines.mjs
+      // （≤600 干净 / 601-800 必须登记 / >800 严禁），它按同一口径（有效代码行）
+      // 统计并在 CI 报错。这里降为 warn：编辑器里给信号，CI 才是硬约束——
+      // 两把尺子量同一个文件，量出口径必须一致（skipBlankLines/skipComments）。
+      'max-lines': ['warn', { max: 600, skipBlankLines: true, skipComments: true }],
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' },
@@ -97,8 +99,8 @@ export default tseslint.config(
     languageOptions: { ecmaVersion: 2023, sourceType: 'module' },
     rules: {
       eqeqeq: ['error', 'smart'],
-      // 与 TS 块一致的文件行数上限（600）
-      'max-lines': ['error', { max: 600, skipBlankLines: true, skipComments: true }],
+      // 与 TS 块一致的文件行数上限（600，提示级；硬闸门见 scripts/check-lines.mjs）
+      'max-lines': ['warn', { max: 600, skipBlankLines: true, skipComments: true }],
       'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'no-var': 'error',
       'prefer-const': 'error',

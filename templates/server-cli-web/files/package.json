@@ -33,7 +33,8 @@
     "lint": "eslint .",
     "test:smoke": "node tests/smoke.mjs",
     "test:unit": "node --import tsx --test tests/unit/*.test.mjs",
-    "test": "pnpm run lint && pnpm run typecheck && pnpm run build && pnpm run test:smoke && pnpm run test:unit"
+    "check:lines": "node scripts/check-lines.mjs",
+    "test": "pnpm run check:lines && pnpm run lint && pnpm run typecheck && pnpm run build && pnpm run test:smoke && pnpm run test:unit"
   },
   "dependencies": {
     "lucide-react": "^1.75.0",

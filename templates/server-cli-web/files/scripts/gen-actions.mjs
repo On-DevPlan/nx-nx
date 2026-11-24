@@ -14,9 +14,22 @@
 //   - 生成的清单是**静态 import**，打包与类型检查都能看见（运行时扫描看不见）。
 //
 // 收集规则：导出类且原型链上有 ActionBase → 收；其余导出（类型、常量）忽略。
-import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+
+/**
+ * 内容一样就不落盘。
+ *
+ * 不是「省一次 IO」的微优化 —— 无谓重写会让**每次 `pnpm test`**（链里含 gen）
+ * 都刷新生成物的 mtime：编辑器的文件监听据此重扫工作区，tsc 的增量缓存失效。
+ * 生成物没变，就不该弄脏时间戳。
+ */
+function writeIfChanged(abs, body) {
+  if (existsSync(abs) && readFileSync(abs, 'utf8') === body) return false;
+  writeFileSync(abs, body, 'utf8');
+  return true;
+}
 
 const ROOT = dirname(fileURLToPath(import.meta.url)).replace(/[\\/]scripts$/, '');
 const MODULES_DIR = join(ROOT, 'src', 'modules');
@@ -73,9 +86,9 @@ ${list}
 // 再导出类本身：前端 apiclient 的返回类型从这里 type-only 引用（实现即契约）。
 ${reexports}
 `;
-  writeFileSync(join(actionsDir, '_manifest.generated.ts'), body, 'utf8');
+  const changed = writeIfChanged(join(actionsDir, '_manifest.generated.ts'), body);
+  console.log(`gen:actions — ${moduleDir.name}: ${classes.length} 个 action 类${changed ? '' : '（无变化）'}`);
   total += classes.length;
-  console.log(`gen:actions — ${moduleDir.name}: ${classes.length} 个 action 类`);
 }
 
 console.log(`gen:actions — 共 ${total} 个 action 类`);
