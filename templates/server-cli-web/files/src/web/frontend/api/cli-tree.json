@@ -4,6 +4,30 @@
   "action": null,
   "children": [
     {
+      "name": "api",
+      "path": [
+        "api"
+      ],
+      "action": null,
+      "children": [
+        {
+          "name": "doc",
+          "path": [
+            "api",
+            "doc"
+          ],
+          "action": {
+            "id": "api.doc",
+            "module": "platform",
+            "summary": "OpenAPI 文档（从 action 声明自动生成）",
+            "usage": "api doc",
+            "http": "GET /api/api-docs"
+          },
+          "children": []
+        }
+      ]
+    },
+    {
       "name": "events",
       "path": [
         "events"

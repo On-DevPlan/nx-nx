@@ -20,6 +20,7 @@ const zodActions = registry.actions.filter((a) => Array.isArray(a.fields));
 test('单通道：全部 action（业务 + 平台）都是 @action 收集的 zod 契约', () => {
   const ids = zodActions.map((a) => a.id).sort();
   assert.deepEqual(ids, [
+    'api.doc',
     'events',
     'help',
     'home.bootstrap',

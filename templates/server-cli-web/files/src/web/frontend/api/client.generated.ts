@@ -15,6 +15,9 @@ import type {
   SetSettingsAction,
 } from '../../../modules/home/actions/_manifest.generated.js';
 import type {
+  ApiDocAction,
+} from '../../../modules/platform/actions/_manifest.generated.js';
+import type {
   InstallAction,
   SkillGetAction,
   SkillGroupsAction,
@@ -27,6 +30,8 @@ export interface Transport {
 }
 
 export interface ApiClient {
+/** OpenAPI 文档（从 action 声明自动生成） */
+  doc(): Promise<Awaited<ReturnType<InstanceType<typeof ApiDocAction>['run']>>>;
 /** 一次取齐面板启动所需的全部上下文 */
   bootstrap(): Promise<Awaited<ReturnType<InstanceType<typeof BootstrapAction>['run']>>>;
 /** 读取全部设置（含头部导航分组 / 隐藏 / 平铺顺序） */
@@ -51,6 +56,11 @@ export interface ApiClient {
 
 export function createApiClient(transport: Transport): ApiClient {
   return {
+    // action: api.doc
+    async doc() {
+      const path = `/api/api-docs`;
+      return (await transport.request("GET", path)) as Awaited<ReturnType<InstanceType<typeof ApiDocAction>['run']>>;
+    },
     // action: home.bootstrap
     async bootstrap() {
       const path = `/api/bootstrap`;
