@@ -1,7 +1,7 @@
 // 导航的唯一计算入口：路由树（页面有哪些）× 设置（用户怎么摆）。
 //
 // 任何壳都只调这里，不自己算。于是「摆法的解释」只有一份——
-// 顶栏壳和左侧栏壳看到的顺序、分组、隐藏结果必然一致。
+// 将来新增的壳（分栏 / 全屏）看到的顺序、分组、隐藏结果必然一致。
 import { useMemo } from 'react';
 import { useStore } from '../store.js';
 import { NAV_PAGES } from './pages.js';

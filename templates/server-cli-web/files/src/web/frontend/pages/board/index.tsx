@@ -10,7 +10,7 @@ import { Link } from 'react-router-dom';
 
 const ITEMS = [
   { id: 'a1', title: '今天要做的三件事', desc: '演示详情页：路由参数 + 不写 nav 就不进导航' },
-  { id: 'b2', title: '本周复盘', desc: '同一个列表在两种壳下表现一致' },
+  { id: 'b2', title: '本周复盘', desc: '列表与详情共用同一套路由约定' },
   { id: 'c3', title: '待归档', desc: '页面与壳完全解耦' },
 ];
 
@@ -20,7 +20,7 @@ export default function BoardPage() {
       <div className="card">
         <div className="colhead">
           看板
-          <span className="right muted">这个页面挂在 sidebar 壳下，且不调用任何 action</span>
+          <span className="right muted">这个页面不调用任何 action</span>
         </div>
         <div style={{ padding: 12 }} className="stack">
           {ITEMS.map((it) => (
@@ -33,7 +33,7 @@ export default function BoardPage() {
       </div>
 
       <div className="muted">
-        切回顶栏壳下的页面，导航照样在——两种壳共存，互不知道对方存在。
+        详情页用路由参数，并且不写 nav——于是它出现在这里，却不在导航里。
       </div>
     </div>
   );

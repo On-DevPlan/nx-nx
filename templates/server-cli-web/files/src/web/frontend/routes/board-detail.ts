@@ -6,6 +6,5 @@ import { definePage } from './contract.js';
 
 export default definePage({
   path: '/board/:id',
-  layout: 'sidebar',
   page: () => import('../pages/board-detail/index.js'),
 });

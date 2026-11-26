@@ -29,7 +29,7 @@ export class ServeAction extends ActionBase<typeof input> {
   })
   override async run(ctx: ActionInput<this['_input']>): Promise<never> {
     // 动态 import：server → registry → 本模块，静态引入会在装载期成环。
-    const { startServer } = await import('../../../runtime/server.js');
+    const { startServer, shutdownServer } = await import('../../../runtime/server.js');
     const { openBrowser } = await import('../../../core/open.js');
     const { autoOpenEnabled, resolvePortConflict, describeOccupant } = await import('../../../core/serve-port.js');
     const host = '127.0.0.1';
@@ -74,9 +74,14 @@ export class ServeAction extends ActionBase<typeof input> {
 
     if (canOpen) openBrowser(addr);
 
+    // 关停只在第一次生效：连按两次 Ctrl+C 不该跑两遍 close 逻辑。
+    // 长连（面板的 SSE）由 shutdownServer 主动断开，否则 close 的回调永远等不到。
+    let stopping = false;
     const shutdown = () => {
+      if (stopping) return;
+      stopping = true;
       console.log('\n正在停止...');
-      server.close(() => process.exit(0));
+      void shutdownServer(server).then(() => process.exit(0));
     };
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);

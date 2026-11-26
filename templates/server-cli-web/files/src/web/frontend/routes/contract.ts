@@ -26,7 +26,7 @@ export interface PageDef {
   /** 路由路径（hash 路由里 `#` 之后的部分），必须以 / 开头 */
   path: string;
   nav?: NavMeta;
-  /** 挂到哪个壳下，默认 'app'；可选值见 app/layouts.ts */
+  /** 挂到哪个壳下，默认 'sidebar'；可选值见 app/layouts.ts（出厂只登记左侧栏） */
   layout?: string;
   /** 页面组件。必须是函数形式，Vite 才能保住按页代码分割 */
   page: () => Promise<{ default: ComponentType }>;

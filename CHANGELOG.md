@@ -1,3 +1,28 @@
+## [0.20.1] - 2026-11-26
+
+### server-cli-web 模板：关停修复 + 文档对齐 + 删除不可达顶栏壳
+
+- **修复「面板开着时 Ctrl+C 退不掉」**：`server.close()` 只停止接受新连接，已有连接
+  要等它们自己断，而面板常驻的 SSE 长连不会自断——回调永远等不到（实测：带一条
+  `GET /api/events` 时 close 回调要等连接被 abort 才返回）。新增
+  `runtime/server.ts#shutdownServer`：先 `closeAllConnections()` 再等 close，
+  1s 只兜隧道/代理下的半开连接；`serve` 改用它，并加幂等位（连按两次 Ctrl+C 只关一次）。
+  `engines.node` 相应提到 `>=18.2`，模板新增 `tests/unit/shutdown.test.mjs` 回归
+  （SSE 在线时关停 ~40ms 结束）。
+- **文档与代码对齐（模板）**：`CHANGELOG` 里的 `views/*/route.ts` 改回
+  `routes/*.ts + pages/<名>/index.tsx`；`routes/contract.ts` 与 `A01` 的「默认壳 app」
+  改为 `sidebar`；`A01` 的 api 示例从已删除的 `useStore().client['repo.list']` 换成
+  `createApiClient({ request: api })` 的可编译写法；删掉 `pages/home/api.ts` 与
+  `scripts/gen-api-client.mjs` 里「builder 通道并存」的过时注释；`template.json`
+  的 nextSteps 不再教人写 `layout: 'app'`。
+- **删除不可达的顶栏壳（模板死代码）**：`app/shells/app-shell/` 出厂没有任何路由挂到
+  它下面（4 条路由全用默认侧栏壳），整个目录连同它独占的 `header` / `.brand` /
+  `.tab` / `.tab-group` / `.cols` 样式一并删除（约 170 行 CSS）。壳机制保留：
+  新增版式仍是「加壳目录 + `layouts.ts` 一行 + route 写 `layout`」，`A01` 的
+  「加一种新版式」照旧可用。
+- 看板示例与路由注释同步去掉「两种壳共存」的说明；`board` / `board-detail`
+  不再显式写默认壳的 `layout: 'sidebar'`。
+
 ## [0.20.0] - 2026-11-24
 
 ### server-cli-web 模板：action 层回移植 nx-kv 的先进机制

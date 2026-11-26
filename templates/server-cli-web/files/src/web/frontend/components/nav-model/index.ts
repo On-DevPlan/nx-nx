@@ -220,7 +220,7 @@ export function availableFor(cfg: NavConfig, gi: number, allIds: string[]): stri
 // —— 渲染用派生：配置 × 路由树 → 头部导航 ——
 //
 // 这一块以前散在 App.tsx 的 useMemo 里（约 20 行），既测不到也和「壳」绑死。
-// 抽成纯函数后：顶栏壳、左侧栏壳、将来任何壳都调同一个，摆法只有一份解释。
+// 抽成纯函数后：任何壳都调同一个，摆法只有一份解释。
 
 export interface NavPage {
   id: string;

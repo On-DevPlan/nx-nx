@@ -9,8 +9,8 @@ const ROOT = dirname(fileURLToPath(import.meta.url)).replace(/[\\/]scripts$/, ''
 const { registry } = await import('../src/runtime/registry.ts');
 const { generateClientSource, generateTreeJson } = await import('../src/runtime/codegen.ts');
 
-// 只生成 zod 通道（@action 装饰、带 fields）的 action；
-// builder 通道继续走 typed client（boot.commands 派发），两条通道并存。
+// 只有一条通道：@action 装饰收集到的 zod 契约（全部 action 都带 fields）。
+// 生成物覆盖每条带 http 的 action；stream（SSE）不进 req/resp 形状的 client。
 const zodActions = registry.actions.filter((a) => Array.isArray(a.fields));
 
 const OUT = join(ROOT, 'src', 'web', 'frontend', 'api');

@@ -1,84 +1,10 @@
 /* 页面专属样式（features）：跟着页面走的样式，原子类与版式覆盖不到的部分。
  *
- * 现在只有两组：
- *   1. 分组入口（顶栏壳的 GroupTab 下拉）——壳的组成部分，跟着壳走
- *   2. 栏目管理（首页的 NavManager 拖拽）——首页专属
+ * 现在只有一组：栏目管理（首页的 NavManager 拖拽）。
  *
  * 新页面的专属样式加在这里，按「/* ── 页面名 ── *​/」分段；
  * 多个页面共用之后，把它升格进 assets/base.css 的原子类。
  */
-
-/* ── 分组入口：一个 pill 收拢多个页面（同域页面不再挤成一排） ── */
-.tab-group { position: relative; display: inline-flex; flex: 0 0 auto; }
-.tab-group .tab { display: inline-flex; align-items: center; gap: 5px; }
-.tab-group .count {
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
-  color: var(--mid);
-  background: var(--soft-2);
-  border-radius: 999px;
-  padding: 2px 5px;
-  min-width: 16px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-.tab-group .tab.active .count { color: var(--ink); background: var(--soft); }
-/* 展开指示用 CSS 三角，不引字符/图标 */
-.tab-group .caret {
-  width: 0;
-  height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 5px solid currentColor;
-  margin-left: 1px;
-  opacity: 0.7;
-}
-.tab-group .tab.active .caret { border-top-color: var(--ink); }
-
-/* 上下列表：与面板同一套立体语言（单层 relief） */
-.tab-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 40;
-  min-width: 172px;
-  padding: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  background: var(--paper);
-  border: var(--border);
-  border-radius: var(--radius-btn);
-  box-shadow: var(--shadow-relief);
-}
-/* 桥：盖住 pill 与菜单之间那几像素的「死区」——鼠标下滑穿过它时不能被判成离开，
-   否则菜单刚探出头就消失（hover 菜单的经典坑） */
-.tab-menu::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: -5px;
-  height: 5px;
-}
-.tab-menu-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: var(--row-h);
-  padding: 0 8px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: none;
-  color: var(--ink);
-  font: inherit;
-  font-size: var(--fs-core);
-  text-align: left;
-  cursor: pointer;
-}
-.tab-menu-row:hover { background: var(--soft); }
-.tab-menu-row.current { font-weight: 600; }
 
 /* ── 栏目管理（首页）：容器 + 拖拽 ─────────────────────
    结构用版面表达、改结构用拖拽表达——所以这里只有把手、输入框与两个动作，

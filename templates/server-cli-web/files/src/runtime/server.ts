@@ -122,3 +122,29 @@ export function startServer({ port, host, allowOrigin }: StartServerOptions = {}
   const allow = parseAllowOrigin(allowOrigin);
   return new PanelServer(new ApiRouter(registry.actions), allow).start({ port, host });
 }
+
+/**
+ * 关停：先断长连，再关监听。
+ *
+ * `server.close()` 只停止接受**新**连接，已有连接要等它们自己断。面板常驻一条
+ * SSE（浏览器 EventSource），用户不关页面它就不会断——于是 Ctrl+C 之后
+ * close 的回调永远等不到，进程一直挂着（实测：SSE 在线时回调要等连接被 abort）。
+ * 所以这里先 closeAllConnections()（Node ≥18.2）把长连掐掉，再等 close 收尾；
+ * graceMs 只兜隧道 / 代理下那种「谁也关不掉」的半开连接。
+ */
+export function shutdownServer(
+  server: HttpServer<typeof IncomingMessage, typeof ServerResponse>,
+  { graceMs = 1000 }: { graceMs?: number } = {},
+): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    server.close(done);
+    server.closeAllConnections?.();
+    setTimeout(done, graceMs).unref();
+  });
+}

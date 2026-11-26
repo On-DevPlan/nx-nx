@@ -1,4 +1,4 @@
-// 左侧栏壳：**默认壳**（DEFAULT_LAYOUT = 'sidebar'）。
+// 左侧栏壳：**出厂唯一的壳**（DEFAULT_LAYOUT = 'sidebar'）。
 //
 // 顶栏 tab 的毛病是「一多就挤」：四个页面还能看，八个页面就变成一行小字，
 // 宽度还要跟品牌名和版本号分。侧栏把导航竖过来，页面按业务关系分组，
@@ -9,9 +9,8 @@
 //   2. 「完全展开 / 收起为图标栏」一键切换（收起态 56px，只剩图标 + title 提示）
 //   3. 每组可单独折叠；「完全展开」按钮同时展开所有组并把侧栏拉到记住的宽度
 //
-// 它和 AppShell 除了都调 useNav() 之外没有任何共用逻辑：版式、分组呈现、
-// 当前项高亮全部自己决定。页面组件对此毫不知情——同一个 pages/<名>/index.tsx
-// 可以同时挂在两种壳下（见 routes/*.ts 的 layout 字段）。
+// 壳与页面互不知情：壳只调 useNav() 折导航，页面只渲染自己的内容，
+// 所以同一个 pages/<名>/index.tsx 可以挂到任何壳下（见 routes/*.ts 的 layout 字段）。
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';

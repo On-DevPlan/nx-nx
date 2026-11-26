@@ -7,7 +7,6 @@ import { definePage } from './contract.js';
 export default definePage({
   path: '/',
   nav: { label: '首页', order: 10 },
-  // 不写 layout：使用 layout-default.ts 里的默认壳（左侧栏）。
-  // 想回到顶栏 tab，只需在这里写 layout: 'app'。
+  // 不写 layout：落在 layout-default.ts 里的默认壳（左侧栏）。
   page: () => import('../pages/home/index.js'),
 });

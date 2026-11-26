@@ -168,7 +168,7 @@ export function useDialog() {
 
 // ---- 错误边界：把崩溃限制在单个视图内 ----
 // 视图都是 lazy() 加载的，没有这层兜底时，任何一个视图抛错（或 chunk 加载失败）
-// 都会让整个面板白屏，用户连切到别的 tab 自救都做不到。
+// 都会让整个面板白屏，用户连切到别的页面自救都做不到。
 
 interface BoundaryState {
   error: Error | null;
@@ -192,7 +192,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, BoundarySt
         <div className="colhead"><h3>这个面板出错了</h3></div>
         <div className="dlg-msg">{String(this.state.error?.message || this.state.error)}</div>
         <div className="muted" style={{ marginBottom: 10 }}>
-          其他面板不受影响，可以切到别的 tab 继续操作；控制台有完整堆栈。
+          其他面板不受影响，可以切到别的页面继续操作；控制台有完整堆栈。
         </div>
         <button className="btn" onClick={() => this.setState({ error: null })}>重试</button>
       </div>

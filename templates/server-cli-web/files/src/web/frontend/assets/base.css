@@ -61,7 +61,6 @@ input:focus, select:focus { outline: none; box-shadow: var(--shadow-relief-inset
 /* 卡片之间用间距分隔，不用投影。限定 .stack 上下文——全局 `.card + .card`
    会把并排（栅格里的兄弟）卡片也顶下去。 */
 .stack > .card + .card { margin-top: 14px; }
-.cols > .card + .card { margin-top: 0; }
 
 .colhead {
   display: flex;

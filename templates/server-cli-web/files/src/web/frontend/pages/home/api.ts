@@ -20,8 +20,7 @@ const request: Transport['request'] = (method, path, body) => api(path, { method
 
 export function useHomeApi() {
   const { refreshSettings } = useStore();
-  // zod 通道的 action（@action 装饰）走生成的 apiclient；
-  // builder 通道（如 skill 域）仍走 client[...] typed client——两条通道并存。
+  // 本页用到的 action 都走生成的 apiclient（类型来自 action 的 zod 契约）
   const generated = createApiClient({ request });
 
   return {
